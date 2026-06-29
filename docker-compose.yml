@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # ── PostgreSQL 数据库 ──────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: skmind-postgres
+    environment:
+      POSTGRES_USER: skmind
+      POSTGRES_PASSWORD: skmind
+      POSTGRES_DB: skmind
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skmind"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis 缓存与队列 ───────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: skmind-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI 后端 ───────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skmind-backend
+    env_file:
+      - .env
+    environment:
+      SKMIND_DATABASE_URL: postgresql+asyncpg://skmind:skmind@postgres:5432/skmind
+      SKMIND_DATABASE_URL_SYNC: postgresql+psycopg2://skmind:skmind@postgres:5432/skmind
+      SKMIND_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # ── Worker 异步任务 ────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skmind-worker
+    command: python -m app.workers
+    env_file:
+      - .env
+    environment:
+      SKMIND_DATABASE_URL: postgresql+asyncpg://skmind:skmind@postgres:5432/skmind
+      SKMIND_DATABASE_URL_SYNC: postgresql+psycopg2://skmind:skmind@postgres:5432/skmind
+      SKMIND_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # ── Nginx 反向代理 ─────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: skmind-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
