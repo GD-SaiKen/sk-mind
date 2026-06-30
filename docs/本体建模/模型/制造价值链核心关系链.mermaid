@@ -1,0 +1,57 @@
+flowchart TB
+    subgraph DEMAND["🏭 需求端：销售 → 发货 → 应收 → 总账"]
+        C["<b>客户</b><br/>Customer<br/><i>BO-CUSTOMER</i><br/>ERP CUSTOMER(23表)<br/>SRM innerCustomerCode<br/>TITA Customer"]
+        SO["<b>销售订单</b><br/>SalesOrder<br/><i>BO-SALES-ORDER</i><br/>ERP SALE(46表)<br/>MES salesorderNo<br/>SRM saleOrderNo"]
+        SHP["<b>发货</b><br/>Shipment<br/><i>BO-SHIPMENT</i><br/>ERP SHIPPING(3表)"]
+        M["<b>★ 物料 / 产品</b><br/>Material / Product<br/><i>BO-MATERIAL</i><br/>ERP ITEM(51表)<br/>MES materialNo<br/>SRM prodCode<br/>TITA Crm.Product"]
+        INV["<b>库存</b><br/>Inventory<br/><i>BO-INVENTORY</i><br/>ERP ITEM_WAREHOUSE<br/>INV_STOCK / ITEM_LOT"]
+        AR["<b>应收账款</b><br/>AR<br/><i>BO-AR</i><br/>ERP AR(22表)<br/>未收→已收→逾期→坏账"]
+        PAY["<b>付款</b><br/>Payment<br/>ERP PAYMENT(19表)"]
+        BANK["<b>银行</b><br/>Bank<br/>ERP BANK(8表)"]
+        GL["<b>总账</b><br/>GL<br/><i>BO-GL</i><br/>GL(4)+VOUCHER(4)<br/>+JOURNAL(5)+ACCOUNT(10)<br/>⚠️ Agent仅聚合"]
+        COST["<b>成本核算</b><br/>Cost<br/><i>BO-COST</i><br/>COST(17)+INV(8)<br/>⚠️ 仅趋势分析"]
+        C -->|"places 下达"| SO
+        SO -->|"ships_via 发货"| SHP
+        SO -->|"references 关联"| M
+        SHP -->|"depletes 消耗库存"| INV
+        M -->|"tracked by 追踪"| INV
+        SO -->|"generates 产生"| AR
+        AR -->|"settled_by 核销"| PAY
+        PAY -->|"via 通过"| BANK
+        AR -->|"posts_to 过账"| GL
+        GL -->|"posts_to 过账"| COST
+        COST -.->|"allocates_to 分配"| M
+        INV -.->|"valued_by 核算"| COST
+    end
+    subgraph SUPPLY["📦 供应端：采购 → 检验 → 验收"]
+        SUP["<b>供应商</b><br/>Supplier<br/><i>BO-SUPPLIER</i><br/>ERP SUPPLIER(7表)<br/>SRM innerVendorCode"]
+        PO["<b>采购订单</b><br/>PurchaseOrder<br/><i>BO-PURCHASE-ORDER</i><br/>ERP PURCHASE_ORDER(22表)<br/>SRM purchaseOrderNo"]
+        REQ["<b>请购单</b><br/>RequisitionOrder<br/><i>BO-REQUISITION</i><br/>ERP REQUISITION(2表)"]
+        IO["<b>检验单</b><br/>InspectionOrder<br/><i>BO-INSPECTION</i><br/>ERP INSPECTION(7表)<br/>MES goodQty/badQty<br/>SRM verifyNo"]
+        DEF["<b>不良品记录</b><br/>DefectiveRecord<br/>MES badQty"]
+        ACC["<b>验收</b><br/>Acceptance"]
+        SUP -->|"references 引用"| PO
+        SUP -->|"supplies 供应"| M
+        PO -->|"contains 包含"| M
+        PO -->|"fulfills 履行"| REQ
+        PO -->|"updates 收货增加"| INV
+        IO -->|"inspects 检验"| M
+        IO -->|"may_create 产生"| DEF
+        IO -->|"judged_by 判定"| ACC
+    end
+    subgraph PROD["⚙️ 生产端：工单 → BOM → 工作中心"]
+        MO["<b>★ 制造工单</b><br/>ProductionOrder<br/><i>BO-PRODUCTION-ORDER</i><br/>ERP MO_CHANGE(41表)<br/>MES Workorder(核心)<br/>status: 1待确认/2异常<br/>3已确认/5部分确认/9已结产"]
+        BOM["<b>BOM 物料清单</b><br/>Bill of Material<br/><i>BO-BOM</i><br/>ERP BOM(10表)<br/>BOM_D: ITEM_ID+QTY+LOSS"]
+        WC["<b>工作中心</b><br/>WorkCenter<br/><i>BO-WORKCENTER</i><br/>ERP WORK(12表)<br/>MES workcenter/machine"]
+        MO -->|"produces 产出 / consumes 消耗"| M
+        MO -->|"uses 使用"| BOM
+        BOM -->|"composes 组成"| M
+        MO -->|"outputs_to 完工入库"| INV
+        MO -->|"executed_at 执行于"| WC
+    end
+    subgraph CROSS["🔗 跨系统同步"]
+        direction LR
+        CS1["ERP MO_CHANGE.DOC_NO<br/>←→<br/>MES workorderNo"]
+        CS2["ERP PURCHASE_ORDER.DOC_NO<br/>←→<br/>SRM purchaseOrderNo"]
+        CS3["ERP ITEM.ITEM_CODE<br/>←→<br/>MES materialNo<br/>SRM prodCode"]
+    end
