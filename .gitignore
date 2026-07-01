@@ -1,17 +1,22 @@
-.DS_Store
+﻿.DS_Store
 
 # IDE 个人配置
 .idea/
-
-# Obsidian 个人工作区
+.vscode/
 .obsidian/
+.claudian/
+.claude/
+.reasonix/
 
-# Reasonix 工具运行时日志
-.reasonix/truncated-results/
+# Claude/Codex 项目记忆（工具自动维护）
+CLAUDE.md
+AGENTS.md
 
 # Python 字节码缓存
 __pycache__/
 
-# Claude/Rox 项目记忆（工具自动维护）
-CLAUDE.md
-AGENTS.md
+# pytest 缓存
+.pytest_cache/
+
+# 环境变量文件
+.env
