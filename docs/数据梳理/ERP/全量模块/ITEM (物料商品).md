@@ -96,134 +96,134 @@ created: 2026-06-25 10:52
 
 ### ITEM (通用品号信息)
 
-| # | Column | Description | Type | Required | PK |
-|---|--------|-------------|------|----------|----|
-| 1 | Owner_Dept | 关联部门 | GUID | Y |  |
-| 2 | Owner_Emp | 关联员工 | GUID | Y |  |
-| 3 | ITEM_BUSINESS_ID | 主键 | GUID | Y | Y |
-| 4 | INVENTORY_MANAGEMENT | 存货管理 | number(0/1) | Y |  |
-| 5 | ITEM_CODE | 品号 | string(80) | Y |  |
-| 6 | ITEM_NAME |  | string(120) | Y |  |
-| 7 | REMARK | 备注 | string(510) | Y |  |
-| 8 | CHANGE_ITEM_SPEC | 归类品 | number(0/1) | Y |  |
-| 9 | SHORTCUT |  | string(40) | Y |  |
-| 10 | ITEM_SPECIFICATION |  | string(510) | Y |  |
-| 11 | LOT_CONTROL | 批号管理 | string(40) | Y |  |
-| 12 | LOT_EXPIRE_DAY | 批号有效天数 | number | Y |  |
-| 13 | LOT_WAITING_DAY | 批号等待天数 | number | Y |  |
-| 14 | LOT_REINSPECTION_DAY | 批号复检天数 | number | Y |  |
-| 15 | LOT_FAILURE_CONTROL | 修改批号有效日期 | string(40) | Y |  |
-| 16 | UNIT_MODE | 计量体系 | string(40) | Y |  |
-| 17 | INVENTORY_CHECK_BY | 库存检查方式 | string(40) | Y |  |
-| 18 | ITEM_SN_MANAGEMENT | 序列号管理 | number(0/1) | Y |  |
-| 19 | SN_ENTRY_MODE | 序列号输入模式 | string(40) | Y |  |
-| 20 | ITEM_FEATURE_CONTROL | 启用特征码 | number(0/1) | Y |  |
-| 21 | PACKING_UNIT | 以包装方式输入数量 | number(0/1) | Y |  |
-| 22 | STATUS | 状态 | string(40) | Y |  |
-| 23 | E_ITEM | 工程品号 | string(80) | Y |  |
-| 24 | E_CODE | 工程码 | string(40) | Y |  |
-| 25 | FEATURE_GENERATE_MODE | 特征码产生模式 | string(40) | Y |  |
-| 26 | CKD | CKD母件 | number(0/1) | Y |  |
-| 27 | ITEM_PICTURE | 图片 | string(400) |  |  |
-| 28 | JOINT_PRODUCT_CONTROL | 启用联产品 | number(0/1) | Y |  |
-| 29 | NEED_CERTIFICATION | 需要做料件认可 | number(0/1) | Y |  |
-| 30 | LOT_NO_RULE_ID | 批号编码规则 | GUID | Y |  |
-| 31 | SN_NO_RULE_ID | 序号编码规则 | GUID | Y |  |
-| 32 | FEATURE_GROUP_ID | 品号群组 | GUID | Y |  |
-| 33 | SECOND_UNIT_ID | 第二单位 | GUID | Y |  |
-| 34 | STOCK_UNIT_ID | 库存单位 | GUID | Y |  |
-| 35 | LIFECYCLE_ID | 生命周期 | GUID | Y |  |
-| 36 | LOGISTIC_UNIT_ID | 物流单位 | GUID | Y |  |
-| 37 | ISWEIGHT | 电子称重 | number(0/1) | Y |  |
-| 38 | WEIGHT_PRICE | 电子称变价 | number(0/1) | Y |  |
-| 39 | WEIGHT_PLU | 电子称PLU | string(20) | Y |  |
-| 40 | WEIGHT_UNIT_ID | 电子称单位 | GUID | Y |  |
-| 41 | SOURCE | 品号来源 | string(40) | Y |  |
-| 42 | PLM_DATAKEY | PLM传输批次号 | string(80) | Y |  |
-| 43 | ITEM_PIC | 品号图片 | string(4000) | Y |  |
-| 44 | ITEM_DESC2 | 商品描述(作废) | string | Y |  |
-| 45 | ITEM_DESC | 品号描述 | string(4000) | Y |  |
-| 46 | DRAWING_NO | 图号 | string(510) | Y |  |
-| 47 | DRAWING_NO_FROM | 图号取自 | string(40) | Y |  |
-| 48 | ITEM_NET_WEIGHT | 品号净重 | number(16,6) | Y |  |
-| 49 | NET_WEIGHT_UNIT_ID | 重量单位 | GUID | Y |  |
-| 50 | SERVICE_ITEM | 服务品号 | number(0/1) | Y |  |
-| 51 | CreateDate | 创建日期 | date | Y |  |
-| 52 | LastModifiedDate | 最后修改日期 | date | Y |  |
-| 53 | ModifiedDate | 修改日期 | date | Y |  |
-| 54 | CreateBy | 创建者 | GUID | Y |  |
-| 55 | LastModifiedBy | 最后修改者 | GUID | Y |  |
-| 56 | ModifiedBy | 修改者 | GUID | Y |  |
-| 57 | Attachments | 附件 | string | Y |  |
-| 58 | ProcessInstanceId | 表单所在的流程实例的编号 | GUID | Y |  |
-| 59 | Version | 版本号，不要随意更改 | binary | Y |  |
-| 60 | UDF001 | 自定义字段0 | number(23,8) | Y |  |
-| 61 | UDF002 | 自定义字段1 | number(23,8) | Y |  |
-| 62 | UDF003 | 自定义字段2 | number(23,8) | Y |  |
-| 63 | UDF011 | 自定义字段3 | number(16,6) | Y |  |
-| 64 | UDF012 | 自定义字段4 | number(16,6) | Y |  |
-| 65 | UDF013 | 自定义字段5 | number(16,6) | Y |  |
-| 66 | UDF021 | 自定义字段6 | string(510) | Y |  |
-| 67 | UDF022 | 自定义字段7 | string(510) | Y |  |
-| 68 | UDF023 | 自定义字段8 | string(510) | Y |  |
-| 69 | UDF024 | 自定义字段9 | string(510) | Y |  |
-| 70 | UDF025 | 自定义字段10 | string(510) | Y |  |
-| 71 | UDF026 | 自定义字段11 | string(510) | Y |  |
-| 72 | UDF041 | 自定义字段12 | date | Y |  |
-| 73 | UDF042 | 自定义字段13 | date | Y |  |
-| 74 | UDF051 | 自定义字段14 | GUID | Y |  |
-| 75 | UDF052 | 自定义字段15 | GUID | Y |  |
-| 76 | UDF053 | 自定义字段16 | GUID | Y |  |
-| 77 | UDF054 | 自定义字段17 | GUID | Y |  |
-| 78 | ApproveStatus | 单据状态属性 | string(2) | Y |  |
-| 79 | ApproveDate | 修改日期 | date | Y |  |
-| 80 | ApproveBy | 修改人 | GUID | Y |  |
-| 81 | Owner_Org_RTK |  | string(400) | Y |  |
-| 82 | Owner_Org_ROid |  | GUID | Y |  |
-| 83 | ASSET | 资产 | number(0/1) | Y |  |
+| #     | Column                | Description  | Type            | Required | PK  |
+| ----- | --------------------- | ------------ | --------------- | -------- | --- |
+| 1     | Owner_Dept            | 关联部门         | GUID            | Y        |     |
+| 2     | Owner_Emp             | 关联员工         | GUID            | Y        |     |
+| 3     | ITEM_BUSINESS_ID      | 主键           | GUID            | Y        | Y   |
+| 4     | INVENTORY_MANAGEMENT  | 存货管理         | number(0/1)     | Y        |     |
+| ==5== | ==ITEM_CODE==         | ==品号==       | ==string(80)==  | ==Y==    |     |
+| ==6== | ==ITEM_NAME==         |              | ==string(120)== | ==Y==    |     |
+| 7     | REMARK                | 备注           | string(510)     | Y        |     |
+| 8     | CHANGE_ITEM_SPEC      | 归类品          | number(0/1)     | Y        |     |
+| 9     | SHORTCUT              |              | string(40)      | Y        |     |
+| ==10==    | ==ITEM_SPECIFICATION==    |              | ==string(510)==     | ==Y==        |     |
+| 11    | LOT_CONTROL           | 批号管理         | string(40)      | Y        |     |
+| 12    | LOT_EXPIRE_DAY        | 批号有效天数       | number          | Y        |     |
+| 13    | LOT_WAITING_DAY       | 批号等待天数       | number          | Y        |     |
+| 14    | LOT_REINSPECTION_DAY  | 批号复检天数       | number          | Y        |     |
+| 15    | LOT_FAILURE_CONTROL   | 修改批号有效日期     | string(40)      | Y        |     |
+| 16    | UNIT_MODE             | 计量体系         | string(40)      | Y        |     |
+| 17    | INVENTORY_CHECK_BY    | 库存检查方式       | string(40)      | Y        |     |
+| 18    | ITEM_SN_MANAGEMENT    | 序列号管理        | number(0/1)     | Y        |     |
+| 19    | SN_ENTRY_MODE         | 序列号输入模式      | string(40)      | Y        |     |
+| 20    | ITEM_FEATURE_CONTROL  | 启用特征码        | number(0/1)     | Y        |     |
+| 21    | PACKING_UNIT          | 以包装方式输入数量    | number(0/1)     | Y        |     |
+| 22    | STATUS                | 状态           | string(40)      | Y        |     |
+| 23    | E_ITEM                | 工程品号         | string(80)      | Y        |     |
+| 24    | E_CODE                | 工程码          | string(40)      | Y        |     |
+| 25    | FEATURE_GENERATE_MODE | 特征码产生模式      | string(40)      | Y        |     |
+| 26    | CKD                   | CKD母件        | number(0/1)     | Y        |     |
+| 27    | ITEM_PICTURE          | 图片           | string(400)     |          |     |
+| 28    | JOINT_PRODUCT_CONTROL | 启用联产品        | number(0/1)     | Y        |     |
+| 29    | NEED_CERTIFICATION    | 需要做料件认可      | number(0/1)     | Y        |     |
+| 30    | LOT_NO_RULE_ID        | 批号编码规则       | GUID            | Y        |     |
+| 31    | SN_NO_RULE_ID         | 序号编码规则       | GUID            | Y        |     |
+| 32    | FEATURE_GROUP_ID      | 品号群组         | GUID            | Y        |     |
+| 33    | SECOND_UNIT_ID        | 第二单位         | GUID            | Y        |     |
+| 34    | STOCK_UNIT_ID         | 库存单位         | GUID            | Y        |     |
+| 35    | LIFECYCLE_ID          | 生命周期         | GUID            | Y        |     |
+| 36    | LOGISTIC_UNIT_ID      | 物流单位         | GUID            | Y        |     |
+| 37    | ISWEIGHT              | 电子称重         | number(0/1)     | Y        |     |
+| 38    | WEIGHT_PRICE          | 电子称变价        | number(0/1)     | Y        |     |
+| 39    | WEIGHT_PLU            | 电子称PLU       | string(20)      | Y        |     |
+| 40    | WEIGHT_UNIT_ID        | 电子称单位        | GUID            | Y        |     |
+| 41    | SOURCE                | 品号来源         | string(40)      | Y        |     |
+| 42    | PLM_DATAKEY           | PLM传输批次号     | string(80)      | Y        |     |
+| 43    | ITEM_PIC              | 品号图片         | string(4000)    | Y        |     |
+| 44    | ITEM_DESC2            | 商品描述(作废)     | string          | Y        |     |
+| 45    | ITEM_DESC             | 品号描述         | string(4000)    | Y        |     |
+| 46    | DRAWING_NO            | 图号           | string(510)     | Y        |     |
+| 47    | DRAWING_NO_FROM       | 图号取自         | string(40)      | Y        |     |
+| 48    | ITEM_NET_WEIGHT       | 品号净重         | number(16,6)    | Y        |     |
+| 49    | NET_WEIGHT_UNIT_ID    | 重量单位         | GUID            | Y        |     |
+| 50    | SERVICE_ITEM          | 服务品号         | number(0/1)     | Y        |     |
+| 51    | CreateDate            | 创建日期         | date            | Y        |     |
+| 52    | LastModifiedDate      | 最后修改日期       | date            | Y        |     |
+| 53    | ModifiedDate          | 修改日期         | date            | Y        |     |
+| 54    | CreateBy              | 创建者          | GUID            | Y        |     |
+| 55    | LastModifiedBy        | 最后修改者        | GUID            | Y        |     |
+| 56    | ModifiedBy            | 修改者          | GUID            | Y        |     |
+| 57    | Attachments           | 附件           | string          | Y        |     |
+| 58    | ProcessInstanceId     | 表单所在的流程实例的编号 | GUID            | Y        |     |
+| 59    | Version               | 版本号，不要随意更改   | binary          | Y        |     |
+| 60    | UDF001                | 自定义字段0       | number(23,8)    | Y        |     |
+| 61    | UDF002                | 自定义字段1       | number(23,8)    | Y        |     |
+| 62    | UDF003                | 自定义字段2       | number(23,8)    | Y        |     |
+| 63    | UDF011                | 自定义字段3       | number(16,6)    | Y        |     |
+| 64    | UDF012                | 自定义字段4       | number(16,6)    | Y        |     |
+| 65    | UDF013                | 自定义字段5       | number(16,6)    | Y        |     |
+| 66    | UDF021                | 自定义字段6       | string(510)     | Y        |     |
+| 67    | UDF022                | 自定义字段7       | string(510)     | Y        |     |
+| 68    | UDF023                | 自定义字段8       | string(510)     | Y        |     |
+| 69    | UDF024                | 自定义字段9       | string(510)     | Y        |     |
+| 70    | UDF025                | 自定义字段10      | string(510)     | Y        |     |
+| 71    | UDF026                | 自定义字段11      | string(510)     | Y        |     |
+| 72    | UDF041                | 自定义字段12      | date            | Y        |     |
+| 73    | UDF042                | 自定义字段13      | date            | Y        |     |
+| 74    | UDF051                | 自定义字段14      | GUID            | Y        |     |
+| 75    | UDF052                | 自定义字段15      | GUID            | Y        |     |
+| 76    | UDF053                | 自定义字段16      | GUID            | Y        |     |
+| 77    | UDF054                | 自定义字段17      | GUID            | Y        |     |
+| 78    | ApproveStatus         | 单据状态属性       | string(2)       | Y        |     |
+| 79    | ApproveDate           | 修改日期         | date            | Y        |     |
+| 80    | ApproveBy             | 修改人          | GUID            | Y        |     |
+| 81    | Owner_Org_RTK         |              | string(400)     | Y        |     |
+| 82    | Owner_Org_ROid        |              | GUID            | Y        |     |
+| 83    | ASSET                 | 资产           | number(0/1)     | Y        |     |
 
 ### ITEM_BARCODE (品号条码信息)
 
-| # | Column | Description | Type | Required | PK |
-|---|--------|-------------|------|----------|----|
-| 1 | Owner_Dept | 关联部门 | GUID | Y |  |
-| 2 | Owner_Emp | 关联员工 | GUID | Y |  |
-| 3 | ITEM_BARCODE_ID | 主键 | GUID | Y | Y |
-| 4 | ITEM_ID | 品号编号 | GUID | Y |  |
-| 5 | ITEM_FEATURE_ID | 品号特征码 | GUID | Y |  |
-| 6 | REMARK | 备注 | string(510) | Y |  |
-| 7 | CreateDate | 创建日期 | date | Y |  |
-| 8 | LastModifiedDate | 最后修改日期 | date | Y |  |
-| 9 | ModifiedDate | 修改日期 | date | Y |  |
-| 10 | CreateBy | 创建者 | GUID | Y |  |
-| 11 | LastModifiedBy | 最后修改者 | GUID | Y |  |
-| 12 | ModifiedBy | 修改者 | GUID | Y |  |
-| 13 | Attachments | 附件 | string | Y |  |
-| 14 | UDF001 | 自定义字段0 | number(23,8) | Y |  |
-| 15 | UDF002 | 自定义字段1 | number(23,8) | Y |  |
-| 16 | UDF003 | 自定义字段2 | number(23,8) | Y |  |
-| 17 | UDF011 | 自定义字段3 | number(16,6) | Y |  |
-| 18 | UDF012 | 自定义字段4 | number(16,6) | Y |  |
-| 19 | UDF013 | 自定义字段5 | number(16,6) | Y |  |
-| 20 | UDF021 | 自定义字段6 | string(510) | Y |  |
-| 21 | UDF022 | 自定义字段7 | string(510) | Y |  |
-| 22 | UDF023 | 自定义字段8 | string(510) | Y |  |
-| 23 | UDF024 | 自定义字段9 | string(510) | Y |  |
-| 24 | UDF025 | 自定义字段10 | string(510) | Y |  |
-| 25 | UDF026 | 自定义字段11 | string(510) | Y |  |
-| 26 | UDF041 | 自定义字段12 | date | Y |  |
-| 27 | UDF042 | 自定义字段13 | date | Y |  |
-| 28 | UDF051 | 自定义字段14 | GUID | Y |  |
-| 29 | UDF052 | 自定义字段15 | GUID | Y |  |
-| 30 | UDF053 | 自定义字段16 | GUID | Y |  |
-| 31 | UDF054 | 自定义字段17 | GUID | Y |  |
-| 32 | ProcessInstanceId | 表单所在的流程实例的编号 | GUID | Y |  |
-| 33 | Version | 版本号，不要随意更改 | binary | Y |  |
-| 34 | ApproveStatus | 单据状态属性 | string(2) | Y |  |
-| 35 | ApproveDate | 修改日期 | date | Y |  |
-| 36 | ApproveBy | 修改人 | GUID | Y |  |
-| 37 | Owner_Org_RTK |  | string(400) | Y |  |
-| 38 | Owner_Org_ROid |  | GUID | Y |  |
+| #     | Column            | Description  | Type         | Required | PK  |
+| ----- | ----------------- | ------------ | ------------ | -------- | --- |
+| 1     | Owner_Dept        | 关联部门         | GUID         | Y        |     |
+| 2     | Owner_Emp         | 关联员工         | GUID         | Y        |     |
+| 3     | ITEM_BARCODE_ID   | 主键           | GUID         | Y        | Y   |
+| ==4== | ==ITEM_ID==       | ==品号编号==     | ==GUID==     | ==Y==    |     |
+| 5     | ITEM_FEATURE_ID   | 品号特征码        | GUID         | Y        |     |
+| 6     | REMARK            | 备注           | string(510)  | Y        |     |
+| 7     | CreateDate        | 创建日期         | date         | Y        |     |
+| 8     | LastModifiedDate  | 最后修改日期       | date         | Y        |     |
+| 9     | ModifiedDate      | 修改日期         | date         | Y        |     |
+| 10    | CreateBy          | 创建者          | GUID         | Y        |     |
+| 11    | LastModifiedBy    | 最后修改者        | GUID         | Y        |     |
+| 12    | ModifiedBy        | 修改者          | GUID         | Y        |     |
+| 13    | Attachments       | 附件           | string       | Y        |     |
+| 14    | UDF001            | 自定义字段0       | number(23,8) | Y        |     |
+| 15    | UDF002            | 自定义字段1       | number(23,8) | Y        |     |
+| 16    | UDF003            | 自定义字段2       | number(23,8) | Y        |     |
+| 17    | UDF011            | 自定义字段3       | number(16,6) | Y        |     |
+| 18    | UDF012            | 自定义字段4       | number(16,6) | Y        |     |
+| 19    | UDF013            | 自定义字段5       | number(16,6) | Y        |     |
+| 20    | UDF021            | 自定义字段6       | string(510)  | Y        |     |
+| 21    | UDF022            | 自定义字段7       | string(510)  | Y        |     |
+| 22    | UDF023            | 自定义字段8       | string(510)  | Y        |     |
+| 23    | UDF024            | 自定义字段9       | string(510)  | Y        |     |
+| 24    | UDF025            | 自定义字段10      | string(510)  | Y        |     |
+| 25    | UDF026            | 自定义字段11      | string(510)  | Y        |     |
+| 26    | UDF041            | 自定义字段12      | date         | Y        |     |
+| 27    | UDF042            | 自定义字段13      | date         | Y        |     |
+| 28    | UDF051            | 自定义字段14      | GUID         | Y        |     |
+| 29    | UDF052            | 自定义字段15      | GUID         | Y        |     |
+| 30    | UDF053            | 自定义字段16      | GUID         | Y        |     |
+| 31    | UDF054            | 自定义字段17      | GUID         | Y        |     |
+| 32    | ProcessInstanceId | 表单所在的流程实例的编号 | GUID         | Y        |     |
+| 33    | Version           | 版本号，不要随意更改   | binary       | Y        |     |
+| 34    | ApproveStatus     | 单据状态属性       | string(2)    | Y        |     |
+| 35    | ApproveDate       | 修改日期         | date         | Y        |     |
+| 36    | ApproveBy         | 修改人          | GUID         | Y        |     |
+| 37    | Owner_Org_RTK     |              | string(400)  | Y        |     |
+| 38    | Owner_Org_ROid    |              | GUID         | Y        |     |
 
 ### ITEM_BARCODE_D (品号条码信息单身)
 

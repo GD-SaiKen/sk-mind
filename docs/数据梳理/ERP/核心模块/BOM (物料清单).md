@@ -49,53 +49,53 @@ created: "2026-06-25 13:06"
 
 ### BOM_AUTO_CONFIG (BOM自动配置模板)
 
-| # | Column | Description | Type | Required | PK |
-|---|--------|-------------|------|----------|----|
-| 1 | Owner_Dept | 关联部门 | GUID | Y |  |
-| 2 | Owner_Emp | 关联员工 | GUID | Y |  |
-| 3 | BOM_AUTO_CONFIG_ID | 主键 | GUID | Y | Y |
-| 4 | CODE | 模板编号 | string(80) | Y |  |
-| 5 | NAME | 模板名称 | string(120) | Y |  |
-| 6 | REMARK | 备注 | string(510) | Y |  |
-| 7 | FEATURE_GROUP_D_ID | 条件变量 | string(8000) | Y |  |
-| 8 | VERSION_TIMES | 版次 | string(8) | Y |  |
-| 9 | FEATURE_CODE | 条件变量代号 | string(8000) | Y |  |
-| 10 | SCRIPTS | 脚本 | string | Y |  |
-| 11 | ROOT_ITEM | 最终产品 | string | Y |  |
-| 12 | ITEM_ID | 品号 | GUID | Y |  |
-| 13 | ROOT_ITEM_CODE | 最终产品 | string(2000) | Y |  |
-| 14 | UDF001 | 自定义字段0 | number(23,8) | Y |  |
-| 15 | UDF002 | 自定义字段1 | number(23,8) | Y |  |
-| 16 | UDF003 | 自定义字段2 | number(23,8) | Y |  |
-| 17 | UDF011 | 自定义字段3 | number(16,6) | Y |  |
-| 18 | UDF012 | 自定义字段4 | number(16,6) | Y |  |
-| 19 | UDF013 | 自定义字段5 | number(16,6) | Y |  |
-| 20 | UDF021 | 自定义字段6 | string(510) | Y |  |
-| 21 | UDF022 | 自定义字段7 | string(510) | Y |  |
-| 22 | UDF023 | 自定义字段8 | string(510) | Y |  |
-| 23 | UDF024 | 自定义字段9 | string(510) | Y |  |
-| 24 | UDF025 | 自定义字段10 | string(510) | Y |  |
-| 25 | UDF026 | 自定义字段11 | string(510) | Y |  |
-| 26 | UDF041 | 自定义字段12 | date | Y |  |
-| 27 | UDF042 | 自定义字段13 | date | Y |  |
-| 28 | UDF051 | 自定义字段14 | GUID | Y |  |
-| 29 | UDF052 | 自定义字段15 | GUID | Y |  |
-| 30 | UDF053 | 自定义字段16 | GUID | Y |  |
-| 31 | UDF054 | 自定义字段17 | GUID | Y |  |
-| 32 | Version | 版本号，不要随意更改 | binary | Y |  |
-| 33 | CreateDate | 创建日期 | date | Y |  |
-| 34 | LastModifiedDate | 最后修改日期 | date | Y |  |
-| 35 | ModifiedDate | 修改日期 | date | Y |  |
-| 36 | CreateBy | 创建者 | GUID | Y |  |
-| 37 | LastModifiedBy | 最后修改者 | GUID | Y |  |
-| 38 | ModifiedBy | 修改者 | GUID | Y |  |
-| 39 | Attachments | 附件 | string | Y |  |
-| 40 | ProcessInstanceId | 表单所在的流程实例的编号 | GUID | Y |  |
-| 41 | ApproveStatus | 单据状态属性 | string(2) | Y |  |
-| 42 | ApproveDate | 修改日期 | date | Y |  |
-| 43 | ApproveBy | 修改人 | GUID | Y |  |
-| 44 | Owner_Org_RTK |  | string(400) | Y |  |
-| 45 | Owner_Org_ROid |  | GUID | Y |  |
+| #   | Column             | Description  | Type         | Required | PK  |
+| --- | ------------------ | ------------ | ------------ | -------- | --- |
+| 1   | Owner_Dept         | 关联部门         | GUID         | Y        |     |
+| 2   | Owner_Emp          | 关联员工         | GUID         | Y        |     |
+| 3   | BOM_AUTO_CONFIG_ID | 主键           | GUID         | Y        | Y   |
+| 4   | CODE               | 模板编号         | string(80)   | Y        |     |
+| 5   | NAME               | 模板名称         | string(120)  | Y        |     |
+| 6   | REMARK             | 备注           | string(510)  | Y        |     |
+| 7   | FEATURE_GROUP_D_ID | 条件变量         | string(8000) | Y        |     |
+| 8   | VERSION_TIMES      | 版次           | string(8)    | Y        |     |
+| 9   | FEATURE_CODE       | 条件变量代号       | string(8000) | Y        |     |
+| 10  | SCRIPTS            | 脚本           | string       | Y        |     |
+| 11  | ROOT_ITEM          | 最终产品         | string       | Y        |     |
+| 12  | ITEM_ID            | 品号           | GUID         | Y        |     |
+| 13  | ROOT_ITEM_CODE     | 最终产品         | string(2000) | Y        |     |
+| 14  | UDF001             | 自定义字段0       | number(23,8) | Y        |     |
+| 15  | UDF002             | 自定义字段1       | number(23,8) | Y        |     |
+| 16  | UDF003             | 自定义字段2       | number(23,8) | Y        |     |
+| 17  | UDF011             | 自定义字段3       | number(16,6) | Y        |     |
+| 18  | UDF012             | 自定义字段4       | number(16,6) | Y        |     |
+| 19  | UDF013             | 自定义字段5       | number(16,6) | Y        |     |
+| 20  | UDF021             | 自定义字段6       | string(510)  | Y        |     |
+| 21  | UDF022             | 自定义字段7       | string(510)  | Y        |     |
+| 22  | UDF023             | 自定义字段8       | string(510)  | Y        |     |
+| 23  | UDF024             | 自定义字段9       | string(510)  | Y        |     |
+| 24  | UDF025             | 自定义字段10      | string(510)  | Y        |     |
+| 25  | UDF026             | 自定义字段11      | string(510)  | Y        |     |
+| 26  | UDF041             | 自定义字段12      | date         | Y        |     |
+| 27  | UDF042             | 自定义字段13      | date         | Y        |     |
+| 28  | UDF051             | 自定义字段14      | GUID         | Y        |     |
+| 29  | UDF052             | 自定义字段15      | GUID         | Y        |     |
+| 30  | UDF053             | 自定义字段16      | GUID         | Y        |     |
+| 31  | UDF054             | 自定义字段17      | GUID         | Y        |     |
+| 32  | Version            | 版本号，不要随意更改   | binary       | Y        |     |
+| 33  | CreateDate         | 创建日期         | date         | Y        |     |
+| 34  | LastModifiedDate   | 最后修改日期       | date         | Y        |     |
+| 35  | ModifiedDate       | 修改日期         | date         | Y        |     |
+| 36  | CreateBy           | 创建者          | GUID         | Y        |     |
+| 37  | LastModifiedBy     | 最后修改者        | GUID         | Y        |     |
+| 38  | ModifiedBy         | 修改者          | GUID         | Y        |     |
+| 39  | Attachments        | 附件           | string       | Y        |     |
+| 40  | ProcessInstanceId  | 表单所在的流程实例的编号 | GUID         | Y        |     |
+| 41  | ApproveStatus      | 单据状态属性       | string(2)    | Y        |     |
+| 42  | ApproveDate        | 修改日期         | date         | Y        |     |
+| 43  | ApproveBy          | 修改人          | GUID         | Y        |     |
+| 44  | Owner_Org_RTK      |              | string(400)  | Y        |     |
+| 45  | Owner_Org_ROid     |              | GUID         | Y        |     |
 
 
 ### BOM_AUTO_CONFIG_D (BOM自动配置模板单身)
