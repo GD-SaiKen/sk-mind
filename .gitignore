@@ -15,6 +15,13 @@ AGENTS.md
 # Python 字节码缓存
 __pycache__/
 
+# Python 虚拟环境
+.venv/
+venv/
+
+# setuptools 自动生成的元数据
+*.egg-info/
+
 # pytest 缓存
 .pytest_cache/
 
