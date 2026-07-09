@@ -42,6 +42,8 @@ class ConnectorService:
             auth_token_prefix=config.get("auth_token_prefix", "Bearer"),
             auth_url=config.get("auth_url"),
             auth_credentials_map=config.get("auth_credentials_map"),
+            auth_credentials_2=config.get("auth_credentials_2"),
+            auth_header_name_2=config.get("auth_header_name_2", ""),
             qps_limit=config.get("qps_limit", 10),
             timeout=config.get("timeout", 30),
             max_retries=config.get("max_retries", 3),

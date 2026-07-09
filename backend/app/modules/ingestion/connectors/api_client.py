@@ -33,12 +33,14 @@ class HttpxApiConnector(ApiConnector):
     def __init__(
         self,
         base_url: str,
-        auth_type: str = "none",         # none / bearer / basic / api_key / session
+        auth_type: str = "none",         # none / bearer / basic / api_key / dual_key / session
         auth_credentials: str | None = None,
         auth_header_name: str = "Authorization",
         auth_token_prefix: str = "Bearer",
         auth_url: str | None = None,
         auth_credentials_map: dict[str, str] | None = None,
+        auth_credentials_2: str | None = None,
+        auth_header_name_2: str = "",
         qps_limit: int = 10,
         timeout: int = 30,
         max_retries: int = 3,
@@ -57,6 +59,8 @@ class HttpxApiConnector(ApiConnector):
             auth_token_prefix: token 前缀（如 "Bearer"）。
             auth_url: 动态登录鉴权的 URL（session 模式）。
             auth_credentials_map: 动态登录的凭据。
+            auth_credentials_2: 第二凭据（dual_key 模式的第二个 Header 值）。
+            auth_header_name_2: 第二鉴权 Header 名（dual_key 模式）。
             qps_limit: QPS 上限。
             timeout: 请求超时秒数。
             max_retries: 最大重试次数。
@@ -72,6 +76,8 @@ class HttpxApiConnector(ApiConnector):
         self._auth_token_prefix = auth_token_prefix
         self._auth_url = auth_url
         self._auth_credentials_map = auth_credentials_map
+        self._auth_credentials_2 = auth_credentials_2
+        self._auth_header_name_2 = auth_header_name_2
         self._qps_limit = qps_limit
         self._timeout = timeout
         self._max_retries = max_retries
@@ -104,6 +110,9 @@ class HttpxApiConnector(ApiConnector):
             headers[self._auth_header_name] = f"Basic {self._auth_credentials}"
         elif self._auth_type == "api_key" and self._auth_credentials:
             headers[self._auth_header_name] = self._auth_credentials
+        elif self._auth_type == "dual_key" and self._auth_credentials and self._auth_credentials_2:
+            headers[self._auth_header_name] = self._auth_credentials
+            headers[self._auth_header_name_2] = self._auth_credentials_2
         elif self._auth_type == "session" and self._token_manager:
             token = self._token_manager.get_token()
             headers[self._auth_header_name] = (

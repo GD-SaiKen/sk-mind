@@ -309,6 +309,45 @@ class SyncService:
         )
         self._db.execute(sql, record)
 
+    def _ensure_api_table(self, table_name: str) -> None:
+        """确保 Raw API 分表存在（不存在则创建）。
+
+        表结构固定：追踪字段 + payload JSONB + 去重唯一约束。
+        """
+        schema, tbl = self._parse_schema_table(table_name)
+        check = text(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = :s AND table_name = :t)"
+        )
+        result = self._db.execute(check, {"s": schema, "t": tbl})
+        if result.scalar_one():
+            return
+
+        ddl = text(
+            f"CREATE TABLE {table_name} ("
+            "  _raw_id              BIGSERIAL PRIMARY KEY,"
+            "  _batch_id            VARCHAR(64)  NOT NULL,"
+            "  _source_system       VARCHAR(64)  NOT NULL,"
+            "  _source_object       VARCHAR(256) NOT NULL,"
+            "  _source_row_hash     VARCHAR(64)  NOT NULL,"
+            "  _api_url             VARCHAR(512) NOT NULL,"
+            "  _api_request_params  JSONB,"
+            "  _api_response_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),"
+            "  _ingested_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),"
+            "  _is_deleted          BOOLEAN      NOT NULL DEFAULT FALSE,"
+            "  payload              JSONB        NOT NULL"
+            ")"
+        )
+        self._db.execute(ddl)
+
+        idx = text(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS uq_{tbl}_dedup "
+            f"ON {table_name} (_batch_id, _source_row_hash)"
+        )
+        self._db.execute(idx)
+        self._db.commit()
+        logger.info("Created API raw table: %s", table_name)
+
     def _insert_api_record(
         self,
         batch_id: str,
@@ -318,13 +357,17 @@ class SyncService:
         request_params: str,
         payload: dict[str, Any],
     ) -> None:
-        """向 raw.api_record 表写入 API 响应数据。"""
+        """向 raw.{system}_{source_object} 分表写入 API 响应数据。"""
+        table_name = f"raw.{source_system.lower()}_{source_object}"
+        self._ensure_api_table(table_name)
+
         sql = text(
-            "INSERT INTO raw.api_record "
+            f"INSERT INTO {table_name} "
             "(_batch_id, _source_system, _source_object, _source_row_hash, "
             " _api_url, _api_request_params, _api_response_at, _ingested_at, payload) "
             "VALUES (:batch_id, :source_system, :source_object, :source_row_hash, "
-            " :api_url, :api_request_params, :api_response_at, :ingested_at, :payload)"
+            " :api_url, :api_request_params, :api_response_at, :ingested_at, :payload) "
+            "ON CONFLICT (_batch_id, _source_row_hash) DO NOTHING"
         )
         self._db.execute(sql, {
             "batch_id": batch_id,
