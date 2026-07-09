@@ -20,6 +20,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await engine.dispose()
 
 
+# ── 注册所有 ORM 模型（确保 FK 关系可解析）───
+import app.modules.auth.models          # noqa: F401
+import app.modules.data_sources.models  # noqa: F401
+import app.modules.datasets.models      # noqa: F401
+import app.modules.ingestion.models     # noqa: F401
+import app.modules.lineage.models       # noqa: F401
+import app.modules.quality.models       # noqa: F401
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
