@@ -1,25 +1,3 @@
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import api from '@/api/client'
-
-const healthStatus = ref<string>('检查中...')
-const appVersion = ref<string>('')
-
-async function checkHealth() {
-  try {
-    const res = await api.get('/api/health')
-    healthStatus.value = '运行正常'
-    appVersion.value = res.data.version ?? ''
-  } catch {
-    healthStatus.value = '连接失败'
-  }
-}
-
-onMounted(() => {
-  checkHealth()
-})
-</script>
-
 <template>
   <div class="home-page">
     <h2>平台概览</h2>
@@ -62,6 +40,28 @@ onMounted(() => {
     </el-card>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { api } from '@/api'
+
+const healthStatus = ref<string>('检查中...')
+const appVersion = ref<string>('')
+
+async function checkHealth() {
+  try {
+    const res = await api.get('/health')
+    healthStatus.value = '运行正常'
+    appVersion.value = res.data.version ?? ''
+  } catch {
+    healthStatus.value = '连接失败'
+  }
+}
+
+onMounted(() => {
+  checkHealth()
+})
+</script>
 
 <style scoped>
 .home-page {

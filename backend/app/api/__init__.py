@@ -4,12 +4,14 @@ from fastapi import APIRouter
 
 from app.api.auth import router as auth_router
 from app.modules.ingestion.api import ingestion_tasks_router
+from app.modules.ingestion.api.data_browse import router as data_browse_router
 
 router = APIRouter()
 
 # ── 注册业务路由 ─────────────────────────────
 router.include_router(auth_router)
 router.include_router(ingestion_tasks_router)
+router.include_router(data_browse_router)
 
 # 当前阶段提供一个简单的状态接口验证前后端联通
 @router.get("/status", tags=["system"])
