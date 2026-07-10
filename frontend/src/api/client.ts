@@ -2,22 +2,11 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 const api = axios.create({
-  baseURL: '/',
+  baseURL: '/api',
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 响应拦截：统一错误提示
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const message = error.response?.data?.detail ?? error.message ?? '请求失败'
-    ElMessage.error(message)
-    return Promise.reject(error)
-  },
-)
-
-// 请求拦截：自动附加 token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
   if (token) {
@@ -25,5 +14,26 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+api.interceptors.response.use(
+  (response) => {
+    const data = response.data
+    if (data?.code !== undefined && data.code !== 0) {
+      ElMessage.error(data.msg || data.message || '请求失败')
+      return Promise.reject(new Error(data.msg || data.message))
+    }
+    return response
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('access_token')
+      window.location.href = '/login'
+      return Promise.reject(error)
+    }
+    const msg = error.response?.data?.detail ?? error.message ?? '网络错误'
+    ElMessage.error(msg)
+    return Promise.reject(error)
+  },
+)
 
 export default api

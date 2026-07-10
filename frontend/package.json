@@ -1,7 +1,7 @@
 {
-  "name": "frontend",
+  "name": "skmind-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,18 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
-    "axios": "^1.18.1",
-    "element-plus": "^2.14.2",
-    "vue": "^3.5.38",
-    "vue-router": "^4.6.4"
+    "axios": "^1.7",
+    "element-plus": "^2.9",
+    "pinia": "^2.2",
+    "vue": "^3.5",
+    "vue-router": "^4.4"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/tsconfig": "^0.9.1",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.0",
-    "vue-tsc": "^3.3.5"
+    "@types/node": "^26.1.1",
+    "@vitejs/plugin-vue": "^5.2",
+    "esbuild": "^0.28.1",
+    "sass": "^1.80",
+    "typescript": "~5.6",
+    "vite": "^6.4.3",
+    "vue-tsc": "^2.2"
   }
 }
