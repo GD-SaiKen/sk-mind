@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="root">
     <!-- 左侧导航 — 白色背景，非 menu 组件 -->
     <aside class="aside" :class="{ collapsed: !sidebarOpen }">
@@ -75,12 +75,12 @@
         </div>
       </header>
       
-      <!-- 面包屑 + 标签（同容器） -->
+      <!-- 面包屑 + 标签（同一容器） -->
       <div class="bread-tab-bar">
         <div class="breadcrumb-row">
           <router-link to="/" class="bread-link">首页</router-link>
           <template v-if="activeTabPath !== '/'">
-            <span class="bread-sep">›</span>
+            <span class="bread-sep">/</span>
             <span class="bread-current">{{ currentNav?.label }}</span>
           </template>
         </div>
@@ -119,8 +119,8 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
-  HomeFilled, Coin, Upload, Collection, CircleCheck, User, Setting,
-  Search, Bell, QuestionFilled, Fold, Expand, Close,
+  HomeFilled, Coin, Tickets, Collection, CircleCheck, User, Setting,
+  Search, Bell, QuestionFilled, Fold, Expand, Close, DataAnalysis, Connection, Service,
 } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
@@ -130,11 +130,15 @@ const sidebarOpen = ref(true)
 
 const navItems: { path: string; icon: Component; label: string }[] = [
   { path: '/home', icon: HomeFilled, label: '首页' },
-  { path: '/ingestion', icon: Upload, label: '接入任务' },
+  { path: '/ingestion', icon: Tickets, label: '接入任务' },
   { path: '/data-browse', icon: Collection, label: '数据浏览' },
   { path: '/data-sources', icon: Coin, label: '数据源' },
   { path: '/catalog', icon: Collection, label: '数据目录' },
   { path: '/quality', icon: CircleCheck, label: '数据质量' },
+  { path: '/permissions', icon: User, label: '权限审计' },
+  { path: '/semantic', icon: DataAnalysis, label: '语义模型' },
+  { path: '/graph', icon: Connection, label: '关系图谱' },
+  { path: '/agent', icon: Service, label: 'Agent 服务' },
   { path: '/settings', icon: Setting, label: '系统设置' },
 ]
 
@@ -212,8 +216,8 @@ const currentNav = computed(() => matchNav(route.path))
 }
 
 .aside-logo {
-  font-size: $font-size-body;
-  font-weight: $font-weight-semibold;
+  font-size: 16px;
+  font-weight: 600;
   color: #1f2937;
 }
 
@@ -234,7 +238,7 @@ const currentNav = computed(() => matchNav(route.path))
   border-radius: 8px;
   color: #374151;
   text-decoration: none;
-  font-size: $font-size-base;
+  font-size: 14px;
   transition: background 0.15s;
 }
 
@@ -286,24 +290,22 @@ const currentNav = computed(() => matchNav(route.path))
 
 .search-wrap {
   flex: 1;
+}
 
-  :deep(.el-input__wrapper) {
-    background: #f3f4f6;
-    border-radius: 8px;
-    box-shadow: none;
-    transition: background 0.2s;
+.search-wrap :deep(.el-input__wrapper) {
+  background: #f3f4f6;
+  border-radius: 8px;
+  box-shadow: none;
+  transition: background 0.2s;
+}
 
-    &:hover {
-      background: #e5e7eb;
-    }
-  }
+.search-wrap :deep(.el-input__wrapper:hover) {
+  background: #e5e7eb;
+}
 
-  :deep(.el-input__inner) {
-    &::placeholder {
-      color: #9ca3af;
-      font-size: 13px;
-    }
-  }
+.search-wrap :deep(.el-input__inner::placeholder) {
+  color: #9ca3af;
+  font-size: 13px;
 }
 
 .topbar-right {
@@ -321,10 +323,10 @@ const currentNav = computed(() => matchNav(route.path))
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
+}
 
-  &:hover {
-    background: #f3f4f6;
-  }
+.user-area:hover {
+  background: #f3f4f6;
 }
 
 .avatar {
@@ -333,19 +335,19 @@ const currentNav = computed(() => matchNav(route.path))
   border-radius: 50%;
   background: #dbeafe;
   color: #2563eb;
-  font-size: $font-size-base;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .user-name {
-  font-size: $font-size-base;
+  font-size: 14px;
   color: #1f2937;
 }
 
 .user-email {
-  font-size: $font-size-xs;
+  font-size: 12px;
   color: #6b7280;
 }
 
@@ -362,7 +364,7 @@ const currentNav = computed(() => matchNav(route.path))
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: $font-size-sm;
+  font-size: 13px;
 }
 
 .bread-link {
@@ -395,7 +397,7 @@ const currentNav = computed(() => matchNav(route.path))
   align-items: center;
   gap: 5px;
   padding: 6px 14px;
-  font-size: $font-size-sm;
+  font-size: 13px;
   text-decoration: none;
   color: #6b7280;
   border-radius: 6px 6px 0 0;
