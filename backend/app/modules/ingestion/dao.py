@@ -1,6 +1,7 @@
 """Ingestion 模块数据访问层 — 纯数据库 CRUD 操作。"""
 
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -53,6 +54,19 @@ async def task_insert(db: AsyncSession, task: IngestionTask) -> IngestionTask:
 
 
 async def task_update(db: AsyncSession, task: IngestionTask) -> IngestionTask:
+    await db.flush()
+    return task
+
+
+async def task_update_sync_status(
+    db: AsyncSession,
+    task: IngestionTask,
+    status: str,
+    sync_at: datetime | None = None,
+) -> IngestionTask:
+    """更新任务的同步追踪字段。"""
+    task.last_sync_status = status
+    task.last_sync_at = sync_at or datetime.now(timezone.utc)
     await db.flush()
     return task
 

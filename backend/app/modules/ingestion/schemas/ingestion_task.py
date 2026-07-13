@@ -31,6 +31,7 @@ class IngestionTaskCreate(CamelModel):
     data_source_id: uuid.UUID = Field(..., description="关联数据源 ID")
     source_object_id: Optional[uuid.UUID] = Field(None, description="关联来源对象 ID")
     target_layer: str = Field("raw", description="目标层级 raw/clean/serving")
+    sync_mode: str = Field("full", description="同步模式 full/incremental")
     schedule_type: str = Field("manual", description="调度方式 manual/cron/on_demand")
     cron_expression: Optional[str] = Field(None, max_length=50, description="Cron 表达式")
     config: Optional[dict] = Field(None, description="任务配置 JSON")
@@ -42,6 +43,7 @@ class IngestionTaskUpdate(CamelModel):
 
     name: Optional[str] = Field(None, max_length=200, description="任务名称")
     target_layer: Optional[str] = Field(None, description="目标层级")
+    sync_mode: Optional[str] = Field(None, description="同步模式 full/incremental")
     schedule_type: Optional[str] = Field(None, description="调度方式")
     cron_expression: Optional[str] = Field(None, max_length=50, description="Cron 表达式")
     config: Optional[dict] = Field(None, description="任务配置 JSON")
@@ -65,8 +67,11 @@ class IngestionTaskResponse(CamelModel):
     data_source_id: uuid.UUID
     source_object_id: Optional[uuid.UUID] = None
     target_layer: str
+    sync_mode: str
     schedule_type: str
     cron_expression: Optional[str] = None
+    last_sync_at: Optional[datetime] = None
+    last_sync_status: Optional[str] = None
     status: str
     config: Optional[dict] = None
     description: Optional[str] = None
@@ -129,3 +134,25 @@ class ImportErrorResponse(CamelModel):
     error_message: str
     raw_value: Optional[str] = None
     created_at: datetime
+
+
+# ── 时间范围 / 快补 ───────────────────────────
+
+class QuickFillRequest(CamelModel):
+    """近期快补请求 — 指定起止时间拉取数据。"""
+
+    start_time: datetime = Field(..., description="开始时间（含）")
+    end_time: datetime = Field(..., description="结束时间（含）")
+
+
+class TimeRangeResponse(CamelModel):
+    """时间范围预览响应 — 展示建议的同步范围，不触发同步。"""
+
+    sync_mode: str
+    last_sync_at: Optional[datetime] = None
+    suggested_start: Optional[datetime] = None
+    suggested_end: Optional[datetime] = None
+    history_start_date: Optional[str] = None
+    next_scheduled_run: Optional[datetime] = None
+    schedule_cron: Optional[str] = None
+    schedule_description: Optional[str] = None

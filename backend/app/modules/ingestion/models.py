@@ -40,6 +40,19 @@ class IngestionTask(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )  # manual / cron / on_demand
     cron_expression: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
+    # 同步模式
+    sync_mode: Mapped[str] = mapped_column(
+        String(20), default="full", nullable=False
+    )  # full / incremental
+
+    # 同步追踪
+    last_sync_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_sync_status: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )  # success / partial_success / failed
+
     # 状态
     status: Mapped[str] = mapped_column(
         String(20), default="draft", nullable=False, index=True

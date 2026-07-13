@@ -13,10 +13,14 @@ from app.core.logging import setup_logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """应用生命周期：启动时初始化日志，关闭时清理连接。"""
+    """应用生命周期：启动时初始化日志和调度器，关闭时清理连接。"""
     setup_logging(settings.LOG_LEVEL)
     from app.core.database import engine
+    from app.core.scheduler import start_scheduler, shutdown_scheduler
+
+    start_scheduler()
     yield
+    shutdown_scheduler()
     await engine.dispose()
 
 
