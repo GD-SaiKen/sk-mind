@@ -25,6 +25,30 @@
       >
         立即执行
       </el-button>
+      <el-dropdown
+        trigger="click"
+        size="small"
+      >
+        <el-button
+          :icon="Clock"
+          size="small"
+        >
+          补拉数据
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item @click="handleQuickFill(1)">补拉昨天</el-dropdown-item>
+            <el-dropdown-item @click="handleQuickFill(7)">补拉最近 7 天</el-dropdown-item>
+            <el-dropdown-item @click="handleQuickFill(30)">补拉最近 30 天</el-dropdown-item>
+            <el-dropdown-item
+              divided
+              @click="handleBackfill"
+            >
+              全量回溯（从上线日期至今）
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button :icon="Refresh" size="small">
         重试
       </el-button>
@@ -53,8 +77,12 @@
           <el-descriptions-item label="名称">{{ task.name }}</el-descriptions-item>
           <el-descriptions-item label="编码">{{ task.code }}</el-descriptions-item>
           <el-descriptions-item label="目标层">{{ task.targetLayer }}</el-descriptions-item>
+          <el-descriptions-item label="同步模式">{{ task.syncMode === 'incremental' ? '增量同步' : '全量同步' }}</el-descriptions-item>
           <el-descriptions-item label="调度类型">{{ task.scheduleType }}</el-descriptions-item>
+          <el-descriptions-item label="Cron">{{ task.cronExpression || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ task.status }}</el-descriptions-item>
+          <el-descriptions-item label="最近同步">{{ task.lastSyncAt?.slice(0, 19) || '未同步过' }}</el-descriptions-item>
+          <el-descriptions-item label="上次结果">{{ task.lastSyncStatus || '-' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ task.createdAt }}</el-descriptions-item>
         </el-descriptions>
       </el-tab-pane>
@@ -160,7 +188,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
-import { Refresh, VideoPlay } from '@element-plus/icons-vue';
+import { Clock, Refresh, VideoPlay } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import {
@@ -168,6 +196,7 @@ import {
   type IngestionBatch,
   type ImportError,
   type IngestionTask,
+  type TimeRange,
 } from '@/api';
 
 const route = useRoute();
@@ -177,6 +206,8 @@ const batches = ref<IngestionBatch[]>([]);
 const errors = ref<ImportError[]>([]);
 const activeTab = ref('batches');
 const executing = ref(false);
+const backfilling = ref(false);
+const quickDays = ref(7);
 
 const batchLabel: Record<string, string> = {
   pending: '等待中',
@@ -195,10 +226,10 @@ const batchType: Record<string, '' | 'success' | 'warning' | 'danger' | 'info'> 
 
 const summary = computed(() => [
   { label: '调度', value: task.value?.scheduleType ?? '-' },
+  { label: '同步模式', value: task.value?.syncMode === 'incremental' ? '增量' : '全量' },
   { label: '目标层', value: task.value?.targetLayer ?? '-' },
+  { label: '最近同步', value: task.value?.lastSyncAt?.slice(0, 16) ?? '未同步过' },
   { label: '创建时间', value: task.value?.createdAt?.slice(0, 10) ?? '-' },
-  { label: '最近状态', value: batches.value[0]?.status ?? '-' },
-  { label: '总行数', value: (batches.value[0]?.recordCount ?? 0).toLocaleString() },
 ]);
 
 async function load() {
@@ -228,6 +259,31 @@ async function loadErrors(bid: string) {
   const e = await ingestionService.getBatchErrors(bid, { pageSize: 50 });
   errors.value = e.items;
   activeTab.value = 'errors';
+}
+
+async function handleBackfill() {
+  backfilling.value = true;
+  try {
+    const r = await ingestionService.backfill(taskId);
+    ElMessage.success(`全量回溯已提交 (${r.startTime} → ${r.endTime?.slice(0, 10)})`);
+    await load();
+  } finally {
+    backfilling.value = false;
+  }
+}
+
+async function handleQuickFill(days: number) {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end);
+  start.setDate(start.getDate() - days);
+  try {
+    await ingestionService.quickFill(taskId, start.toISOString(), end.toISOString());
+    ElMessage.success(`快补 ${days} 天数据已提交`);
+    await load();
+  } catch {
+    // handled by interceptor
+  }
 }
 
 onMounted(load);

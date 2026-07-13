@@ -13,8 +13,13 @@ export interface IngestionTask {
   code: string
   dataSourceId: string
   targetLayer: string
+  syncMode: string
   scheduleType: string
+  cronExpression: string | null
+  lastSyncAt: string | null
+  lastSyncStatus: string | null
   status: string
+  config: Record<string, unknown> | null
   createdAt: string
   updatedAt: string
 }
@@ -49,4 +54,14 @@ export interface ImportError {
   errorMessage: string
   rawValue: string | null
   createdAt: string
+}
+
+export interface TimeRange {
+  syncMode: string
+  lastSyncAt: string | null
+  suggestedStart: string | null
+  suggestedEnd: string | null
+  historyStartDate: string | null
+  scheduleCron: string | null
+  scheduleDescription: string | null
 }

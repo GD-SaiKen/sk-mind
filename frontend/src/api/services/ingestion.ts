@@ -53,6 +53,19 @@ export class IngestionService {
   retryBatch(batchId: string) {
     return this.api.post(`/ingestion-tasks/batches/${batchId}/retry`).then(r => r.data.data)
   }
+
+  // ── 全量回溯 / 快补 / 时间范围预览（目标1+3）──
+  backfill(id: string) {
+    return this.api.post(`/ingestion-tasks/${id}/backfill`).then(r => r.data.data)
+  }
+
+  quickFill(id: string, startTime: string, endTime: string) {
+    return this.api.post(`/ingestion-tasks/${id}/quick-fill`, { startTime, endTime }).then(r => r.data.data)
+  }
+
+  getTimeRange(id: string) {
+    return this.api.get(`/ingestion-tasks/${id}/time-range`).then(r => r.data.data)
+  }
 }
 
 export const ingestionService = new IngestionService()
