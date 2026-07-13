@@ -1,17 +1,24 @@
-"""API 路由聚合 — 汇总所有业务模块路由。"""
+"""API 路由聚合 — 汇总所有业务模块路由（三层架构：router → service → dao）。"""
 
 from fastapi import APIRouter
 
-from app.api.auth import router as auth_router
-from app.modules.ingestion.api import ingestion_tasks_router
-from app.modules.ingestion.api.data_browse import router as data_browse_router
+from app.modules.auth.router import router as auth_router
+from app.modules.ingestion.router import task_router, browse_router
+from app.modules.data_sources.router import router as data_sources_router
+from app.modules.datasets.router import router as datasets_router
+from app.modules.lineage.router import router as lineage_router
+from app.modules.quality.router import router as quality_router
 
 router = APIRouter()
 
 # ── 注册业务路由 ─────────────────────────────
 router.include_router(auth_router)
-router.include_router(ingestion_tasks_router)
-router.include_router(data_browse_router)
+router.include_router(task_router)
+router.include_router(browse_router)
+router.include_router(data_sources_router)
+router.include_router(datasets_router)
+router.include_router(lineage_router)
+router.include_router(quality_router)
 
 # 当前阶段提供一个简单的状态接口验证前后端联通
 @router.get("/status", tags=["system"])

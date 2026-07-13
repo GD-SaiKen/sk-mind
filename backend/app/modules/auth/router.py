@@ -1,4 +1,4 @@
-"""Auth API 路由 — 登录、注册、Token 刷新、用户管理。"""
+"""Auth 模块路由层 — 登录、注册、Token 刷新、用户/角色/权限管理。"""
 
 import uuid
 from typing import Optional
@@ -46,7 +46,6 @@ async def login(
 
     token = auth_svc.create_user_token(user)
 
-    # 审计日志
     await auth_svc.write_audit_log(
         db,
         action="login",
@@ -70,7 +69,6 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ):
     """注册新用户。"""
-    # 检查用户名和邮箱唯一性
     existing_user = await auth_svc.get_user_by_username(db, data.username)
     if existing_user:
         raise HTTPException(

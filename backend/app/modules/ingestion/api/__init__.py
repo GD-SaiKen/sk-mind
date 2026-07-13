@@ -1,5 +1,4 @@
-"""Ingestion API 包。"""
+"""Ingestion API 包 — 路由已迁移至 app.modules.ingestion.router。"""
 
-from app.modules.ingestion.api.ingestion_tasks import router as ingestion_tasks_router
-
-__all__ = ["ingestion_tasks_router"]
+# 旧路由已迁移至模块级 router.py（三层架构）。
+# 此包保留用于未来可能的 API 子模块扩展。
