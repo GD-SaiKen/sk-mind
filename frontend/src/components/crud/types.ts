@@ -1,5 +1,7 @@
 // ==================== 操作按钮 ====================
 
+import type { Component } from 'vue'
+
 /** 单个操作按钮配置 */
 export interface ActionButton {
   /** 按钮文字 */
@@ -12,8 +14,8 @@ export interface ActionButton {
   onClick: (row: Record<string, any>, index: number) => void
   /** 是否隐藏（动态控制） */
   hidden?: (row: Record<string, any>) => boolean
-  /** 图标名（element-plus icon） */
-  icon?: string
+  /** 图标组件（@element-plus/icons-vue），传入后按钮只显示图标，悬浮显示 label */
+  icon?: Component
 }
 
 // ==================== 列类型枚举 ====================

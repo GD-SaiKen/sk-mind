@@ -126,23 +126,23 @@
           <template #default="{ row, $index }">
             <div class="action-btns">
               <template v-for="(btn, i) in visibleButtons(col, row)" :key="i">
+                <el-tooltip v-if="btn.icon" :content="btn.label" placement="top" :show-after="400">
+                  <el-button
+                    link
+                    :type="btn.type ?? 'primary'"
+                    size="small"
+                    @click="btn.onClick(row, $index)"
+                  >
+                    <el-icon><component :is="btn.icon" /></el-icon>
+                  </el-button>
+                </el-tooltip>
                 <el-button
-                  v-if="btn.link ?? true"
+                  v-else
                   link
                   :type="btn.type ?? 'primary'"
                   size="small"
                   @click="btn.onClick(row, $index)"
                 >
-                  <el-icon v-if="btn.icon" class="btn-icon"><component :is="btn.icon" /></el-icon>
-                  {{ btn.label }}
-                </el-button>
-                <el-button
-                  v-else
-                  :type="btn.type ?? 'primary'"
-                  size="small"
-                  @click="btn.onClick(row, $index)"
-                >
-                  <el-icon v-if="btn.icon" class="btn-icon"><component :is="btn.icon" /></el-icon>
                   {{ btn.label }}
                 </el-button>
               </template>
@@ -329,6 +329,28 @@ function actionColWidth(col: ActionColumn): number {
   overflow: hidden;
 }
 
+/* 表格填满容器 */
+.table-wrapper :deep(.el-table) {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-wrapper :deep(.el-table__inner-wrapper) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.table-wrapper :deep(.el-table__header-wrapper) {
+  flex-shrink: 0;
+}
+
+.table-wrapper :deep(.el-table__body-wrapper) {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .text-muted {
   color: #c0c4cc;
 }
@@ -339,10 +361,6 @@ function actionColWidth(col: ActionColumn): number {
   justify-content: center;
   gap: 4px;
   flex-wrap: nowrap;
-}
-
-.btn-icon {
-  margin-right: 2px;
 }
 
 .is-clickable {

@@ -1,22 +1,19 @@
 <template>
   <el-card>
-    <!-- 1. 标题 + 筛选区（同行） -->
+    <!-- 1. 标题 + 筛选区 + 操作按钮（同行） -->
     <template #header>
-      <div class="crud-top" v-if="title || $slots['title-extra'] || $slots.filters">
+      <div class="crud-top" v-if="title || $slots['title-extra'] || $slots.filters || $slots.actions">
         <div class="crud-top-left">
           <span class="crud-title-text" v-if="title">{{ title }}</span>
           <slot name="title-extra" />
         </div>
-        <div class="crud-top-right" v-if="$slots.filters">
+        <div class="crud-top-right" v-if="$slots.filters || $slots.actions">
           <slot name="filters" />
+          <div class="crud-spacer" v-if="$slots.filters && $slots.actions" />
+          <slot name="actions" />
         </div>
       </div>
     </template>
-
-    <!-- 2. 表头操作区 -->
-    <div class="crud-actions" v-if="$slots.actions">
-      <slot name="actions" />
-    </div>
 
     <!-- 3. 表格 -->
     <div class="crud-table">
@@ -106,12 +103,8 @@ defineProps<{
   white-space: nowrap;
 }
 
-.crud-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 12px;
-  flex-shrink: 0;
+.crud-spacer {
+  flex: 1;
 }
 
 .crud-table {
