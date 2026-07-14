@@ -296,6 +296,134 @@ export function HomePage() {
         </div>
       </div>
 
+      {/* 数据质量概览 */}
+      <Card className="mb-8">
+        <div className="border-b border-gray-200 px-4 py-3">
+          <h2 className="flex items-center gap-2">
+            <ShieldCheck className="size-5 text-orange-600" />
+            数据质量概览
+          </h2>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">66.7%</div>
+              <div className="text-xs text-gray-400 mt-1">质量通过率</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-800">3</div>
+              <div className="text-xs text-gray-400 mt-1">问题类型</div>
+              <div className="text-[10px] text-gray-400">完整性/格式/枚举</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-500">1</div>
+              <div className="text-xs text-gray-400 mt-1">异常数据集</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-800">10:45</div>
+              <div className="text-xs text-gray-400 mt-1">最近检查</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-yellow-500">持平</div>
+              <div className="text-xs text-gray-400 mt-1">趋势 vs 上周期</div>
+            </div>
+          </div>
+          <div className="text-xs text-gray-500 mb-3">异常数据集 TOP 5</div>
+          <div className="space-y-1.5">
+            {[
+              { name: "每日考勤记录", problems: 12, type: "完整性" },
+              { name: "采购订单明细", problems: 5, type: "格式" },
+              { name: "物料主数据", problems: 3, type: "枚举" },
+            ].map((ds) => (
+              <Link key={ds.name} to="/quality" className="flex items-center justify-between p-2 bg-red-50 border border-red-100 rounded hover:bg-red-100 transition-colors">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="size-3.5 text-red-500" />
+                  <span className="text-sm text-red-800">{ds.name}</span>
+                  <Badge variant="outline" className="text-[10px] h-4 px-1 bg-red-100 text-red-600 border-red-200">{ds.type}</Badge>
+                </div>
+                <span className="text-sm font-medium text-red-600">{ds.problems} 个问题</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {/* Agent 使用概览 */}
+      <Card className="mb-8">
+        <div className="border-b border-gray-200 px-4 py-3">
+          <h2 className="flex items-center gap-2">
+            <Bot className="size-5 text-pink-600" />
+            Agent 使用概览
+          </h2>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-800">156</div>
+              <div className="text-xs text-gray-400 mt-1">今日查询</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">96.2%</div>
+              <div className="text-xs text-gray-400 mt-1">成功率</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-800">数据查询</div>
+              <div className="text-xs text-gray-400 mt-1">最常用工具</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-800">销售订单</div>
+              <div className="text-xs text-gray-400 mt-1">最常用数据集</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-500">权限不足</div>
+              <div className="text-xs text-gray-400 mt-1">主要失败原因</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-800">11:02</div>
+              <div className="text-xs text-gray-400 mt-1">最近查询</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs text-gray-500 mb-2">常用工具 TOP 5</div>
+              <div className="space-y-1">
+                {[
+                  { name: "受控数据查询", count: 89, pct: "57%" },
+                  { name: "数据目录检索", count: 34, pct: "22%" },
+                  { name: "权限检查", count: 15, pct: "10%" },
+                  { name: "语义检索", count: 10, pct: "6%" },
+                  { name: "质量状态查询", count: 8, pct: "5%" },
+                ].map((tool) => (
+                  <div key={tool.name} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-700">{tool.name}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-gray-400">{tool.count}次</span>
+                      <span className="text-gray-400 w-8 text-right">{tool.pct}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-2">失败原因分布</div>
+              <div className="space-y-1">
+                {[
+                  { reason: "权限不足", count: 4, color: "bg-red-500" },
+                  { reason: "数据不可用", count: 1, color: "bg-orange-500" },
+                  { reason: "查询超时", count: 1, color: "bg-yellow-500" },
+                ].map((item) => (
+                  <div key={item.reason} className="flex items-center gap-2 text-sm">
+                    <span className={`size-2 rounded-full ${item.color}`} />
+                    <span className="text-gray-700 flex-1">{item.reason}</span>
+                    <span className="text-gray-400">{item.count}次</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* 待处理事项 */}
       <Card className="mb-8">
         <div className="border-b border-gray-200 px-4 py-3">
