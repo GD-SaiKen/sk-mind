@@ -2,6 +2,8 @@
   <div class="detail-page">
     <!-- 面包屑 -->
     <div class="breadcrumb">
+      <router-link to="/" class="bread-link">首页</router-link>
+      <span class="bread-sep">/</span>
       <router-link to="/data-sources" class="bread-link">数据源</router-link>
       <span class="bread-sep">/</span>
       <span class="bread-current">{{ ds?.name }}</span>

@@ -69,6 +69,34 @@ h4 { font-size: 16px; font-weight: 600; color: #1f2937; line-height: 1.4; }
   font-size: 20px;
 }
 
+/* ── 面包屑（全局） ── */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.bread-link {
+  color: #6b7280;
+  text-decoration: none;
+}
+
+.bread-link:hover {
+  color: #2563eb;
+}
+
+.bread-sep {
+  margin: 0 6px;
+  color: #d1d5db;
+}
+
+.bread-current {
+  color: #374151;
+  font-weight: 500;
+}
+
 /* ── 滚动条 ── */
 ::-webkit-scrollbar {
   width: 5px;

@@ -2,6 +2,17 @@
 
   <div class="page">
 
+    <div class="breadcrumb">
+      <router-link
+        to="/"
+        class="bread-link"
+      >
+        首页
+      </router-link>
+      <span class="bread-sep">/</span>
+      <span class="bread-current">接入任务</span>
+    </div>
+
     <!-- 统计卡片 -->
 
     <div class="stat-grid">

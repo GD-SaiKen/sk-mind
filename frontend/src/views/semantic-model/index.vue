@@ -1,5 +1,15 @@
 ﻿<template>
   <div class="sem-page">
+    <div class="breadcrumb">
+      <router-link
+        to="/"
+        class="bread-link"
+      >
+        首页
+      </router-link>
+      <span class="bread-sep">/</span>
+      <span class="bread-current">语义模型</span>
+    </div>
     <div class="tab-bar">
       <button
         v-for="tab in tabs"

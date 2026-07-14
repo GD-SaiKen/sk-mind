@@ -1,6 +1,8 @@
 <template>
   <div class="detail-page">
     <div class="breadcrumb">
+      <router-link to="/" class="bread-link">首页</router-link>
+      <span class="bread-sep">/</span>
       <router-link to="/catalog" class="bread-link">数据目录</router-link>
       <span class="bread-sep">/</span>
       <span class="bread-current">{{ datasetName }}</span>

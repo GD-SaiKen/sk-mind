@@ -1,10 +1,21 @@
 ﻿<template>
-  <Crud
-    :filter-items="filterItems"
-    v-model:filter-values="filterValues"
-    :pagination="paginationConfig"
-    @filter-change="load"
-  >
+  <div class="list-page">
+    <div class="breadcrumb">
+      <router-link
+        to="/"
+        class="bread-link"
+      >
+        首页
+      </router-link>
+      <span class="bread-sep">/</span>
+      <span class="bread-current">数据源</span>
+    </div>
+    <Crud
+      :filter-items="filterItems"
+      v-model:filter-values="filterValues"
+      :pagination="paginationConfig"
+      @filter-change="load"
+    >
 
     <!-- 操作区 -->
     <template #actions>
@@ -30,10 +41,9 @@
         </template>
       </Table>
     </template>
-  </Crud>
+    </Crud>
 
-  <!-- 编辑/新建弹窗 -->
-  <el-dialog
+    <el-dialog
     v-model="dialogVisible"
     :title="editingId ? '编辑数据源' : '新增数据源'"
     width="600px"
@@ -87,7 +97,8 @@
         {{ editingId ? '保存' : '创建' }}
       </el-button>
     </template>
-  </el-dialog>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">

@@ -1,5 +1,15 @@
 ﻿<template>
   <div class="settings-page">
+    <div class="breadcrumb">
+      <router-link
+        to="/"
+        class="bread-link"
+      >
+        首页
+      </router-link>
+      <span class="bread-sep">/</span>
+      <span class="bread-current">系统设置</span>
+    </div>
     <div class="tab-bar">
       <button
         v-for="tab in tabs"

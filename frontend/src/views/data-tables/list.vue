@@ -1,5 +1,22 @@
 <template>
   <div class="page">
+    <div class="breadcrumb">
+      <router-link
+        to="/"
+        class="bread-link"
+      >
+        首页
+      </router-link>
+      <span class="bread-sep">/</span>
+      <router-link
+        to="/tables"
+        class="bread-link"
+      >
+        数据表
+      </router-link>
+      <span class="bread-sep">/</span>
+      <span class="bread-current">Raw 数据浏览</span>
+    </div>
     <div class="title-row">
       <h1>鏁版嵁娴忚� <span class="count">({{ tables.length }} 寮犺〃)</span></h1>
     </div>

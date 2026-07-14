@@ -1,6 +1,8 @@
 <template>
   <div class="detail-page">
     <div class="breadcrumb">
+      <router-link to="/" class="bread-link">首页</router-link>
+      <span class="bread-sep">/</span>
       <router-link to="/ingestion" class="bread-link">接入任务</router-link>
       <span class="bread-sep">/</span>
       <router-link :to="`/ingestion/${taskId}`" class="bread-link">{{ taskName }}</router-link>
