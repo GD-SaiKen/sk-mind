@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <Index title="数据源管理" :pagination="paginationConfig">
     <!-- 筛选区 -->
     <template #filters>
@@ -61,7 +61,7 @@
     destroy-on-close
     @closed="resetForm"
   >
-    <el-form :model="form" label-width="100px" size="small">
+    <el-form :model="form" label-width="100px">
       <el-form-item label="名称" required>
         <el-input v-model="form.name" maxlength="200" />
       </el-form-item>

@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="agent-page">
     <div class="tab-bar">
       <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">{{ tab }}</button>
@@ -22,21 +22,21 @@
         <div v-if="showAnswer" class="answer-area">
           <h4>查询结果</h4>
           <div class="answer-sql">生成 SQL: SELECT customer_name, SUM(amount) as total FROM sales_orders WHERE order_date BETWEEN '2026-06-01' AND '2026-06-30' GROUP BY customer_name ORDER BY total DESC LIMIT 10</div>
-          <el-table :data="mockResult" stripe size="small" class="result-table">
+          <el-table :data="mockResult" stripe class="result-table">
             <el-table-column label="排名" type="index" width="60" />
             <el-table-column label="客户名称" prop="customer" />
             <el-table-column label="销售额" prop="amount" />
           </el-table>
           <div class="answer-meta">
             <span>数据来源: 销售订单表、客户信息表</span>
-            <span>质量状态: <el-tag type="success" size="small" effect="plain">正常</el-tag></span>
+            <span>质量状态: <el-tag type="success" effect="plain">正常</el-tag></span>
           </div>
         </div>
       </el-card>
       <el-card shadow="never" class="suggest-card">
         <h4>示例问题</h4>
         <div class="suggest-list">
-          <el-button v-for="q in suggestions" :key="q" plain size="small" class="suggest-btn" @click="query = q">{{ q }}</el-button>
+          <el-button v-for="q in suggestions" :key="q" plain class="suggest-btn" @click="query = q">{{ q }}</el-button>
         </div>
       </el-card>
     </div>

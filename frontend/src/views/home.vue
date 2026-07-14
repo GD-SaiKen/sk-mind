@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="home-page">
     <!-- 标签页 -->
     <div class="tab-bar">
@@ -114,7 +114,6 @@
             </div>
             <el-tag
               :type="item.level === 'error' ? 'danger' : 'warning'"
-              size="small"
               effect="plain"
             >
               {{ item.tag }}
@@ -150,7 +149,6 @@
             </div>
             <el-tag
               :type="task.tagType"
-              size="small"
               effect="plain"
             >
               {{ task.tag }}
@@ -169,7 +167,6 @@
         <el-descriptions-item label="后端服务">
           <el-tag
             :type="healthStatus === '运行正常' ? 'success' : 'danger'"
-            size="small"
           >
             {{ healthStatus }}
           </el-tag>

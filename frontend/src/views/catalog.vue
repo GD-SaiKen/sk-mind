@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="catalog-page">
     <!-- 标签页 -->
     <div class="tab-bar">
@@ -93,14 +93,13 @@
           <div class="ds-name-row">
             <span :class="['ds-dot', ds.quality === 'error' ? 'red' : ds.quality === 'warning' ? 'yellow' : 'green']" />
             <span class="ds-name">{{ ds.displayName }}</span>
-            <el-tag
-              size="small" effect="plain"
+            <el-tag effect="plain"
               :type="ds.quality === 'error' ? 'danger' : ds.quality === 'warning' ? 'warning' : 'success'"
             >{{ ds.quality === 'error' ? '异常' : ds.quality === 'warning' ? '警告' : '正常' }}</el-tag>
           </div>
           <div class="ds-code-row">
             <span class="ds-code">{{ ds.name }}</span>
-            <el-tag v-if="ds.layer === 'Serving'" size="small" effect="plain" class="layer-tag">语义: 订单</el-tag>
+            <el-tag v-if="ds.layer === 'Serving'" effect="plain" class="layer-tag">语义: 订单</el-tag>
           </div>
         </div>
 
@@ -125,22 +124,21 @@
 
         <div class="ds-actions">
           <el-button
-            v-if="ds.agentEnabled && ds.records > 0"
-            size="small" plain type="primary"
+            v-if="ds.agentEnabled && ds.records > 0" plain type="primary"
           >
             <el-icon :size="14"><Service /></el-icon>
             问问 Agent
           </el-button>
-          <el-button v-else-if="ds.agentEnabled" size="small" plain disabled>
+          <el-button v-else-if="ds.agentEnabled" plain disabled>
             <el-icon :size="14"><Service /></el-icon>
             暂无可查数据
           </el-button>
-          <el-button v-else size="small" plain disabled>
+          <el-button v-else plain disabled>
             <el-icon :size="14"><Lock /></el-icon>
             申请权限
           </el-button>
           <router-link :to="/tables/">
-            <el-button size="small" link type="primary">
+            <el-button link type="primary">
               {{ ds.records === 0 ? '查看表结构' : '查看详情' }}
             </el-button>
           </router-link>

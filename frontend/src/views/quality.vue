@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="quality-page">
     <!-- 标签页 -->
     <div class="tab-bar">
@@ -112,7 +112,7 @@
               <div class="issue-type">{{ issue.type }}</div>
             </div>
           </div>
-          <el-tag type="warning" size="small" effect="plain">{{ issue.status }}</el-tag>
+          <el-tag type="warning" effect="plain">{{ issue.status }}</el-tag>
         </div>
         <div class="issue-meta-row">
           <div class="issue-meta-item"><span class="meta-label">问题数量</span><span class="meta-value">{{ issue.count }} 条</span></div>
@@ -121,10 +121,10 @@
           <div class="issue-meta-item"><span class="meta-label">负责人</span><span class="meta-value">{{ issue.owner }}</span></div>
         </div>
         <div class="issue-actions">
-          <el-button size="small" plain>查看</el-button>
-          <el-button size="small" plain>分派</el-button>
-          <el-button size="small" plain>标记为可接受</el-button>
-          <el-button size="small" plain type="danger">关闭</el-button>
+          <el-button plain>查看</el-button>
+          <el-button plain>分派</el-button>
+          <el-button plain>标记为可接受</el-button>
+          <el-button plain type="danger">关闭</el-button>
         </div>
       </div>
     </div>

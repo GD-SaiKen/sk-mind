@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="detail-page">
     <!-- 面包屑 -->
     <div class="breadcrumb">
@@ -15,8 +15,8 @@
       <div class="title-row">
         <div class="title-left">
           <h1>{{ ds.name }}</h1>
-          <el-tag :type="statusTag(ds.status)" size="small" effect="plain">{{ statusLabel(ds.status) }}</el-tag>
-          <el-tag size="small" effect="plain">{{ ds.type }}</el-tag>
+          <el-tag :type="statusTag(ds.status)" effect="plain">{{ statusLabel(ds.status) }}</el-tag>
+          <el-tag effect="plain">{{ ds.type }}</el-tag>
         </div>
         <div class="actions">
           <el-button :icon="Edit" plain>编辑</el-button>
@@ -65,7 +65,7 @@
           <el-card shadow="never">
             <div class="tab-header">
               <h3>关联的接入任务</h3>
-              <el-button type="primary" size="small">创建新任务</el-button>
+              <el-button type="primary">创建新任务</el-button>
             </div>
             <div class="link-list">
               <div class="link-item">
@@ -99,12 +99,12 @@
               <router-link to="/tables/1" class="link-item">
                 <div>
                   <span>销售订单表</span>
-                  <el-tag size="small" effect="plain" class="ml-sm">Serving</el-tag>
+                  <el-tag effect="plain" class="ml-sm">Serving</el-tag>
                 </div>
                 <span>1,250 条 · 24 字段</span>
               </router-link>
               <router-link to="/tables/2" class="link-item">
-                <div><span>客户信息表</span><el-tag size="small" effect="plain" class="ml-sm">Serving</el-tag></div>
+                <div><span>客户信息表</span><el-tag effect="plain" class="ml-sm">Serving</el-tag></div>
                 <span>180 条 · 15 字段</span>
               </router-link>
             </div>

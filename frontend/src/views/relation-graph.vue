@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="rg-page">
     <div class="tab-bar">
       <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">{{ tab }}<span v-if="tab === '待确认关系'" class="tab-count">{{ pendingCount }}</span></button>
@@ -23,11 +23,11 @@
       <template #table>
         <Table :columns="edgesColumns" :data="pagedEdges">
           <template #col-fromEntity="{ row }">
-            <el-tag size="small" effect="plain">{{ row.fromEntity }}</el-tag>
+            <el-tag effect="plain">{{ row.fromEntity }}</el-tag>
             <span class="mono">{{ row.fromId }}</span>
           </template>
           <template #col-toEntity="{ row }">
-            <el-tag size="small" effect="plain">{{ row.toEntity }}</el-tag>
+            <el-tag effect="plain">{{ row.toEntity }}</el-tag>
             <span class="mono">{{ row.toId }}</span>
           </template>
         </Table>
@@ -47,9 +47,9 @@
       <div v-if="showResult" class="result-section">
         <h4>查询结果示例</h4>
         <div class="result-path">
-          <el-tag size="small" effect="plain">客户 CUST-8856</el-tag><span class="arrow">→ 下单 →</span>
-          <el-tag size="small" effect="plain">订单 SO-2026-001234</el-tag><span class="arrow">→ 包含 →</span>
-          <el-tag size="small" effect="plain">产品 PROD-5678</el-tag>
+          <el-tag effect="plain">客户 CUST-8856</el-tag><span class="arrow">→ 下单 →</span>
+          <el-tag effect="plain">订单 SO-2026-001234</el-tag><span class="arrow">→ 包含 →</span>
+          <el-tag effect="plain">产品 PROD-5678</el-tag>
           <span class="result-meta">可信度: 93% · 已确认</span>
         </div>
       </div>
@@ -60,17 +60,17 @@
       <div v-for="edge in pendingEdges" :key="edge.id" class="pending-card">
         <div class="pending-header">
           <div class="pending-path">
-            <el-tag size="small" effect="plain">{{ edge.fromEntity }}</el-tag><span class="mono">{{ edge.fromId }}</span>
+            <el-tag effect="plain">{{ edge.fromEntity }}</el-tag><span class="mono">{{ edge.fromId }}</span>
             <span class="arrow">→ {{ edge.relation }} →</span>
-            <el-tag size="small" effect="plain">{{ edge.toEntity }}</el-tag><span class="mono">{{ edge.toId }}</span>
+            <el-tag effect="plain">{{ edge.toEntity }}</el-tag><span class="mono">{{ edge.toId }}</span>
           </div>
-          <el-tag type="warning" size="small" effect="plain">待确认</el-tag>
+          <el-tag type="warning" effect="plain">待确认</el-tag>
         </div>
         <div class="pending-meta">来源: {{ edge.source }} · 生成方式: {{ edge.generatedBy }} · 可信度: {{ (edge.confidence * 100).toFixed(0) }}%</div>
         <div class="pending-actions">
-          <el-button size="small" plain>查看证据</el-button>
-          <el-button size="small" type="primary">确认关系</el-button>
-          <el-button size="small" plain type="danger">拒绝</el-button>
+          <el-button plain>查看证据</el-button>
+          <el-button type="primary">确认关系</el-button>
+          <el-button plain type="danger">拒绝</el-button>
         </div>
       </div>
     </div>

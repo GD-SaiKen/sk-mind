@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="perm-page">
     <div class="tab-bar">
       <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">{{ tab }}</button>
@@ -34,7 +34,7 @@
       </div>
       <div v-for="role in roles" :key="role.name" class="role-item">
         <div class="role-left"><div :class="['role-icon', role.bg]"><el-icon :size="16"><component :is="role.icon" /></el-icon></div><div><div class="role-name">{{ role.name }}</div><div class="role-desc">{{ role.desc }}</div></div></div>
-        <div class="role-right"><el-tag size="small" effect="plain">{{ role.count }} 人</el-tag><el-button link size="small">编辑</el-button><el-button link size="small">查看成员</el-button></div>
+        <div class="role-right"><el-tag effect="plain">{{ role.count }} 人</el-tag><el-button link>编辑</el-button><el-button link>查看成员</el-button></div>
       </div>
     </div>
 

@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="settings-page">
     <!-- 标签页 -->
     <div class="tab-bar">
@@ -82,8 +82,7 @@
         <el-card v-for="tag in businessTags" :key="tag.id" shadow="never" class="tag-card">
           <div class="tag-card-header">
             <el-tag
-              :type="tag.color === 'blue' ? '' : tag.color === 'green' ? 'success' : tag.color === 'purple' ? '' : 'warning'"
-              size="small" effect="plain"
+              :type="tag.color === 'blue' ? '' : tag.color === 'green' ? 'success' : tag.color === 'purple' ? '' : 'warning'" effect="plain"
               :class="'tag-' + tag.color"
             >{{ tag.name }}</el-tag>
             <el-button link type="primary" :icon="Edit" />
@@ -126,7 +125,7 @@
         <el-col :span="6">
           <div class="sys-info-item">
             <div class="sys-info-label">部署环境</div>
-            <el-tag type="warning" size="small" effect="plain">测试环境</el-tag>
+            <el-tag type="warning" effect="plain">测试环境</el-tag>
           </div>
         </el-col>
         <el-col :span="6">
