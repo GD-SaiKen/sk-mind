@@ -1,6 +1,3 @@
-<!--
-  ingestion-task/detail.vue — 接入任务详情
--->
 <template>
   <div class="page" v-if="task">
     <div class="title-row">
@@ -32,7 +29,7 @@
 
     <el-tabs v-model="activeTab">
       <el-tab-pane label="当前配置" name="config">
-        <el-descriptions :column="2" border size="small" style="max-width:600px">
+        <el-descriptions :column="2" border size="small" style="max-width: 600px">
           <el-descriptions-item label="名称">{{ task.name }}</el-descriptions-item>
           <el-descriptions-item label="编码">{{ task.code }}</el-descriptions-item>
           <el-descriptions-item label="同步模式">{{ task.syncMode === 'incremental' ? '增量同步' : '全量同步' }}</el-descriptions-item>
@@ -44,70 +41,72 @@
       </el-tab-pane>
 
       <el-tab-pane :label="`执行记录 (${batches.length})`" name="batches">
-        <el-table :data="batches" stripe size="small">
-          <el-table-column label="时间" width="170">
-            <template #default="{ row }">{{ row.createdAt?.slice(0, 19).replace('T', ' ') }}</template>
-          </el-table-column>
-          <el-table-column label="触发" width="90">
-            <template #default="{ row }">
-              <span class="trigger-text">{{ triggerLabel[row.triggerType] ?? row.triggerType }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态 / 进度" width="200">
-            <template #default="{ row }">
-              <div class="status-cell">
-                <el-tag :type="batchType[row.status]" size="small" effect="plain">
-                  {{ batchLabel[row.status] ?? row.status }}
-                </el-tag>
-                <template v-if="row.status === 'running'">
-                  <el-progress
-                    :percentage="row._pct >= 0 ? row._pct : 0"
-                    :indeterminate="row._pct < 0"
-                    :stroke-width="5"
-                    :show-text="false"
-                    style="width:100%"
-                  />
-                  <span v-if="row._step" class="step-text">{{ row._step }}</span>
+        <Index :pagination="batchesPagination">
+          <template #table>
+            <Table :columns="batchesColumns" :data="batches" size="small">
+              <!-- 时间 -->
+              <template #col-createdAt="{ row }">
+                {{ row.createdAt?.slice(0, 19).replace('T', ' ') }}
+              </template>
+              <!-- 触发 -->
+              <template #col-triggerType="{ row }">
+                <span class="trigger-text">{{ triggerLabel[row.triggerType] ?? row.triggerType }}</span>
+              </template>
+              <!-- 状态/进度 -->
+              <template #col-status="{ row }">
+                <div class="status-cell">
+                  <el-tag :type="batchType[row.status]" size="small" effect="plain">
+                    {{ batchLabel[row.status] ?? row.status }}
+                  </el-tag>
+                  <template v-if="row.status === 'running'">
+                    <el-progress
+                      :percentage="row._pct >= 0 ? row._pct : 0"
+                      :indeterminate="row._pct < 0"
+                      :stroke-width="5"
+                      :show-text="false"
+                      style="width: 100%"
+                    />
+                    <span v-if="row._step" class="step-text">{{ row._step }}</span>
+                  </template>
+                  <span v-if="row.errorSummary" class="err-text">{{ row.errorSummary }}</span>
+                </div>
+              </template>
+              <!-- 数据量 -->
+              <template #col-successCount="{ row }">
+                <template v-if="row.status === 'success' || row.status === 'partial_success'">
+                  <span class="count-ok">{{ row.successCount?.toLocaleString() }} 行</span>
+                  <span v-if="row.failCount > 0" class="count-err"> · {{ row.failCount }} 跳过</span>
                 </template>
-                <span v-if="row.errorSummary" class="err-text">{{ row.errorSummary }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="数据量" width="160">
-            <template #default="{ row }">
-              <template v-if="row.status === 'success' || row.status === 'partial_success'">
-                <span class="count-ok">{{ row.successCount?.toLocaleString() }} 行</span>
-                <span v-if="row.failCount > 0" class="count-err"> · {{ row.failCount }} 跳过</span>
+                <span v-else-if="row.status === 'running'">—</span>
+                <span v-else class="count-dim">-</span>
               </template>
-              <span v-else-if="row.status === 'running'">—</span>
-              <span v-else class="count-dim">-</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="耗时" width="80">
-            <template #default="{ row }">
-              <span v-if="row.startedAt && row.finishedAt" class="dur-text">
-                {{ duration(row.startedAt, row.finishedAt) }}
-              </span>
-              <span v-else-if="row.status === 'running' && row.startedAt" class="dur-text">
-                {{ elapsed(row.startedAt) }}
-              </span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="160">
-            <template #default="{ row }">
-              <el-button v-if="row.status === 'running'" size="small" text type="danger" @click="handleCancel(row.id)">停止</el-button>
-              <template v-else>
-                <el-button size="small" text @click="showLog(row)">日志</el-button>
-                <el-button
-                  v-if="row.status === 'failed' || row.status === 'cancelled'"
-                  size="small" text type="warning"
-                  @click="handleRetry(row.id)"
-                >重试</el-button>
+              <!-- 耗时 -->
+              <template #col-duration="{ row }">
+                <span v-if="row.startedAt && row.finishedAt" class="dur-text">
+                  {{ duration(row.startedAt, row.finishedAt) }}
+                </span>
+                <span v-else-if="row.status === 'running' && row.startedAt" class="dur-text">
+                  {{ elapsed(row.startedAt) }}
+                </span>
+                <span v-else>-</span>
               </template>
-            </template>
-          </el-table-column>
-        </el-table>
+              <!-- 操作 -->
+              <template #col-actions="{ row }">
+                <div class="action-btns">
+                  <el-button v-if="row.status === 'running'" size="small" text type="danger" @click="handleCancel(row.id)">停止</el-button>
+                  <template v-else>
+                    <el-button size="small" text @click="showLog(row)">日志</el-button>
+                    <el-button
+                      v-if="row.status === 'failed' || row.status === 'cancelled'"
+                      size="small" text type="warning"
+                      @click="handleRetry(row.id)"
+                    >重试</el-button>
+                  </template>
+                </div>
+              </template>
+            </Table>
+          </template>
+        </Index>
         <div v-if="batches.length === 0" class="empty">暂无执行记录，点击「立即执行」开始</div>
       </el-tab-pane>
     </el-tabs>
@@ -121,13 +120,11 @@
           <span v-if="logBatch?.startedAt && logBatch?.finishedAt">耗时: {{ duration(logBatch.startedAt, logBatch.finishedAt) }}</span>
           <span v-if="logBatch?.errorSummary" class="log-err-summary">{{ logBatch.errorSummary }}</span>
         </div>
-        <el-table v-if="errorList.length > 0" :data="errorList" stripe size="small" style="margin-top:12px">
+        <el-table v-if="errorList.length > 0" :data="errorList" stripe size="small" style="margin-top: 12px">
           <el-table-column prop="errorType" label="类型" width="100" />
           <el-table-column prop="errorMessage" label="错误信息" min-width="250" />
           <el-table-column label="位置" width="100">
-            <template #default="{ row: e }">
-              {{ e.fieldName || (e.rowNumber ? '行 ' + e.rowNumber : '-') }}
-            </template>
+            <template #default="{ row: e }">{{ e.fieldName || (e.rowNumber ? '行 ' + e.rowNumber : '-') }}</template>
           </el-table-column>
           <el-table-column prop="createdAt" label="时间" width="160">
             <template #default="{ row: e }">{{ e.createdAt?.slice(0, 19).replace('T', ' ') }}</template>
@@ -142,106 +139,118 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
-import { Clock, VideoPlay } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask } from '@/api';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { Clock, VideoPlay } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask } from '@/api'
+import { Index, Table } from '@/components/crud'
+import type { ColumnSchema } from '@/components/crud'
 
-const route = useRoute();
-const taskId = route.params.id as string;
-const task = ref<IngestionTask | null>(null);
-const batches = ref<(IngestionBatch & { _pct?: number; _step?: string })[]>([]);
-const activeTab = ref('batches');
-const executing = ref(false);
-const backfilling = ref(false);
-const logDialog = ref(false);
-const logBatch = ref<IngestionBatch | null>(null);
-const errorList = ref<ImportError[]>([]);
-let _esList: EventSource[] = [];
+const route = useRoute()
+const taskId = route.params.id as string
+const task = ref<IngestionTask | null>(null)
+const batches = ref<(IngestionBatch & { _pct?: number; _step?: string })[]>([])
+const activeTab = ref('batches')
+const executing = ref(false)
+const backfilling = ref(false)
+const logDialog = ref(false)
+const logBatch = ref<IngestionBatch | null>(null)
+const errorList = ref<ImportError[]>([])
+let _esList: EventSource[] = []
 
 const batchLabel: Record<string, string> = {
   pending: '等待中', running: '运行中', success: '成功', partial_success: '部分成功', failed: '失败', cancelled: '已取消',
-};
+}
 const batchType: Record<string, '' | 'success' | 'warning' | 'danger' | 'info'> = {
   pending: 'info', running: '', success: 'success', partial_success: 'warning', failed: 'danger', cancelled: 'info',
-};
+}
 const triggerLabel: Record<string, string> = {
   manual: '手动', scheduled: '定时', retry: '重试', backfill: '全量回溯', quick_fill: '快补',
-};
+}
 
 const summary = computed(() => [
   { label: '调度', value: task.value?.scheduleType === 'cron' ? `定时 ${task.value?.cronExpression}` : task.value?.scheduleType ?? '-' },
   { label: '同步模式', value: task.value?.syncMode === 'incremental' ? '增量' : '全量' },
   { label: '最近同步', value: task.value?.lastSyncAt?.slice(0, 16) ?? '未同步过' },
   { label: '上次结果', value: task.value?.lastSyncStatus || '-' },
-]);
+])
 
+// ---- 分页 ----
+const batchesPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
+
+// ---- 批次列表列配置 ----
+const batchesColumns: ColumnSchema[] = [
+  { type: 'custom', prop: 'createdAt', label: '时间', width: 170 },
+  { type: 'custom', prop: 'triggerType', label: '触发', width: 90 },
+  { type: 'custom', prop: 'status', label: '状态 / 进度', width: 200 },
+  { type: 'custom', prop: 'successCount', label: '数据量', width: 160 },
+  { type: 'custom', prop: 'duration', label: '耗时', width: 80 },
+  { type: 'custom', prop: 'actions', label: '操作', width: 160 },
+]
+
+// ---- 工具函数 ----
 function duration(start: string, end: string): string {
-  const s = (new Date(end).getTime() - new Date(start).getTime()) / 1000;
-  if (s < 60) return `${s.toFixed(0)}s`;
-  return `${Math.floor(s / 60)}m${(s % 60).toFixed(0)}s`;
+  const s = (new Date(end).getTime() - new Date(start).getTime()) / 1000
+  if (s < 60) return `${s.toFixed(0)}s`
+  return `${Math.floor(s / 60)}m${(s % 60).toFixed(0)}s`
 }
-
 function elapsed(start: string): string {
-  const s = (Date.now() - new Date(start).getTime()) / 1000;
-  if (s < 60) return `${s.toFixed(0)}s`;
-  return `${Math.floor(s / 60)}m${(s % 60).toFixed(0)}s`;
+  const s = (Date.now() - new Date(start).getTime()) / 1000
+  if (s < 60) return `${s.toFixed(0)}s`
+  return `${Math.floor(s / 60)}m${(s % 60).toFixed(0)}s`
 }
 
+// ---- 数据加载 ----
 async function load() {
-  task.value = await ingestionService.get(taskId);
-  const b = await ingestionService.getBatches(taskId, { pageSize: 20 });
-  batches.value = b.items;
+  task.value = await ingestionService.get(taskId)
+  const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
+  batches.value = b.items
 }
 
 async function handleExecute() {
-  executing.value = true;
+  executing.value = true
   try {
-    const { batchId } = await ingestionService.execute(taskId);
-    ElMessage.success('已提交');
-    const placeholder: any = { id: batchId, triggerType: 'manual', status: 'pending', recordCount: 0, successCount: 0, failCount: 0, createdAt: new Date().toISOString(), _pct: -1, _step: '等待 Worker...' };
-    batches.value.unshift(placeholder);
+    const { batchId } = await ingestionService.execute(taskId)
+    ElMessage.success('已提交')
+    const placeholder: any = { id: batchId, triggerType: 'manual', status: 'pending', recordCount: 0, successCount: 0, failCount: 0, createdAt: new Date().toISOString(), _pct: -1, _step: '等待 Worker...' }
+    batches.value.unshift(placeholder)
     const es = ingestionService.streamProgress(batchId,
       (d) => {
-        const b = batches.value.find(x => x.id === batchId);
-        if (b) { b._pct = d.pct; b._step = d.step; if (d.status !== 'running') b.status = d.status === 'success' ? 'success' : d.status === 'cancelled' ? 'cancelled' : 'failed'; }
+        const b = batches.value.find(x => x.id === batchId)
+        if (b) { b._pct = d.pct; b._step = d.step; if (d.status !== 'running') b.status = d.status === 'success' ? 'success' : d.status === 'cancelled' ? 'cancelled' : 'failed' }
       },
       () => load(),
-    );
-    _esList.push(es);
+    )
+    _esList.push(es)
   } catch { /* */ }
-  finally { executing.value = false; }
+  finally { executing.value = false }
 }
 
 async function handleRetry(bid: string) {
-  try { await ingestionService.retryBatch(bid); ElMessage.success('重试已提交'); await load(); } catch { /* */ }
+  try { await ingestionService.retryBatch(bid); ElMessage.success('重试已提交'); await load() } catch { /* */ }
 }
-
 async function handleCancel(bid: string) {
-  try { await ingestionService.cancelBatch(bid); ElMessage.success('已停止'); } catch { /* */ }
+  try { await ingestionService.cancelBatch(bid); ElMessage.success('已停止') } catch { /* */ }
 }
-
 async function showLog(row: IngestionBatch) {
-  logBatch.value = row;
-  const e = await ingestionService.getBatchErrors(row.id, { pageSize: 50 });
-  errorList.value = e.items;
-  logDialog.value = true;
+  logBatch.value = row
+  const e = await ingestionService.getBatchErrors(row.id, { pageSize: 50 })
+  errorList.value = e.items
+  logDialog.value = true
 }
-
 async function handleBackfill() {
-  backfilling.value = true;
-  try { const r = await ingestionService.backfill(taskId); ElMessage.success(`全量回溯已提交`); await load(); } finally { backfilling.value = false; }
+  backfilling.value = true
+  try { await ingestionService.backfill(taskId); ElMessage.success('全量回溯已提交'); await load() } finally { backfilling.value = false }
 }
-
 async function handleQuickFill(days: number) {
-  const end = new Date(); end.setHours(0, 0, 0, 0);
-  const start = new Date(end); start.setDate(start.getDate() - days);
-  try { await ingestionService.quickFill(taskId, start.toISOString(), end.toISOString()); ElMessage.success(`快补 ${days} 天已提交`); await load(); } catch { /* */ }
+  const end = new Date(); end.setHours(0, 0, 0, 0)
+  const start = new Date(end); start.setDate(start.getDate() - days)
+  try { await ingestionService.quickFill(taskId, start.toISOString(), end.toISOString()); ElMessage.success(`快补 ${days} 天已提交`); await load() } catch { /* */ }
 }
 
-onMounted(load);
-onUnmounted(() => _esList.forEach(es => es.close()));
+onMounted(load)
+onUnmounted(() => _esList.forEach(es => es.close()))
 </script>
 
 <style lang="scss" scoped>
@@ -254,6 +263,7 @@ onUnmounted(() => _esList.forEach(es => es.close()));
 .sum-label { font-size: $font-size-xs; color: $color-text-placeholder; }
 .sum-val { font-size: $font-size-lg; font-weight: $font-weight-semibold; }
 .empty { text-align: center; padding: 60px; color: $color-text-placeholder; }
+
 .status-cell { display: flex; flex-direction: column; gap: 4px; }
 .step-text { font-size: 11px; color: $color-primary; }
 .err-text { font-size: 11px; color: $color-danger; }
@@ -262,6 +272,8 @@ onUnmounted(() => _esList.forEach(es => es.close()));
 .count-dim { color: $color-text-placeholder; }
 .dur-text { color: $color-text-secondary; font-size: $font-size-sm; }
 .trigger-text { color: $color-text-secondary; font-size: $font-size-sm; }
+.action-btns { display: flex; align-items: center; gap: 4px; }
+
 .log-detail { }
 .log-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: $font-size-sm; color: $color-text-secondary; }
 .log-err-summary { color: $color-danger; font-weight: $font-weight-semibold; }

@@ -33,10 +33,10 @@ const router = createRouter({
           meta: { title: '任务详情', icon: 'Upload', hidden: true },
         },
         {
-          path: 'data-browse',
-          name: 'DataBrowse',
+          path: 'tables',
+          name: 'DataTables',
           component: () => import('@/views/data-browse/index.vue'),
-          meta: { title: '数据浏览', icon: 'Collection' },
+          meta: { title: '数据表', icon: 'Collection' },
         },
         {
           path: 'tables/:id',

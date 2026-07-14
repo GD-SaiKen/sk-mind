@@ -1,147 +1,396 @@
 ﻿<template>
-  <div class="page">
-    <div class="toolbar">
-      <el-button type="primary" :icon="Plus" @click="openCreate">新增数据源</el-button>
-      <div class="spacer" />
-    </div>
+  <Index title="数据源管理" :pagination="paginationConfig">
+    <!-- 筛选区 -->
+    <template #filters>
+      <el-input
+        v-model="searchKey"
+        placeholder="搜索名称..."
+        :prefix-icon="Search"
+        style="width: 220px"
+        clearable
+        @change="load"
+      />
+      <el-select v-model="typeFilter" placeholder="类型" clearable style="width: 120px" @change="load">
+        <el-option label="数据库" value="database" />
+        <el-option label="API 接口" value="api" />
+        <el-option label="Excel" value="excel" />
+        <el-option label="CSV" value="csv" />
+      </el-select>
+      <el-select v-model="statusFilter" placeholder="状态" clearable style="width: 100px" @change="load">
+        <el-option label="正常" value="active" />
+        <el-option label="草稿" value="draft" />
+        <el-option label="停用" value="paused" />
+      </el-select>
+      <el-input
+        v-model="ownerFilter"
+        placeholder="负责人..."
+        :prefix-icon="Search"
+        style="width: 160px"
+        clearable
+        @change="load"
+      />
+    </template>
 
-    <el-table v-loading="loading" :data="sources" stripe size="small">
-      <el-table-column prop="name" label="名称" min-width="160">
-        <template #default="{ row }">
-          <el-link type="primary" :underline="false" @click="openEdit(row)">{{ row.name }}</el-link>
+    <!-- 操作区 -->
+    <template #actions>
+      <el-button type="primary" :icon="Plus" @click="openCreate">新增数据源</el-button>
+    </template>
+
+    <!-- 表格 -->
+    <template #table>
+      <Table
+        ref="tableRef"
+        :columns="columns"
+        :data="sources"
+        :loading="loading"
+      >
+        <!-- 名称列 -->
+        <template #col-name="{ row }">
+          <el-link type="primary" :underline="false" @click="handleView(row)">{{ row.name }}</el-link>
           <div class="row-sub">{{ row.description }}</div>
         </template>
-      </el-table-column>
-      <el-table-column prop="sourceType" label="类型" width="100">
-        <template #default="{ row }">
-          <el-tag size="small" effect="plain">{{ row.sourceType }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="accessMethod" label="接入方式" width="110" />
-      <el-table-column prop="status" label="状态" width="90">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : row.status === 'draft' ? 'info' : 'warning'" size="small" effect="plain">
-            {{ row.status === 'active' ? '正常' : row.status === 'draft' ? '草稿' : row.status === 'archived' ? '已归档' : row.status }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="createdAt" label="创建时间" width="170">
-        <template #default="{ row }">{{ row.createdAt?.slice(0, 19).replace('T', ' ') }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="120">
-        <template #default="{ row }">
-          <el-button size="small" text @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" text type="danger" @click="handleDelete(row)">归档</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <div v-if="sources.length === 0 && !loading" class="empty">暂无数据源</div>
+      </Table>
+    </template>
+  </Index>
 
-    <!-- 编辑/新建弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑数据源' : '新增数据源'" width="560px" destroy-on-close @closed="resetForm">
-      <el-form :model="form" label-width="90px" size="small">
-        <el-form-item label="名称" required><el-input v-model="form.name" maxlength="200" /></el-form-item>
-        <el-form-item label="编码" required><el-input v-model="form.code" maxlength="100" :disabled="!!editingId" /></el-form-item>
-        <el-form-item label="类型" required>
-          <el-select v-model="form.sourceType" style="width:100%">
-            <el-option label="数据库 (database)" value="database" />
-            <el-option label="API 接口 (api)" value="api" />
-            <el-option label="Excel 文件 (excel)" value="excel" />
-            <el-option label="CSV 文件 (csv)" value="csv" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="接入方式" required>
-          <el-select v-model="form.accessMethod" style="width:100%">
-            <el-option label="数据库同步 (db_sync)" value="db_sync" />
-            <el-option label="API 拉取 (api_pull)" value="api_pull" />
-            <el-option label="文件上传 (file_upload)" value="file_upload" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="负责人"><el-input v-model="form.ownerName" maxlength="100" /></el-form-item>
-        <el-form-item label="所属部门"><el-input v-model="form.ownerDept" maxlength="100" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">{{ editingId ? '保存' : '创建' }}</el-button>
-      </template>
-    </el-dialog>
-  </div>
+  <!-- 编辑/新建弹窗 -->
+  <el-dialog
+    v-model="dialogVisible"
+    :title="editingId ? '编辑数据源' : '新增数据源'"
+    width="600px"
+    destroy-on-close
+    @closed="resetForm"
+  >
+    <el-form :model="form" label-width="100px" size="small">
+      <el-form-item label="名称" required>
+        <el-input v-model="form.name" maxlength="200" />
+      </el-form-item>
+      <el-form-item label="编码" required>
+        <el-input v-model="form.code" maxlength="100" :disabled="!!editingId" />
+      </el-form-item>
+      <el-form-item label="类型" required>
+        <el-select v-model="form.sourceType" style="width: 100%">
+          <el-option label="数据库 (database)" value="database" />
+          <el-option label="API 接口 (api)" value="api" />
+          <el-option label="Excel 文件 (excel)" value="excel" />
+          <el-option label="CSV 文件 (csv)" value="csv" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="接入方式" required>
+        <el-select v-model="form.accessMethod" style="width: 100%">
+          <el-option label="数据库同步 (db_sync)" value="db_sync" />
+          <el-option label="API 拉取 (api_pull)" value="api_pull" />
+          <el-option label="文件上传 (file_upload)" value="file_upload" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="描述">
+        <el-input v-model="form.description" type="textarea" :rows="2" />
+      </el-form-item>
+      <el-row :gutter="12">
+        <el-col :span="12">
+          <el-form-item label="业务负责人">
+            <el-input v-model="form.businessOwner" maxlength="100" placeholder="姓名" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="技术负责人">
+            <el-input v-model="form.techOwner" maxlength="100" placeholder="姓名" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-form-item label="所属部门">
+        <el-input v-model="form.ownerDept" maxlength="100" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="dialogVisible = false">取消</el-button>
+      <el-button type="primary" :loading="saving" @click="handleSave">
+        {{ editingId ? '保存' : '创建' }}
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { Plus } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { dataSourceService } from '@/api/services/data-source';
+import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Plus, Search } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { dataSourceService } from '@/api/services/data-source'
+import { Index, Table } from '@/components/crud'
+import type { ColumnSchema } from '@/components/crud'
+
+const router = useRouter()
 
 interface DS {
-  id: string; name: string; code: string; sourceType: string; accessMethod: string;
-  description: string; ownerName: string; ownerDept: string; status: string; createdAt: string;
+  id: string
+  name: string
+  code: string
+  sourceType: string
+  accessMethod: string
+  description: string
+  businessOwner: string
+  techOwner: string
+  ownerDept: string
+  status: string
+  lastSyncAt: string
+  taskCount: number
+  createdAt: string
 }
 
-const sources = ref<DS[]>([]);
-const loading = ref(false);
-const dialogVisible = ref(false);
-const editingId = ref('');
-const saving = ref(false);
-const form = ref({ name: '', code: '', sourceType: 'api', accessMethod: 'api_pull', description: '', ownerName: '', ownerDept: '' });
+const tableRef = ref()
+const sources = ref<DS[]>([])
+const loading = ref(false)
+const searchKey = ref('')
+const typeFilter = ref('')
+const statusFilter = ref('')
+const ownerFilter = ref('')
+
+// ---- 分页 ----
+const page = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+
+const paginationConfig = reactive({
+  page,
+  pageSize,
+  get total() { return total.value },
+  onPageChange(p: number) { page.value = p; load() },
+  onSizeChange(s: number) { pageSize.value = s; page.value = 1; load() },
+})
+
+// ---- 状态映射 ----
+const statusLabelMap: Record<string, string> = {
+  active: '正常',
+  draft: '草稿',
+  paused: '停用',
+  archived: '已归档',
+}
+const statusTagMap: Record<string, '' | 'success' | 'warning' | 'danger' | 'info'> = {
+  active: 'success',
+  draft: 'info',
+  paused: 'warning',
+  archived: 'warning',
+}
+
+const sourceTypeLabelMap: Record<string, string> = {
+  database: '数据库',
+  api: 'API 接口',
+  excel: 'Excel',
+  csv: 'CSV',
+}
+const accessMethodLabelMap: Record<string, string> = {
+  db_sync: '数据库同步',
+  api_pull: 'API 拉取',
+  file_upload: '文件上传',
+}
+
+// ---- 列配置 ----
+const columns: ColumnSchema[] = [
+  {
+    type: 'custom',
+    prop: 'name',
+    label: '数据源名称',
+    minWidth: 180,
+  },
+  {
+    type: 'tag',
+    prop: 'sourceType',
+    label: '类型',
+    width: 90,
+    formatter: (v: string) => sourceTypeLabelMap[v] ?? v,
+  },
+  {
+    type: 'text',
+    prop: 'accessMethod',
+    label: '接入方式',
+    width: 110,
+    formatter: (v: string) => accessMethodLabelMap[v] ?? v,
+  },
+  {
+    type: 'tag',
+    prop: 'status',
+    label: '状态',
+    width: 80,
+    tagMap: statusTagMap,
+    formatter: (v: string) => statusLabelMap[v] ?? v,
+  },
+  {
+    type: 'text',
+    prop: 'businessOwner',
+    label: '业务负责人',
+    width: 100,
+  },
+  {
+    type: 'text',
+    prop: 'techOwner',
+    label: '技术负责人',
+    width: 100,
+  },
+  {
+    type: 'date',
+    prop: 'lastSyncAt',
+    label: '最近接入时间',
+    width: 170,
+  },
+  {
+    type: 'text',
+    prop: 'taskCount',
+    label: '关联任务',
+    width: 80,
+    align: 'center',
+  },
+  {
+    type: 'action',
+    label: '操作',
+    width: 200,
+    buttons: [
+      { label: '查看', onClick: (row) => handleView(row as DS) },
+      { label: '编辑', onClick: (row) => openEdit(row as DS) },
+      {
+        label: '创建接入任务',
+        onClick: (row) => handleCreateTask(row as DS),
+      },
+      {
+        label: '停用',
+        type: 'danger',
+        onClick: (row) => handleDisable(row as DS),
+        hidden: (row) => (row as DS).status === 'paused' || (row as DS).status === 'archived',
+      },
+    ],
+  },
+]
+
+// ---- 弹窗 ----
+const dialogVisible = ref(false)
+const editingId = ref('')
+const saving = ref(false)
+const form = ref({
+  name: '',
+  code: '',
+  sourceType: 'api',
+  accessMethod: 'api_pull',
+  description: '',
+  businessOwner: '',
+  techOwner: '',
+  ownerDept: '',
+})
 
 function resetForm() {
-  editingId.value = '';
-  form.value = { name: '', code: '', sourceType: 'api', accessMethod: 'api_pull', description: '', ownerName: '', ownerDept: '' };
-}
-
-async function load() {
-  loading.value = true;
-  try {
-    const r = await dataSourceService.getList({ pageSize: 50 });
-    sources.value = r.items;
-  } finally { loading.value = false; }
-}
-
-function openCreate() { resetForm(); dialogVisible.value = true; }
-async function openEdit(row: DS) {
-  editingId.value = row.id;
-  const detail = await dataSourceService.get(row.id);
+  editingId.value = ''
   form.value = {
-    name: detail.name, code: detail.code,
-    sourceType: detail.sourceType, accessMethod: detail.accessMethod,
-    description: detail.description || '', ownerName: detail.ownerName || '', ownerDept: detail.ownerDept || '',
-  };
-  dialogVisible.value = true;
+    name: '',
+    code: '',
+    sourceType: 'api',
+    accessMethod: 'api_pull',
+    description: '',
+    businessOwner: '',
+    techOwner: '',
+    ownerDept: '',
+  }
+}
+
+// ---- 数据加载 ----
+async function load() {
+  loading.value = true
+  try {
+    const r = await dataSourceService.getList({
+      keyword: searchKey.value || undefined,
+      sourceType: typeFilter.value || undefined,
+      status: statusFilter.value || undefined,
+      owner: ownerFilter.value || undefined,
+      page: page.value,
+      pageSize: pageSize.value,
+    })
+    sources.value = (r.items ?? []).map(normalizeSource)
+    total.value = r.total ?? 0
+  } finally {
+    loading.value = false
+  }
+}
+
+/** 归一化后端返回数据，填充可能缺失的新字段 */
+function normalizeSource(item: any): DS {
+  return {
+    id: item.id ?? '',
+    name: item.name ?? '',
+    code: item.code ?? '',
+    sourceType: item.sourceType ?? '',
+    accessMethod: item.accessMethod ?? '',
+    description: item.description ?? '',
+    businessOwner: item.businessOwner ?? item.ownerName ?? '',
+    techOwner: item.techOwner ?? '',
+    ownerDept: item.ownerDept ?? '',
+    status: item.status ?? 'draft',
+    lastSyncAt: item.lastSyncAt ?? item.createdAt ?? '',
+    taskCount: item.taskCount ?? 0,
+    createdAt: item.createdAt ?? '',
+  }
+}
+
+function openCreate() {
+  resetForm()
+  dialogVisible.value = true
+}
+
+async function openEdit(row: DS) {
+  editingId.value = row.id
+  const detail = await dataSourceService.get(row.id)
+  form.value = {
+    name: detail.name ?? '',
+    code: detail.code ?? '',
+    sourceType: detail.sourceType ?? 'api',
+    accessMethod: detail.accessMethod ?? 'api_pull',
+    description: detail.description ?? '',
+    businessOwner: detail.businessOwner ?? detail.ownerName ?? '',
+    techOwner: detail.techOwner ?? '',
+    ownerDept: detail.ownerDept ?? '',
+  }
+  dialogVisible.value = true
 }
 
 async function handleSave() {
-  saving.value = true;
+  saving.value = true
   try {
     if (editingId.value) {
-      await dataSourceService.update(editingId.value, form.value);
-      ElMessage.success('已保存');
+      await dataSourceService.update(editingId.value, form.value)
+      ElMessage.success('已保存')
     } else {
-      await dataSourceService.create(form.value);
-      ElMessage.success('已创建');
+      await dataSourceService.create(form.value)
+      ElMessage.success('已创建')
     }
-    dialogVisible.value = false;
-    await load();
-  } catch { /* handled */ }
-  finally { saving.value = false; }
+    dialogVisible.value = false
+    await load()
+  } catch {
+    /* handled */
+  } finally {
+    saving.value = false
+  }
 }
 
-async function handleDelete(row: DS) {
-  await ElMessageBox.confirm('确定归档该数据源？', '确认');
-  await dataSourceService.delete(row.id);
-  ElMessage.success('已归档');
-  await load();
+// ---- 行操作 ----
+function handleView(row: DS) {
+  router.push(`/data-sources/${row.id}`)
 }
 
-onMounted(load);
+function handleCreateTask(row: DS) {
+  router.push(`/ingestion/create?sourceId=${row.id}`)
+}
+
+async function handleDisable(row: DS) {
+  await ElMessageBox.confirm(`确定停用数据源「${row.name}」？停用后关联的接入任务将不再执行。`, '确认停用')
+  await dataSourceService.delete(row.id)
+  ElMessage.success('已停用')
+  await load()
+}
+
+onMounted(load)
 </script>
 
 <style lang="scss" scoped>
-.page { }
-.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
-.spacer { flex: 1; }
-.row-sub { font-size: 11px; color: $color-text-placeholder; margin-top: 2px; }
-.empty { text-align: center; padding: 60px; color: $color-text-placeholder; }
+.row-sub {
+  font-size: 11px;
+  color: $color-text-placeholder;
+  margin-top: 2px;
+}
 </style>

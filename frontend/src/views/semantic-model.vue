@@ -4,12 +4,7 @@
       <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">{{ tab }}</button>
     </div>
 
-    <div class="toolbar">
-      <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      <div class="spacer" />
-      <el-button type="primary" :icon="Plus">{{ actionLabel[activeTab] }}</el-button>
-    </div>
-
+    <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-indigo"><el-icon :size="16"><Service /></el-icon></div><span class="info-card-label">业务对象</span><span class="subtag">已建模</span></div><div class="val-row"><span class="val">3</span><span class="badge neutral">较昨日持平</span></div><div class="foot">订单 · 客户 · 产品</div></el-card></el-col>
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-blue"><el-icon :size="16"><Collection /></el-icon></div><span class="info-card-label">对象属性</span><span class="subtag">已定义</span></div><div class="val-row"><span class="val">28</span><span class="badge neutral">较昨日持平</span></div><div class="foot">全部已映射</div></el-card></el-col>
@@ -17,52 +12,63 @@
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-purple"><el-icon :size="16"><Link /></el-icon></div><span class="info-card-label">数据映射</span><span class="subtag">待确认</span></div><div class="val-row"><span class="val">3</span><span class="badge neutral">较昨日持平</span></div><div class="foot">1 个待确认</div></el-card></el-col>
     </el-row>
 
-    <el-card v-if="activeTab === '业务对象'" shadow="never">
-      <el-table :data="semanticObjects" stripe>
-        <el-table-column label="对象编码" width="130"><template #default="{ row }"><span class="mono">{{ row.code }}</span></template></el-table-column>
-        <el-table-column label="对象名称" prop="name" min-width="120" />
-        <el-table-column label="描述" prop="description" min-width="200" />
-        <el-table-column label="属性数" prop="attrCount" width="80" align="center" />
-        <el-table-column label="关系数" prop="relCount" width="80" align="center" />
-        <el-table-column label="操作" width="80" fixed="right"><template #default><el-button link type="primary" :icon="Edit" /></template></el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 业务对象 -->
+    <Index v-if="activeTab === '业务对象'" :pagination="soPagination">
+      <template #filters>
+        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
+      </template>
+      <template #actions>
+        <el-button type="primary" :icon="Plus">创建业务对象</el-button>
+      </template>
+      <template #table>
+        <Table :columns="soColumns" :data="pagedObjects" />
+      </template>
+    </Index>
 
-    <el-card v-if="activeTab === '语义关系'" shadow="never">
-      <el-table :data="semanticRelations" stripe>
-        <el-table-column label="关系名称" prop="name" min-width="100" />
-        <el-table-column label="主体对象" width="100"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.subject }}</el-tag></template></el-table-column>
-        <el-table-column label="客体对象" width="100"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.object }}</el-tag></template></el-table-column>
-        <el-table-column label="方向" prop="direction" width="80" />
-        <el-table-column label="类型" prop="type" width="80" />
-        <el-table-column label="Agent可用" width="100"><template #default="{ row }"><el-tag :type="row.agentEnabled ? 'success' : 'info'" size="small" effect="plain">{{ row.agentEnabled ? '是' : '否' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80"><template #default><el-button link type="primary" :icon="Edit" /></template></el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 语义关系 -->
+    <Index v-if="activeTab === '语义关系'" :pagination="srPagination">
+      <template #filters>
+        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
+      </template>
+      <template #actions>
+        <el-button type="primary" :icon="Plus">创建关系</el-button>
+      </template>
+      <template #table>
+        <Table :columns="srColumns" :data="pagedRelations" />
+      </template>
+    </Index>
 
-    <el-card v-if="activeTab === '数据映射'" shadow="never">
-      <el-table :data="dataMappings" stripe>
-        <el-table-column label="语义对象/属性" prop="semantic" min-width="160" />
-        <el-table-column label="来源表" width="140"><template #default="{ row }"><span class="mono">{{ row.sourceTable }}</span></template></el-table-column>
-        <el-table-column label="来源字段" width="140"><template #default="{ row }"><span class="mono">{{ row.sourceField }}</span></template></el-table-column>
-        <el-table-column label="转换" prop="transform" width="100" />
-        <el-table-column label="可信度" width="90"><template #default="{ row }"><el-tag :type="row.confidence === '高' ? 'success' : 'warning'" size="small" effect="plain">{{ row.confidence }}</el-tag></template></el-table-column>
-        <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status === '已确认' ? 'success' : 'warning'" size="small" effect="plain">{{ row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="120" fixed="right"><template #default><el-button link type="primary" size="small">确认</el-button><el-button link type="primary" size="small">编辑</el-button></template></el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 数据映射 -->
+    <Index v-if="activeTab === '数据映射'" :pagination="dmPagination">
+      <template #filters>
+        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
+      </template>
+      <template #actions>
+        <el-button type="primary" :icon="Plus">创建映射</el-button>
+      </template>
+      <template #table>
+        <Table :columns="dmColumns" :data="pagedMappings" />
+      </template>
+    </Index>
 
-    <el-card v-if="activeTab === '行动策略'" shadow="never">
-      <el-table :data="actionPolicies" stripe>
-        <el-table-column label="对象类型" width="100"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.objectType }}</el-tag></template></el-table-column>
-        <el-table-column label="允许行动" prop="allowedActions" min-width="140" />
-        <el-table-column label="禁止行动" min-width="140"><template #default="{ row }"><span class="text-danger">{{ row.forbiddenActions }}</span></template></el-table-column>
-        <el-table-column label="风险等级" width="100"><template #default="{ row }"><el-tag :type="row.riskLevel === '高' ? 'danger' : row.riskLevel === '中' ? 'warning' : 'success'" size="small" effect="plain">{{ row.riskLevel }}</el-tag></template></el-table-column>
-        <el-table-column label="需确认" width="100"><template #default="{ row }"><el-tag :type="row.requireConfirm ? 'warning' : 'info'" size="small" effect="plain">{{ row.requireConfirm ? '是' : '否' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80"><template #default><el-button link type="primary" :icon="Edit" /></template></el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 行动策略 -->
+    <Index v-if="activeTab === '行动策略'" :pagination="apPagination">
+      <template #filters>
+        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
+      </template>
+      <template #actions>
+        <el-button type="primary" :icon="Plus">配置策略</el-button>
+      </template>
+      <template #table>
+        <Table :columns="apColumns" :data="pagedPolicies">
+          <template #col-forbiddenActions="{ row }">
+            <span class="text-danger">{{ row.forbiddenActions }}</span>
+          </template>
+        </Table>
+      </template>
+    </Index>
 
+    <!-- 对象属性（占位） -->
     <el-card v-if="activeTab === '对象属性'" shadow="never">
       <el-empty description="对象属性管理功能即将上线" />
     </el-card>
@@ -70,13 +76,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Service, Collection, Connection, Link } from '@element-plus/icons-vue'
+import { Index, Table } from '@/components/crud'
+import type { ColumnSchema } from '@/components/crud'
 
 const activeTab = ref('业务对象')
 const searchTerm = ref('')
 const tabs = ['业务对象', '对象属性', '语义关系', '数据映射', '行动策略']
-const actionLabel: Record<string, string> = { '业务对象': '创建业务对象', '对象属性': '创建属性', '语义关系': '创建关系', '数据映射': '创建映射', '行动策略': '配置策略' }
+
+// ===================== Mock 数据 =====================
 
 const semanticObjects = [
   { code: 'ORDER', name: '订单', description: '销售订单业务对象', attrCount: 8, relCount: 12 },
@@ -101,15 +110,109 @@ const actionPolicies = [
   { objectType: '客户', allowedActions: '查询', forbiddenActions: '修改, 删除', riskLevel: '高', requireConfirm: true },
   { objectType: '产品', allowedActions: '查询', forbiddenActions: '修改, 删除, 创建', riskLevel: '低', requireConfirm: false },
 ]
+
+// ===================== 过滤 & 分页 =====================
+
+function filterBySearch<T extends Record<string, any>>(items: T[], fields: string[]): T[] {
+  if (!searchTerm.value) return items
+  return items.filter(item => fields.some(f => String(item[f] ?? '').includes(searchTerm.value)))
+}
+
+const filteredObjects = computed(() => filterBySearch(semanticObjects, ['code', 'name', 'description']))
+const filteredRelations = computed(() => filterBySearch(semanticRelations, ['name', 'subject', 'object']))
+const filteredMappings = computed(() => filterBySearch(dataMappings, ['semantic', 'sourceTable', 'sourceField']))
+const filteredPolicies = computed(() => filterBySearch(actionPolicies, ['objectType', 'allowedActions', 'forbiddenActions']))
+
+function slicePage<T>(data: T[], page: number, size: number) {
+  return data.slice((page - 1) * size, page * size)
+}
+
+// ---- 分页状态 ----
+function usePage() {
+  const pg = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
+  return pg
+}
+
+const soPagination = usePage()
+const pagedObjects = computed(() => slicePage(filteredObjects.value, soPagination.page, soPagination.pageSize))
+watch([filteredObjects, () => soPagination.pageSize], () => { soPagination.total = filteredObjects.value.length })
+
+const srPagination = usePage()
+const pagedRelations = computed(() => slicePage(filteredRelations.value, srPagination.page, srPagination.pageSize))
+watch([filteredRelations, () => srPagination.pageSize], () => { srPagination.total = filteredRelations.value.length })
+
+const dmPagination = usePage()
+const pagedMappings = computed(() => slicePage(filteredMappings.value, dmPagination.page, dmPagination.pageSize))
+watch([filteredMappings, () => dmPagination.pageSize], () => { dmPagination.total = filteredMappings.value.length })
+
+const apPagination = usePage()
+const pagedPolicies = computed(() => slicePage(filteredPolicies.value, apPagination.page, apPagination.pageSize))
+watch([filteredPolicies, () => apPagination.pageSize], () => { apPagination.total = filteredPolicies.value.length })
+
+// ===================== 列配置 =====================
+
+const soColumns: ColumnSchema[] = [
+  { type: 'text', prop: 'code', label: '对象编码', width: 130 },
+  { type: 'text', prop: 'name', label: '对象名称', minWidth: 120 },
+  { type: 'text', prop: 'description', label: '描述', minWidth: 200 },
+  { type: 'text', prop: 'attrCount', label: '属性数', width: 80, align: 'center' },
+  { type: 'text', prop: 'relCount', label: '关系数', width: 80, align: 'center' },
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+]
+
+const srColumns: ColumnSchema[] = [
+  { type: 'text', prop: 'name', label: '关系名称', minWidth: 100 },
+  { type: 'tag', prop: 'subject', label: '主体对象', width: 100 },
+  { type: 'tag', prop: 'object', label: '客体对象', width: 100 },
+  { type: 'text', prop: 'direction', label: '方向', width: 80 },
+  { type: 'text', prop: 'type', label: '类型', width: 80 },
+  {
+    type: 'tag', prop: 'agentEnabled', label: 'Agent可用', width: 100,
+    formatter: (v: boolean) => v ? '是' : '否',
+    tagMap: { true: 'success', false: 'info' },
+  } as ColumnSchema,
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+]
+
+const dmColumns: ColumnSchema[] = [
+  { type: 'text', prop: 'semantic', label: '语义对象/属性', minWidth: 160 },
+  { type: 'text', prop: 'sourceTable', label: '来源表', width: 140 },
+  { type: 'text', prop: 'sourceField', label: '来源字段', width: 140 },
+  { type: 'text', prop: 'transform', label: '转换', width: 100 },
+  { type: 'tag', prop: 'confidence', label: '可信度', width: 90, tagMap: { '高': 'success', '中': 'warning' } },
+  { type: 'tag', prop: 'status', label: '状态', width: 90, tagMap: { '已确认': 'success', '待确认': 'warning' } },
+  {
+    type: 'action', label: '操作', width: 120,
+    buttons: [
+      { label: '确认', onClick: () => {} },
+      { label: '编辑', onClick: () => {} },
+    ],
+  },
+]
+
+const apColumns: ColumnSchema[] = [
+  { type: 'tag', prop: 'objectType', label: '对象类型', width: 100 },
+  { type: 'text', prop: 'allowedActions', label: '允许行动', minWidth: 140 },
+  { type: 'custom', prop: 'forbiddenActions', label: '禁止行动', minWidth: 140 },
+  {
+    type: 'tag', prop: 'riskLevel', label: '风险等级', width: 100,
+    tagMap: { '高': 'danger', '中': 'warning', '低': 'success' },
+  },
+  {
+    type: 'tag', prop: 'requireConfirm', label: '需确认', width: 100,
+    formatter: (v: boolean) => v ? '是' : '否',
+    tagMap: { true: 'warning', false: 'info' },
+  } as ColumnSchema,
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+]
 </script>
 
 <style lang="scss" scoped>
 .sem-page { display: flex; flex-direction: column; gap: 20px; }
 .tab-bar { display: flex; gap: 0; border-bottom: 1px solid $color-border; }
 .tab-btn { padding: 10px 16px; border: none; background: none; font-size: $font-size-base; color: $color-text-secondary; cursor: pointer; border-bottom: 2px solid transparent; &:hover { color: $color-text-primary; } &.active { color: $color-primary; border-bottom-color: $color-primary; font-weight: $font-weight-medium; } }
-.toolbar { display: flex; align-items: center; gap: 12px; }
 .search-input { width: 280px; }
-.spacer { flex: 1; }
+
 .stat-row { margin: 0 !important; :deep(.el-col) { padding-left: 8px !important; padding-right: 8px !important; } :deep(.el-col:first-child) { padding-left: 0 !important; } :deep(.el-col:last-child) { padding-right: 0 !important; } }
 .info-card { :deep(.el-card__body) { padding: 20px; display: flex; flex-direction: column; gap: 8px; } }
 .info-card-header { display: flex; align-items: center; gap: 6px; }
@@ -120,6 +223,5 @@ const actionPolicies = [
 .val { font-size: 28px; font-weight: $font-weight-bold; color: $color-text-primary; &.green { color: $color-success; } }
 .badge { font-size: $font-size-xs; padding: 1px 6px; border-radius: 4px; &.neutral { color: $color-text-placeholder; background: #f3f4f6; } }
 .foot { font-size: $font-size-xs; color: $color-text-placeholder; }
-.mono { font-family: $font-family-mono; font-size: $font-size-sm; }
 .text-danger { color: $color-danger; }
 </style>

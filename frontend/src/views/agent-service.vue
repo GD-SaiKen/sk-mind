@@ -4,13 +4,7 @@
       <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">{{ tab }}</button>
     </div>
 
-    <div class="toolbar">
-      <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      <div class="spacer" />
-      <el-button v-if="activeTab === '工具管理'" type="primary" :icon="Edit">配置工具</el-button>
-      <el-button v-if="activeTab === '调用记录'" plain>导出记录</el-button>
-    </div>
-
+    <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-pink"><el-icon :size="16"><Service /></el-icon></div><span class="info-card-label">今日查询</span><span class="subtag green">正常</span></div><div class="val-row"><span class="val">156</span><span class="badge green-bg">↑ 12%</span></div><div class="foot"><span>目标 200</span><div class="health-bar"><div class="health-bar-fill" style="width:78%" /></div><span>78%</span></div></el-card></el-col>
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-orange"><el-icon :size="16"><CircleCheckFilled /></el-icon></div><span class="info-card-label">成功率</span><span class="subtag danger-tag">⚠ 低于阈值</span></div><div class="val-row"><span class="val orange">96%</span><span class="badge red-bg">↓ 2%</span></div><div class="foot"><span>目标 ≥99%</span><div class="health-bar"><div class="health-bar-fill alert" style="width:96%" /></div><span>96%</span></div></el-card></el-col>
@@ -18,13 +12,13 @@
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-green"><el-icon :size="16"><Timer /></el-icon></div><span class="info-card-label">平均响应</span><span class="subtag green">良好</span></div><div class="val-row"><span class="val green">1.2s</span><span class="badge neutral">较昨日持平</span></div><div class="foot">最快 0.3s / 最慢 5.6s</div></el-card></el-col>
     </el-row>
 
+    <!-- Agent查询（保留原样） -->
     <div v-if="activeTab === 'Agent查询'" class="query-section">
       <el-card shadow="never" class="query-card">
         <div class="query-input-area">
           <el-input v-model="query" type="textarea" :rows="3" placeholder="输入你的问题，例如：上个月销售额最高的前10个客户是谁？" class="query-textarea" />
           <el-button type="primary" size="large" :icon="Promotion" class="send-btn" @click="submitQuery">发送查询</el-button>
         </div>
-
         <div v-if="showAnswer" class="answer-area">
           <h4>查询结果</h4>
           <div class="answer-sql">生成 SQL: SELECT customer_name, SUM(amount) as total FROM sales_orders WHERE order_date BETWEEN '2026-06-01' AND '2026-06-30' GROUP BY customer_name ORDER BY total DESC LIMIT 10</div>
@@ -39,7 +33,6 @@
           </div>
         </div>
       </el-card>
-
       <el-card shadow="never" class="suggest-card">
         <h4>示例问题</h4>
         <div class="suggest-list">
@@ -48,35 +41,39 @@
       </el-card>
     </div>
 
-    <el-card v-if="activeTab === '工具管理'" shadow="never">
-      <el-table :data="agentTools" stripe>
-        <el-table-column label="工具名称" prop="name" min-width="160" />
-        <el-table-column label="类型" width="100"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.type }}</el-tag></template></el-table-column>
-        <el-table-column label="关联数据集" prop="datasets" min-width="160" />
-        <el-table-column label="权限" prop="permission" min-width="130" />
-        <el-table-column label="风险" width="80"><template #default="{ row }"><el-tag :type="row.risk === '低' ? 'success' : row.risk === '中' ? 'warning' : 'danger'" size="small" effect="plain">{{ row.risk }}</el-tag></template></el-table-column>
-        <el-table-column label="状态" width="80"><template #default><el-tag type="success" size="small" effect="plain">启用</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80" fixed="right"><template #default><el-button link type="primary" size="small">编辑</el-button></template></el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 工具管理表 -->
+    <Index v-if="activeTab === '工具管理'" :pagination="toolsPagination">
+      <template #filters>
+        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
+      </template>
+      <template #actions>
+        <el-button type="primary" :icon="Edit">配置工具</el-button>
+      </template>
+      <template #table>
+        <Table :columns="toolsColumns" :data="pagedTools" />
+      </template>
+    </Index>
 
-    <el-card v-if="activeTab === '调用记录'" shadow="never">
-      <el-table :data="agentCalls" stripe>
-        <el-table-column label="时间" prop="time" width="170" />
-        <el-table-column label="用户" prop="user" width="80" />
-        <el-table-column label="问题" prop="question" min-width="200" />
-        <el-table-column label="工具" prop="tools" width="120" />
-        <el-table-column label="数据集" prop="datasets" width="140" />
-        <el-table-column label="状态" width="80"><template #default="{ row }"><el-tag :type="row.status === '成功' ? 'success' : 'danger'" size="small" effect="plain">{{ row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="90" fixed="right"><template #default><el-button link type="primary" size="small">查看详情</el-button></template></el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 调用记录表 -->
+    <Index v-if="activeTab === '调用记录'" :pagination="callsPagination">
+      <template #filters>
+        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
+      </template>
+      <template #actions>
+        <el-button plain>导出记录</el-button>
+      </template>
+      <template #table>
+        <Table :columns="callsColumns" :data="pagedCalls" />
+      </template>
+    </Index>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Search, Edit, Service, CircleCheckFilled, Setting, Timer, Promotion } from '@element-plus/icons-vue'
+import { Index, Table } from '@/components/crud'
+import type { ColumnSchema } from '@/components/crud'
 
 const activeTab = ref('Agent查询')
 const searchTerm = ref('')
@@ -96,6 +93,8 @@ const mockResult = [
   { customer: '上海精密仪器有限公司', amount: '¥498,800' },
 ]
 
+// ===================== Mock 数据 =====================
+
 const agentTools = [
   { name: '数据目录检索', type: '查询工具', datasets: '全部', permission: '所有用户', risk: '低' },
   { name: '受控数据查询', type: '查询工具', datasets: '销售订单表, 生产记录表', permission: '继承用户权限', risk: '中' },
@@ -110,6 +109,55 @@ const agentCalls = [
   { time: '2026-06-29 10:05', user: '王五', question: '考勤表空值记录?', tools: '质量查询', datasets: '每日考勤表', status: '失败' },
 ]
 
+// ===================== 过滤 & 分页 =====================
+
+const filteredTools = computed(() =>
+  agentTools.filter(t => t.name.includes(searchTerm.value) || t.type.includes(searchTerm.value))
+)
+const filteredCalls = computed(() =>
+  agentCalls.filter(c => c.user.includes(searchTerm.value) || c.question.includes(searchTerm.value))
+)
+
+function slicePage<T>(data: T[], page: number, size: number) {
+  return data.slice((page - 1) * size, page * size)
+}
+
+const toolsPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
+const pagedTools = computed(() => slicePage(filteredTools.value, toolsPagination.page, toolsPagination.pageSize))
+watch([filteredTools, () => toolsPagination.pageSize], () => { toolsPagination.total = filteredTools.value.length })
+
+const callsPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
+const pagedCalls = computed(() => slicePage(filteredCalls.value, callsPagination.page, callsPagination.pageSize))
+watch([filteredCalls, () => callsPagination.pageSize], () => { callsPagination.total = filteredCalls.value.length })
+
+// ===================== 列配置 =====================
+
+const toolsColumns: ColumnSchema[] = [
+  { type: 'text', prop: 'name', label: '工具名称', minWidth: 160 },
+  { type: 'tag', prop: 'type', label: '类型', width: 100 },
+  { type: 'text', prop: 'datasets', label: '关联数据集', minWidth: 160 },
+  { type: 'text', prop: 'permission', label: '权限', minWidth: 130 },
+  {
+    type: 'tag', prop: 'risk', label: '风险', width: 80,
+    tagMap: { '低': 'success', '中': 'warning', '高': 'danger' },
+  },
+  { type: 'tag', prop: 'status', label: '状态', width: 80, tagType: 'success', formatter: () => '启用' },
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '编辑', onClick: () => {} }] },
+]
+
+const callsColumns: ColumnSchema[] = [
+  { type: 'text', prop: 'time', label: '时间', width: 170 },
+  { type: 'text', prop: 'user', label: '用户', width: 80 },
+  { type: 'text', prop: 'question', label: '问题', minWidth: 200 },
+  { type: 'text', prop: 'tools', label: '工具', width: 120 },
+  { type: 'text', prop: 'datasets', label: '数据集', width: 140 },
+  {
+    type: 'tag', prop: 'status', label: '状态', width: 80,
+    tagMap: { '成功': 'success', '失败': 'danger' },
+  },
+  { type: 'action', label: '操作', width: 90, buttons: [{ label: '查看详情', onClick: () => {} }] },
+]
+
 function submitQuery() {
   if (query.value.trim()) showAnswer.value = true
 }
@@ -119,9 +167,8 @@ function submitQuery() {
 .agent-page { display: flex; flex-direction: column; gap: 20px; }
 .tab-bar { display: flex; gap: 0; border-bottom: 1px solid $color-border; }
 .tab-btn { padding: 10px 16px; border: none; background: none; font-size: $font-size-base; color: $color-text-secondary; cursor: pointer; border-bottom: 2px solid transparent; &:hover { color: $color-text-primary; } &.active { color: $color-primary; border-bottom-color: $color-primary; font-weight: $font-weight-medium; } }
-.toolbar { display: flex; align-items: center; gap: 12px; }
 .search-input { width: 280px; }
-.spacer { flex: 1; }
+
 .stat-row { margin: 0 !important; :deep(.el-col) { padding-left: 8px !important; padding-right: 8px !important; } :deep(.el-col:first-child) { padding-left: 0 !important; } :deep(.el-col:last-child) { padding-right: 0 !important; } }
 .info-card { :deep(.el-card__body) { padding: 20px; display: flex; flex-direction: column; gap: 8px; } }
 .info-card-header { display: flex; align-items: center; gap: 6px; }

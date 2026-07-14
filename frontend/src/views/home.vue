@@ -239,7 +239,7 @@ const statusCards = [
       { label: '新发现', value: '3', color: '#1f2937' },
     ],
     meta: '昨日新增 2 张表',
-    linkTo: '/data-browse',
+    linkTo: '/tables',
   },
   {
     label: '数据质量',

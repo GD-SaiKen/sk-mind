@@ -130,9 +130,9 @@ const sidebarOpen = ref(true)
 
 const navItems: { path: string; icon: Component; label: string }[] = [
   { path: '/home', icon: HomeFilled, label: '首页' },
-  { path: '/ingestion', icon: Tickets, label: '接入任务' },
-  { path: '/data-browse', icon: Collection, label: '数据浏览' },
   { path: '/data-sources', icon: Coin, label: '数据源' },
+  { path: '/ingestion', icon: Tickets, label: '接入任务' },
+  { path: '/tables', icon: Collection, label: '数据表' },
   { path: '/catalog', icon: Collection, label: '数据目录' },
   { path: '/quality', icon: CircleCheck, label: '数据质量' },
   { path: '/permissions', icon: User, label: '权限审计' },

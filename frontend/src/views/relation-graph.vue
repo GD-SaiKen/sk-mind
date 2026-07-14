@@ -4,12 +4,7 @@
       <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">{{ tab }}<span v-if="tab === '待确认关系'" class="tab-count">{{ pendingCount }}</span></button>
     </div>
 
-    <div class="toolbar">
-      <el-input v-model="searchTerm" placeholder="搜索关系..." :prefix-icon="Search" class="search-input" clearable />
-      <div class="spacer" />
-      <el-button v-if="activeTab !== '关系查询'" type="primary" :icon="Plus">创建关系边</el-button>
-    </div>
-
+    <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-blue"><el-icon :size="16"><Connection /></el-icon></div><span class="info-card-label">关系边总数</span><span class="subtag">图谱边</span></div><div class="val-row"><span class="val">{{ relationEdges.length }}</span><span class="badge green-bg">↑ 2 较昨日</span></div><div class="foot">全部关系边</div></el-card></el-col>
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-green"><el-icon :size="16"><CircleCheckFilled /></el-icon></div><span class="info-card-label">已确认</span><span class="subtag green">可信</span></div><div class="val-row"><span class="val green">{{ confirmedCount }}</span><span class="badge neutral">较昨日持平</span></div><div class="foot"><span>确认率</span><div class="health-bar"><div class="health-bar-fill" :style="{ width: confirmRate + '%' }" /></div><span>{{ confirmRate }}%</span></div></el-card></el-col>
@@ -17,19 +12,29 @@
       <el-col :span="6"><el-card shadow="never" class="info-card"><div class="info-card-header"><div class="info-card-icon bg-yellow"><el-icon :size="16"><WarningFilled /></el-icon></div><span class="info-card-label">待确认</span><span class="subtag danger-tag">需审核</span></div><div class="val-row"><span class="val yellow">{{ pendingCount }}</span><span class="badge neutral">较昨日持平</span></div><div class="foot">{{ pendingCount > 0 ? '请及时确认' : '暂无待确认' }}</div></el-card></el-col>
     </el-row>
 
-    <el-card v-if="activeTab === '关系边列表'" shadow="never">
-      <el-table :data="relationEdges" stripe>
-        <el-table-column label="源实体" min-width="160"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.fromEntity }}</el-tag><span class="mono">{{ row.fromId }}</span></template></el-table-column>
-        <el-table-column label="关系" width="120"><template #default="{ row }"><el-tag type="warning" size="small" effect="plain">{{ row.relation }}</el-tag></template></el-table-column>
-        <el-table-column label="目标实体" min-width="160"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.toEntity }}</el-tag><span class="mono">{{ row.toId }}</span></template></el-table-column>
-        <el-table-column label="来源" prop="source" width="140" />
-        <el-table-column label="生成方式" width="100"><template #default="{ row }"><el-tag :type="row.generatedBy === 'AI生成' ? 'warning' : ''" size="small" effect="plain">{{ row.generatedBy }}</el-tag></template></el-table-column>
-        <el-table-column label="可信度" width="90" align="center"><template #default="{ row }">{{ (row.confidence * 100).toFixed(0) }}%</template></el-table-column>
-        <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.confirmed ? 'success' : 'warning'" size="small" effect="plain">{{ row.confirmed ? '已确认' : '待确认' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80" fixed="right"><template #default><el-button link type="primary" :icon="Edit" /></template></el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 关系边列表 -->
+    <Index v-if="activeTab === '关系边列表'" :pagination="edgesPagination">
+      <template #filters>
+        <el-input v-model="searchTerm" placeholder="搜索关系..." :prefix-icon="Search" class="search-input" clearable />
+      </template>
+      <template #actions>
+        <el-button type="primary" :icon="Plus">创建关系边</el-button>
+      </template>
+      <template #table>
+        <Table :columns="edgesColumns" :data="pagedEdges">
+          <template #col-fromEntity="{ row }">
+            <el-tag size="small" effect="plain">{{ row.fromEntity }}</el-tag>
+            <span class="mono">{{ row.fromId }}</span>
+          </template>
+          <template #col-toEntity="{ row }">
+            <el-tag size="small" effect="plain">{{ row.toEntity }}</el-tag>
+            <span class="mono">{{ row.toId }}</span>
+          </template>
+        </Table>
+      </template>
+    </Index>
 
+    <!-- 关系查询 -->
     <el-card v-if="activeTab === '关系查询'" shadow="never">
       <div class="query-form">
         <el-row :gutter="16">
@@ -50,6 +55,7 @@
       </div>
     </el-card>
 
+    <!-- 待确认关系（卡片布局） -->
     <div v-if="activeTab === '待确认关系'" class="pending-list">
       <div v-for="edge in pendingEdges" :key="edge.id" class="pending-card">
         <div class="pending-header">
@@ -72,8 +78,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Connection, CircleCheckFilled, Link, WarningFilled } from '@element-plus/icons-vue'
+import { Index, Table } from '@/components/crud'
+import type { ColumnSchema } from '@/components/crud'
 
 const activeTab = ref('关系边列表')
 const searchTerm = ref('')
@@ -91,10 +99,49 @@ const relationEdges: Edge[] = [
   { id: '3', fromEntity: '客户', fromId: 'CUST-8856', relation: '可能关联', toEntity: '客户', toId: 'CUST-7745', source: 'AI推理', generatedBy: 'AI生成', confidence: 0.65, confirmed: false },
 ]
 
+const filteredEdges = computed(() =>
+  relationEdges.filter(e => {
+    const s = searchTerm.value
+    return !s || e.fromEntity.includes(s) || e.toEntity.includes(s) || e.relation.includes(s) || e.source.includes(s)
+  })
+)
+
+function slicePage<T>(data: T[], page: number, size: number) {
+  return data.slice((page - 1) * size, page * size)
+}
+
+const edgesPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
+const pagedEdges = computed(() => slicePage(filteredEdges.value, edgesPagination.page, edgesPagination.pageSize))
+watch([filteredEdges, () => edgesPagination.pageSize], () => { edgesPagination.total = filteredEdges.value.length })
+
 const pendingEdges = computed(() => relationEdges.filter(e => !e.confirmed))
 const pendingCount = computed(() => pendingEdges.value.length)
 const confirmedCount = computed(() => relationEdges.filter(e => e.confirmed).length)
 const confirmRate = computed(() => relationEdges.length > 0 ? Math.round(confirmedCount.value / relationEdges.length * 100) : 0)
+
+const edgesColumns: ColumnSchema[] = [
+  { type: 'custom', prop: 'fromEntity', label: '源实体', minWidth: 160 },
+  {
+    type: 'tag', prop: 'relation', label: '关系', width: 120,
+    tagType: 'warning',
+  },
+  { type: 'custom', prop: 'toEntity', label: '目标实体', minWidth: 160 },
+  { type: 'text', prop: 'source', label: '来源', width: 140 },
+  {
+    type: 'tag', prop: 'generatedBy', label: '生成方式', width: 100,
+    tagMap: { 'AI生成': 'warning' },
+  },
+  {
+    type: 'text', prop: 'confidence', label: '可信度', width: 90, align: 'center',
+    formatter: (v: number) => (v * 100).toFixed(0) + '%',
+  },
+  {
+    type: 'tag', prop: 'confirmed', label: '状态', width: 90,
+    formatter: (v: boolean) => v ? '已确认' : '待确认',
+    tagMap: { true: 'success', false: 'warning' },
+  } as ColumnSchema,
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+]
 </script>
 
 <style lang="scss" scoped>
@@ -102,9 +149,8 @@ const confirmRate = computed(() => relationEdges.length > 0 ? Math.round(confirm
 .tab-bar { display: flex; gap: 0; border-bottom: 1px solid $color-border; }
 .tab-btn { padding: 10px 16px; border: none; background: none; font-size: $font-size-base; color: $color-text-secondary; cursor: pointer; border-bottom: 2px solid transparent; &:hover { color: $color-text-primary; } &.active { color: $color-primary; border-bottom-color: $color-primary; font-weight: $font-weight-medium; } }
 .tab-count { font-size: $font-size-xs; color: $color-text-placeholder; margin-left: 4px; }
-.toolbar { display: flex; align-items: center; gap: 12px; }
 .search-input { width: 280px; }
-.spacer { flex: 1; }
+
 .stat-row { margin: 0 !important; :deep(.el-col) { padding-left: 8px !important; padding-right: 8px !important; } :deep(.el-col:first-child) { padding-left: 0 !important; } :deep(.el-col:last-child) { padding-right: 0 !important; } }
 .info-card { :deep(.el-card__body) { padding: 20px; display: flex; flex-direction: column; gap: 8px; } }
 .info-card-header { display: flex; align-items: center; gap: 6px; }
