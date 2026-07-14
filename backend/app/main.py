@@ -1,5 +1,6 @@
 """FastAPI 应用入口 — 创建 app、注册路由、配置中间件。"""
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -15,10 +16,17 @@ from app.core.logging import setup_logging
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """应用生命周期：启动时初始化日志和调度器，关闭时清理连接。"""
     setup_logging(settings.LOG_LEVEL)
+
+    # uvicorn 自己的日志不要被 root handler 接管，保持原生彩色
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        logging.getLogger(name).propagate = False
     from app.core.database import engine
     from app.core.scheduler import start_scheduler, shutdown_scheduler
 
-    start_scheduler()
+    try:
+        start_scheduler()
+    except Exception:
+        logging.getLogger("sk-mind").warning("调度器启动失败（可能是 Redis 未就绪），定时任务不可用")
     yield
     shutdown_scheduler()
     await engine.dispose()
@@ -52,7 +60,6 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """兜底异常处理，避免内部错误直接泄露给前端。"""
-    import logging
     logger = logging.getLogger("sk-mind")
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
