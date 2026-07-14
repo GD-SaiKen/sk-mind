@@ -54,6 +54,15 @@ export class IngestionService {
     return this.api.post(`/ingestion-tasks/batches/${batchId}/retry`).then(r => r.data.data)
   }
 
+  // ── 取消 / 回退 ──
+  cancelBatch(batchId: string) {
+    return this.api.post(`/ingestion-tasks/batches/${batchId}/cancel`).then(r => r.data.data)
+  }
+
+  rollbackBatch(batchId: string) {
+    return this.api.post(`/ingestion-tasks/batches/${batchId}/rollback`).then(r => r.data.data)
+  }
+
   // ── 全量回溯 / 快补 / 时间范围预览（目标1+3）──
   backfill(id: string) {
     return this.api.post(`/ingestion-tasks/${id}/backfill`).then(r => r.data.data)
@@ -65,6 +74,26 @@ export class IngestionService {
 
   getTimeRange(id: string) {
     return this.api.get(`/ingestion-tasks/${id}/time-range`).then(r => r.data.data)
+  }
+
+  // ── SSE 进度流 ──
+  streamProgress(
+    batchId: string,
+    onProgress: (data: { pct: number; step: string; status: string }) => void,
+    onDone: () => void,
+  ): EventSource {
+    const base = this.api.defaults.baseURL || ''
+    const es = new EventSource(`${base}/ingestion-tasks/batches/${batchId}/stream`)
+    es.onmessage = (e) => {
+      const d = JSON.parse(e.data)
+      onProgress(d)
+      if (d.status === 'success' || d.status === 'failed' || d.status === 'cancelled') {
+        es.close()
+        onDone()
+      }
+    }
+    es.onerror = () => { es.close(); onDone() }
+    return es
   }
 }
 

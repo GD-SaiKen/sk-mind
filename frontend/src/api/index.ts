@@ -2,6 +2,7 @@
 export { default as api } from './client';
 export { authService } from './services/auth';
 export { ingestionService } from './services/ingestion';
+export { dataSourceService } from './services/data-source';
 export type {
   LoginParams,
   IngestionTask,

@@ -6,7 +6,7 @@
     <div class="toolbar">
       <el-input
         v-model="search"
-        placeholder="搜索任务名称或数据源..."
+        placeholder="搜索任务名称..."
         :prefix-icon="'Search'"
         style="width:260px"
         clearable
@@ -16,7 +16,7 @@
         v-model="statusFilter"
         placeholder="状态"
         clearable
-        style="width:120px"
+        style="width:110px"
         @change="loadTasks"
       >
         <el-option label="全部" value="" />
@@ -24,6 +24,12 @@
         <el-option label="草稿" value="draft" />
         <el-option label="停用" value="paused" />
       </el-select>
+      <el-button
+        :icon="DataAnalysis"
+        @click="router.push('/data-browse')"
+      >
+        Raw 数据浏览
+      </el-button>
       <div class="spacer" />
       <el-button type="primary" :icon="Plus">创建任务</el-button>
     </div>
@@ -84,6 +90,28 @@
         width="80"
       />
       <el-table-column
+        label="最近同步"
+        width="170"
+      >
+        <template #default="{ row }">
+          <span v-if="row.lastSyncAt" :style="{ color: syncFreshColor(row.lastSyncAt) }">
+            {{ row.lastSyncAt.slice(0, 16).replace('T', ' ') }}
+          </span>
+          <span v-else class="never-sync">未同步过</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        prop="syncMode"
+        label="模式"
+        width="70"
+      >
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.syncMode === 'incremental' ? '' : 'info'" effect="plain">
+            {{ row.syncMode === 'incremental' ? '增量' : '全量' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
         prop="status"
         label="状态"
         width="90"
@@ -105,30 +133,54 @@
       />
       <el-table-column
         label="操作"
-        width="220"
+        width="280"
         fixed="right"
       >
         <template #default="{ row }">
-          <el-button size="small" @click="router.push(`/ingestion/${row.id}`)">
-            详情
-          </el-button>
-          <el-button
-            size="small"
-            type="success"
-            :icon="VideoPlay"
-            @click="handleExecute(row)"
-          >
-            执行
-          </el-button>
-          <el-button
-            v-if="row.status !== 'disabled'"
-            size="small"
-            text
-            type="danger"
-            @click="handleDelete(row)"
-          >
-            停用
-          </el-button>
+          <template v-if="running[row.id]">
+            <div class="inline-progress">
+              <span class="ip-step">{{ running[row.id].step }}</span>
+              <div class="ip-row">
+                <el-progress
+                  :percentage="running[row.id].pct >= 0 ? running[row.id].pct : 0"
+                  :indeterminate="running[row.id].pct < 0"
+                  :stroke-width="6"
+                  :show-text="false"
+                  style="width:100px"
+                />
+                <el-button
+                  size="small"
+                  type="danger"
+                  text
+                  @click="handleCancel(row.id, running[row.id].batchId)"
+                >
+                  停止
+                </el-button>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <el-button size="small" @click="router.push(`/ingestion/${row.id}`)">
+              详情
+            </el-button>
+            <el-button
+              size="small"
+              type="success"
+              :icon="VideoPlay"
+              @click="handleExecute(row)"
+            >
+              执行
+            </el-button>
+            <el-button
+              v-if="row.status !== 'disabled'"
+              size="small"
+              text
+              type="danger"
+              @click="handleDelete(row)"
+            >
+              停用
+            </el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -143,13 +195,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
   CircleCheck,
   CircleCloseFilled,
+  Clock,
   Collection,
+  DataAnalysis,
   Plus,
   VideoPlay,
   WarningFilled,
@@ -164,6 +218,8 @@ const loading = ref(false);
 const total = ref(0);
 const search = ref('');
 const statusFilter = ref('');
+const running = reactive<Record<string, { pct: number; step: string; batchId: string }>>({});
+let _pollEss: EventSource[] = [];
 
 const statusMap: Record<string, { text: string; type: '' | 'success' | 'warning' | 'danger' | 'info' }> = {
   draft: { text: '草稿', type: 'info' },
@@ -172,47 +228,52 @@ const statusMap: Record<string, { text: string; type: '' | 'success' | 'warning'
   disabled: { text: '已禁用', type: 'danger' },
 };
 
-const statCards = computed(() => [
-  {
-    label: '任务总数',
-    value: tasks.value.length,
-    icon: Collection,
-    iconBg: 'sc-icon-blue',
-    badge: '已配置',
-    badgeType: 'info' as const,
-    footer: '最近执行: --',
-  },
-  {
-    label: '正常',
-    value: tasks.value.filter(t => t.status === 'active').length,
-    icon: CircleCheck,
-    iconBg: 'sc-icon-green',
-    badge: '状态良好',
-    badgeType: 'success' as const,
-    color: 'green',
-    footer: '启用中的任务',
-  },
-  {
-    label: '草稿',
-    value: tasks.value.filter(t => t.status === 'draft').length,
-    icon: WarningFilled,
-    iconBg: 'sc-icon-yellow',
-    badge: undefined,
-    badgeType: undefined,
-    color: 'yellow',
-    footer: '待启用的任务',
-  },
-  {
-    label: '停用',
-    value: tasks.value.filter(t => t.status === 'paused' || t.status === 'disabled').length,
-    icon: CircleCloseFilled,
-    iconBg: 'sc-icon-red',
-    badge: undefined,
-    badgeType: undefined,
-    color: 'red',
-    footer: '已停用的任务',
-  },
-]);
+const statCards = computed(() => {
+  const activeTasks = tasks.value.filter(t => t.status === 'active');
+  const staleTasks = activeTasks.filter(t => {
+    if (!t.lastSyncAt) return true;
+    return Date.now() - new Date(t.lastSyncAt).getTime() > 24 * 3600000;
+  });
+  const lastSync = activeTasks
+    .map(t => t.lastSyncAt)
+    .filter(Boolean)
+    .sort()
+    .pop();
+
+  return [
+    {
+      label: '活跃任务',
+      value: activeTasks.length,
+      icon: Collection,
+      iconBg: 'sc-icon-blue',
+      footer: lastSync ? `最近同步: ${lastSync.slice(0, 16).replace('T', ' ')}` : '暂无同步记录',
+    },
+    {
+      label: '数据新鲜',
+      value: activeTasks.length - staleTasks.length,
+      icon: CircleCheck,
+      iconBg: 'sc-icon-green',
+      color: 'green' as const,
+      footer: '24h 内有同步',
+    },
+    {
+      label: '数据过期',
+      value: staleTasks.length,
+      icon: WarningFilled,
+      iconBg: 'sc-icon-yellow',
+      color: 'yellow' as const,
+      footer: '超过 24h 未更新',
+    },
+    {
+      label: '停用',
+      value: tasks.value.filter(t => t.status === 'paused' || t.status === 'disabled').length,
+      icon: CircleCloseFilled,
+      iconBg: 'sc-icon-red',
+      color: 'red' as const,
+      footer: '已停用的任务',
+    },
+  ];
+});
 
 async function loadTasks() {
   loading.value = true;
@@ -231,10 +292,30 @@ async function loadTasks() {
 
 async function handleExecute(task: IngestionTask) {
   try {
-    await ingestionService.execute(task.id);
-    ElMessage.success('任务已提交');
-    await loadTasks();
-  } catch { /* interceptor handles */ }
+    const { batchId } = await ingestionService.execute(task.id);
+    ElMessage.success('已提交');
+    startPoll(task.id, batchId);
+  } catch { /* handled */ }
+}
+
+function startPoll(taskId: string, batchId: string) {
+  running[taskId] = { pct: -1, step: '等待 Worker...', batchId };
+  const es = ingestionService.streamProgress(
+    batchId,
+    (d) => { running[taskId] = { pct: d.pct, step: d.step, batchId }; },
+    () => {
+      setTimeout(() => delete running[taskId], 3000);
+      loadTasks();
+    },
+  );
+  _pollEss.push(es);
+}
+
+async function handleCancel(taskId: string, batchId: string) {
+  try {
+    await ingestionService.cancelBatch(batchId);
+    ElMessage.success('取消信号已发送');
+  } catch { /* handled */ }
 }
 
 async function handleDelete(task: IngestionTask) {
@@ -245,6 +326,15 @@ async function handleDelete(task: IngestionTask) {
 }
 
 onMounted(loadTasks);
+onUnmounted(() => _pollEss.forEach(es => es.close()));
+function syncFreshColor(lastSyncAt: string | null): string {
+  if (!lastSyncAt) return '#909399'
+  const ms = Date.now() - new Date(lastSyncAt).getTime()
+  const hours = ms / 3600000
+  if (hours < 6) return '#67c23a'
+  if (hours < 24) return '#e6a23c'
+  return '#f56c6c'
+}
 </script>
 
 <style lang="scss" scoped>
@@ -350,5 +440,27 @@ onMounted(loadTasks);
   padding: 80px;
   color: $color-text-placeholder;
   font-size: $font-size-base;
+}
+
+.inline-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ip-step {
+  font-size: 11px;
+  color: $color-primary;
+}
+
+.ip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.never-sync {
+  color: $color-text-placeholder;
+  font-size: $font-size-xs;
 }
 </style>

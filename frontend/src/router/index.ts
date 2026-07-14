@@ -35,13 +35,13 @@ const router = createRouter({
         {
           path: 'data-browse',
           name: 'DataBrowse',
-          component: () => import('@/views/data-browse/list.vue'),
+          component: () => import('@/views/data-browse/index.vue'),
           meta: { title: '数据浏览', icon: 'Collection' },
         },
         {
           path: 'tables/:id',
           name: 'DataTableDetail',
-          component: () => import('@/views/data-browse/list.vue'),
+          component: () => import('@/views/data-browse/index.vue'),
           meta: { title: '数据表详情', icon: 'Collection', hidden: true },
         },
         {
