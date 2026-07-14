@@ -1,26 +1,44 @@
 <template>
-  <el-card>
-    <!-- 1. 标题 + 筛选区 + 操作按钮（同行） -->
+  <el-card class="crud-root">
+    <!-- 1. 标题 + 筛选区 + 操作按钮 -->
     <template #header>
-      <div class="crud-top" v-if="title || $slots['title-extra'] || $slots.filters || $slots.actions">
+      <div
+        class="crud-top"
+        v-if="title
+        || $slots['title-extra']
+        || filterItems.length
+        || $slots.filters
+        || $slots.actions"
+      >
         <div class="crud-top-left">
           <span class="crud-title-text" v-if="title">{{ title }}</span>
           <slot name="title-extra" />
         </div>
-        <div class="crud-top-right" v-if="$slots.filters || $slots.actions">
+        <div
+          class="crud-top-right"
+          v-if="filterItems.length || $slots.filters || $slots.actions"
+        >
+          <TableFilters
+            :items="filterItems"
+            v-model:filter-values="filterValues"
+            @change="(k: any, v: any) => emit('filterChange', k, v)"
+          />
           <slot name="filters" />
-          <div class="crud-spacer" v-if="$slots.filters && $slots.actions" />
+          <div
+            class="crud-spacer"
+            v-if="(filterItems.length || $slots.filters) && $slots.actions"
+          />
           <slot name="actions" />
         </div>
       </div>
     </template>
 
-    <!-- 3. 表格 -->
+    <!-- 2. 表格 -->
     <div class="crud-table">
       <slot name="table" />
     </div>
 
-    <!-- 4. 分页导航 -->
+    <!-- 3. 分页导航 -->
     <div class="crud-pagination" v-if="pagination">
       <el-pagination
         v-model:current-page="pagination.page"
@@ -37,8 +55,12 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import TableFilters from './table-filters.vue'
+import type { FilterItem } from './types'
+
+withDefaults(defineProps<{
   title?: string
+  filterItems?: FilterItem[]
   pagination?: {
     page: number
     pageSize: number
@@ -48,7 +70,16 @@ defineProps<{
     onPageChange?: (page: number) => void
     onSizeChange?: (size: number) => void
   }
+}>(), {
+  filterItems: () => [],
+})
+
+const filterValues = defineModel<Record<string, any>>('filterValues', { default: () => ({}) })
+
+const emit = defineEmits<{
+  filterChange: [key: string, value: any]
 }>()
+
 </script>
 
 <style scoped>
@@ -66,17 +97,9 @@ defineProps<{
   overflow: hidden;
 }
 
-:deep(.el-card) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 .crud-top {
   display: flex;
   align-items: center;
-  gap: 16px;
   flex-wrap: wrap;
 }
 

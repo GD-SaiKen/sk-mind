@@ -166,6 +166,29 @@ export interface PaginationConfig {
   onSizeChange?: (size: number) => void
 }
 
+// ==================== 筛选配置 ====================
+
+/** 筛选器类型 */
+export type FilterType = 'input' | 'select'
+
+/** 单个筛选项 */
+export interface FilterItem {
+  /** 唯一标识，对应 filterValues 的 key */
+  key: string
+  /** 左侧标签文字 */
+  label?: string
+  /** 控件类型 */
+  type?: FilterType
+  /** 占位文字 */
+  placeholder?: string
+  /** select 的选项（type='select' 时有效） */
+  options?: { label: string; value: string | number }[]
+  /** 控件宽度 */
+  width?: string
+  /** 是否可清空 */
+  clearable?: boolean
+}
+
 // ==================== 表格 Props ====================
 
 export interface TableProps {

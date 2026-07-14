@@ -1,4 +1,4 @@
-﻿﻿<template>
+﻿<template>
   <div class="detail-page">
     <!-- 面包屑 -->
     <div class="breadcrumb">

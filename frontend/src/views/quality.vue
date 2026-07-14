@@ -69,29 +69,17 @@
     </el-row>
 
     <!-- 质量规则表 -->
-    <Index v-if="activeTab === 'rules'" :pagination="rulesPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索规则名称或数据集..." :prefix-icon="Search" class="search-input" clearable />
-        <el-select v-model="typeFilter" placeholder="规则类型" class="filter-select" clearable>
-          <el-option label="全部类型" value="" />
-          <el-option label="完整性" value="完整性" />
-          <el-option label="唯一性" value="唯一性" />
-          <el-option label="格式" value="格式" />
-        </el-select>
-      </template>
+    <Crud v-if="activeTab === 'rules'" :filter-items="rulesFilterItems" v-model:filter-values="filterValues" :pagination="rulesPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">创建质量规则</el-button>
       </template>
       <template #table>
         <Table :columns="rulesColumns" :data="pagedRules" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 执行记录表 -->
-    <Index v-if="activeTab === 'records'" :pagination="recordsPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud v-if="activeTab === 'records'" :filter-items="recordsFilterItems" v-model:filter-values="filterValues" :pagination="recordsPagination">
       <template #table>
         <Table :columns="recordsColumns" :data="pagedRecords">
           <template #col-issues="{ row }">
@@ -99,7 +87,7 @@
           </template>
         </Table>
       </template>
-    </Index>
+    </Crud>
 
     <!-- 问题清单（卡片布局） -->
     <div v-if="activeTab === 'issues'" class="issue-list">
@@ -135,12 +123,29 @@
 import { computed, reactive, ref, watch } from 'vue'
 import {
   Search, Plus, CircleCheckFilled, WarningFilled, CircleCloseFilled, Setting,
-  VideoPlay, Edit,
+  VideoPlay, Edit, View,
 } from '@element-plus/icons-vue'
-import { Index, Table } from '@/components/crud'
-import type { ColumnSchema } from '@/components/crud'
+import { Crud, Table } from '@/components/crud'
+import type { ColumnSchema, FilterItem } from '@/components/crud'
 
 const activeTab = ref('rules')
+const filterValues = ref<Record<string, any>>({})
+
+const rulesFilterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '搜索规则名称或数据集...', width: '260px' },
+  { key: 'type', type: 'select', placeholder: '规则类型', width: '120px',
+    options: [
+      { label: '全部类型', value: '' },
+      { label: '完整性', value: '完整性' },
+      { label: '唯一性', value: '唯一性' },
+      { label: '格式', value: '格式' },
+    ] },
+]
+
+const recordsFilterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '搜索...', width: '260px' },
+]
+
 const searchTerm = ref('')
 const typeFilter = ref('')
 
@@ -183,14 +188,14 @@ const mockIssues = [
 
 const filteredRules = computed(() =>
   qualityRules.filter(r => {
-    const matchSearch = r.name.includes(searchTerm.value) || r.dataset.includes(searchTerm.value)
-    const matchType = !typeFilter.value || r.type === typeFilter.value
+    const matchSearch = r.name.includes(filterValues.value.keyword || '') || r.dataset.includes(filterValues.value.keyword || '')
+    const matchType = !filterValues.value.type || r.type === filterValues.value.type
     return matchSearch && matchType
   })
 )
 const filteredRecords = computed(() =>
   executionRecords.filter(r =>
-    r.rule.includes(searchTerm.value) || r.dataset.includes(searchTerm.value)
+    r.rule.includes(filterValues.value.keyword || '') || r.dataset.includes(filterValues.value.keyword || '')
   )
 )
 
@@ -255,7 +260,7 @@ const recordsColumns: ColumnSchema[] = [
   { type: 'custom', prop: 'issues', label: '发现问题', width: 100, align: 'center' },
   {
     type: 'action', label: '操作', width: 100,
-    buttons: [{ label: '查看详情', onClick: () => {} }],
+    buttons: [{ label: '查看详情', icon: View, onClick: () => {} }],
   },
 ]
 </script>

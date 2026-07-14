@@ -42,40 +42,39 @@
     </div>
 
     <!-- 工具管理表 -->
-    <Index v-if="activeTab === '工具管理'" :pagination="toolsPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud v-if="activeTab === '工具管理'" :filter-items="searchFilterItems" v-model:filter-values="searchValues" :pagination="toolsPagination">
       <template #actions>
         <el-button type="primary" :icon="Edit">配置工具</el-button>
       </template>
       <template #table>
         <Table :columns="toolsColumns" :data="pagedTools" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 调用记录表 -->
-    <Index v-if="activeTab === '调用记录'" :pagination="callsPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud v-if="activeTab === '调用记录'" :filter-items="searchFilterItems" v-model:filter-values="searchValues" :pagination="callsPagination">
       <template #actions>
         <el-button plain>导出记录</el-button>
       </template>
       <template #table>
         <Table :columns="callsColumns" :data="pagedCalls" />
       </template>
-    </Index>
+    </Crud>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Search, Edit, Service, CircleCheckFilled, Setting, Timer, Promotion } from '@element-plus/icons-vue'
-import { Index, Table } from '@/components/crud'
-import type { ColumnSchema } from '@/components/crud'
+import { Search, Edit, Service, CircleCheckFilled, Setting, Timer, Promotion, View } from '@element-plus/icons-vue'
+import { Crud, Table } from '@/components/crud'
+import type { ColumnSchema, FilterItem } from '@/components/crud'
 
 const activeTab = ref('Agent查询')
+const searchFilterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '搜索...', width: '260px' },
+]
+const searchValues = ref<Record<string, any>>({})
+
 const searchTerm = ref('')
 const query = ref('')
 const showAnswer = ref(false)
@@ -112,10 +111,10 @@ const agentCalls = [
 // ===================== 过滤 & 分页 =====================
 
 const filteredTools = computed(() =>
-  agentTools.filter(t => t.name.includes(searchTerm.value) || t.type.includes(searchTerm.value))
+  agentTools.filter(t => t.name.includes(searchValues.value.keyword || '') || t.type.includes(searchValues.value.keyword || ''))
 )
 const filteredCalls = computed(() =>
-  agentCalls.filter(c => c.user.includes(searchTerm.value) || c.question.includes(searchTerm.value))
+  agentCalls.filter(c => c.user.includes(searchValues.value.keyword || '') || c.question.includes(searchValues.value.keyword || ''))
 )
 
 function slicePage<T>(data: T[], page: number, size: number) {
@@ -142,7 +141,7 @@ const toolsColumns: ColumnSchema[] = [
     tagMap: { '低': 'success', '中': 'warning', '高': 'danger' },
   },
   { type: 'tag', prop: 'status', label: '状态', width: 80, tagType: 'success', formatter: () => '启用' },
-  { type: 'action', label: '操作', width: 80, buttons: [{ label: '编辑', onClick: () => {} }] },
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '编辑', icon: Edit, onClick: () => {} }] },
 ]
 
 const callsColumns: ColumnSchema[] = [
@@ -155,7 +154,7 @@ const callsColumns: ColumnSchema[] = [
     type: 'tag', prop: 'status', label: '状态', width: 80,
     tagMap: { '成功': 'success', '失败': 'danger' },
   },
-  { type: 'action', label: '操作', width: 90, buttons: [{ label: '查看详情', onClick: () => {} }] },
+  { type: 'action', label: '操作', width: 90, buttons: [{ label: '查看详情', icon: View, onClick: () => {} }] },
 ]
 
 function submitQuery() {

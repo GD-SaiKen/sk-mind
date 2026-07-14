@@ -14,10 +14,7 @@
     </div>
 
     <!-- 数据源类型 -->
-    <Index v-if="activeTab === '数据源类型'" :pagination="dsPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '数据源类型'" :pagination="dsPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">{{ actionLabel }}</el-button>
       </template>
@@ -26,13 +23,10 @@
           <template #col-code="{ row }"><span class="mono">{{ row.code }}</span></template>
         </Table>
       </template>
-    </Index>
+    </Crud>
 
     <!-- 接入方式 -->
-    <Index v-if="activeTab === '接入方式'" :pagination="imPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '接入方式'" :pagination="imPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">{{ actionLabel }}</el-button>
       </template>
@@ -41,26 +35,20 @@
           <template #col-code="{ row }"><span class="mono">{{ row.code }}</span></template>
         </Table>
       </template>
-    </Index>
+    </Crud>
 
     <!-- 质量状态 -->
-    <Index v-if="activeTab === '质量状态'" :pagination="qsPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '质量状态'" :pagination="qsPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">{{ actionLabel }}</el-button>
       </template>
       <template #table>
         <Table :columns="qsColumns" :data="pagedQualityStatuses" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 敏感字段类型 -->
-    <Index v-if="activeTab === '敏感字段类型'" :pagination="stPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '敏感字段类型'" :pagination="stPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">{{ actionLabel }}</el-button>
       </template>
@@ -69,7 +57,7 @@
           <template #col-code="{ row }"><span class="mono">{{ row.code }}</span></template>
         </Table>
       </template>
-    </Index>
+    </Crud>
 
     <!-- 业务标签（卡片网格） -->
     <template v-if="activeTab === '业务标签'">
@@ -93,10 +81,7 @@
     </template>
 
     <!-- 平台参数 -->
-    <Index v-if="activeTab === '平台参数'" :pagination="ppPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '平台参数'" :pagination="ppPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">{{ actionLabel }}</el-button>
       </template>
@@ -105,7 +90,7 @@
           <template #col-key="{ row }"><span class="mono">{{ row.key }}</span></template>
         </Table>
       </template>
-    </Index>
+    </Crud>
 
     <!-- 系统信息 -->
     <el-card shadow="never" class="sys-info-card">
@@ -148,10 +133,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Setting } from '@element-plus/icons-vue'
-import { Index, Table } from '@/components/crud'
-import type { ColumnSchema } from '@/components/crud'
+import { Crud, Table } from '@/components/crud'
+import type { ColumnSchema, FilterItem } from '@/components/crud'
 
 const activeTab = ref('数据源类型')
+const searchFilterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '搜索...', width: '260px' },
+]
+const searchValues = ref<Record<string, any>>({})
 const searchTerm = ref('')
 
 const tabs = ['数据源类型', '接入方式', '质量状态', '敏感字段类型', '业务标签', '平台参数']
@@ -207,9 +196,9 @@ const platformParams: SettingItem[] = [
 // ===================== 搜索过滤 =====================
 
 function filterItems<T extends { name: string; description?: string }>(items: T[]): T[] {
-  if (!searchTerm.value) return items
+  if (!searchValues.value.keyword || '') return items
   return items.filter(item =>
-    item.name.includes(searchTerm.value) || (item.description ?? '').includes(searchTerm.value),
+    item.name.includes(searchValues.value.keyword || '') || (item.description ?? '').includes(searchValues.value.keyword || ''),
   )
 }
 

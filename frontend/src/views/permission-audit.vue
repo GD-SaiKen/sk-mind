@@ -13,17 +13,14 @@
     </el-row>
 
     <!-- 审计日志表 -->
-    <Index v-if="activeTab === '审计日志'" :pagination="auditPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '审计日志'" :pagination="auditPagination">
       <template #actions>
         <el-button plain :icon="View">导出日志</el-button>
       </template>
       <template #table>
         <Table :columns="auditColumns" :data="pagedAuditLogs" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 角色管理（卡片布局） -->
     <div v-if="activeTab === '角色管理'">
@@ -39,17 +36,14 @@
     </div>
 
     <!-- 敏感字段表 -->
-    <Index v-if="activeTab === '敏感字段'" :pagination="sfPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '敏感字段'" :pagination="sfPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">标记敏感字段</el-button>
       </template>
       <template #table>
         <Table :columns="sfColumns" :data="pagedSensitiveFields" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 用户管理 / 数据集权限（占位） -->
     <el-card v-if="activeTab === '用户管理' || activeTab === '数据集权限'" shadow="never">
@@ -61,10 +55,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, View, User, Lock, CircleCheckFilled, WarningFilled, Edit, Coin, Upload, Service } from '@element-plus/icons-vue'
-import { Index, Table } from '@/components/crud'
-import type { ColumnSchema } from '@/components/crud'
+import { Crud, Table } from '@/components/crud'
+import type { ColumnSchema, FilterItem } from '@/components/crud'
 
 const activeTab = ref('审计日志')
+const searchFilterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '搜索...', width: '260px' },
+]
+const searchValues = ref<Record<string, any>>({})
 const searchTerm = ref('')
 const tabs = ['用户管理', '角色管理', '数据集权限', '敏感字段', '审计日志']
 
@@ -92,10 +90,10 @@ const sensitiveFields = [
 // ===================== 过滤 & 分页 =====================
 
 const filteredAuditLogs = computed(() =>
-  auditLogs.filter(l => l.user.includes(searchTerm.value) || l.object.includes(searchTerm.value) || l.operation.includes(searchTerm.value))
+  auditLogs.filter(l => l.user.includes(searchValues.value.keyword || '') || l.object.includes(searchValues.value.keyword || '') || l.operation.includes(searchValues.value.keyword || ''))
 )
 const filteredSensitiveFields = computed(() =>
-  sensitiveFields.filter(f => f.field.includes(searchTerm.value) || f.dataset.includes(searchTerm.value))
+  sensitiveFields.filter(f => f.field.includes(searchValues.value.keyword || '') || f.dataset.includes(searchValues.value.keyword || ''))
 )
 
 function slicePage<T>(data: T[], page: number, size: number) {

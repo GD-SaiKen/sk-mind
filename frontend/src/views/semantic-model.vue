@@ -13,49 +13,37 @@
     </el-row>
 
     <!-- 业务对象 -->
-    <Index v-if="activeTab === '业务对象'" :pagination="soPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '业务对象'" :pagination="soPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">创建业务对象</el-button>
       </template>
       <template #table>
         <Table :columns="soColumns" :data="pagedObjects" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 语义关系 -->
-    <Index v-if="activeTab === '语义关系'" :pagination="srPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '语义关系'" :pagination="srPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">创建关系</el-button>
       </template>
       <template #table>
         <Table :columns="srColumns" :data="pagedRelations" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 数据映射 -->
-    <Index v-if="activeTab === '数据映射'" :pagination="dmPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '数据映射'" :pagination="dmPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">创建映射</el-button>
       </template>
       <template #table>
         <Table :columns="dmColumns" :data="pagedMappings" />
       </template>
-    </Index>
+    </Crud>
 
     <!-- 行动策略 -->
-    <Index v-if="activeTab === '行动策略'" :pagination="apPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '行动策略'" :pagination="apPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">配置策略</el-button>
       </template>
@@ -66,7 +54,7 @@
           </template>
         </Table>
       </template>
-    </Index>
+    </Crud>
 
     <!-- 对象属性（占位） -->
     <el-card v-if="activeTab === '对象属性'" shadow="never">
@@ -77,11 +65,15 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Search, Plus, Edit, Service, Collection, Connection, Link } from '@element-plus/icons-vue'
-import { Index, Table } from '@/components/crud'
-import type { ColumnSchema } from '@/components/crud'
+import { Search, Plus, Edit, Service, Collection, Connection, Link, Select } from '@element-plus/icons-vue'
+import { Crud, Table } from '@/components/crud'
+import type { ColumnSchema, FilterItem } from '@/components/crud'
 
 const activeTab = ref('业务对象')
+const searchFilterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '搜索...', width: '260px' },
+]
+const searchValues = ref<Record<string, any>>({})
 const searchTerm = ref('')
 const tabs = ['业务对象', '对象属性', '语义关系', '数据映射', '行动策略']
 
@@ -114,8 +106,8 @@ const actionPolicies = [
 // ===================== 过滤 & 分页 =====================
 
 function filterBySearch<T extends Record<string, any>>(items: T[], fields: string[]): T[] {
-  if (!searchTerm.value) return items
-  return items.filter(item => fields.some(f => String(item[f] ?? '').includes(searchTerm.value)))
+  if (!searchValues.value.keyword || '') return items
+  return items.filter(item => fields.some(f => String(item[f] ?? '').includes(searchValues.value.keyword || '')))
 }
 
 const filteredObjects = computed(() => filterBySearch(semanticObjects, ['code', 'name', 'description']))
@@ -157,7 +149,7 @@ const soColumns: ColumnSchema[] = [
   { type: 'text', prop: 'description', label: '描述', minWidth: 200 },
   { type: 'text', prop: 'attrCount', label: '属性数', width: 80, align: 'center' },
   { type: 'text', prop: 'relCount', label: '关系数', width: 80, align: 'center' },
-  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: Edit, onClick: () => {} }] },
 ]
 
 const srColumns: ColumnSchema[] = [
@@ -171,7 +163,7 @@ const srColumns: ColumnSchema[] = [
     formatter: (v: boolean) => v ? '是' : '否',
     tagMap: { true: 'success', false: 'info' },
   } as ColumnSchema,
-  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: Edit, onClick: () => {} }] },
 ]
 
 const dmColumns: ColumnSchema[] = [
@@ -184,8 +176,8 @@ const dmColumns: ColumnSchema[] = [
   {
     type: 'action', label: '操作', width: 120,
     buttons: [
-      { label: '确认', onClick: () => {} },
-      { label: '编辑', onClick: () => {} },
+      { label: '确认', icon: Select, onClick: () => {} },
+      { label: '编辑', icon: Edit, onClick: () => {} },
     ],
   },
 ]
@@ -203,7 +195,7 @@ const apColumns: ColumnSchema[] = [
     formatter: (v: boolean) => v ? '是' : '否',
     tagMap: { true: 'warning', false: 'info' },
   } as ColumnSchema,
-  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: Edit, onClick: () => {} }] },
 ]
 </script>
 

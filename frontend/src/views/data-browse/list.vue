@@ -1,13 +1,11 @@
 <template>
   <div class="page">
     <div class="title-row">
-      <h1>鏁版嵁娴忚 <span class="count">({{ tables.length }} 寮犺〃)</span></h1>
+      <h1>鏁版嵁娴忚� <span class="count">({{ tables.length }} 寮犺〃)</span></h1>
     </div>
 
-    <!-- 绛涢�夊尯 -->
-    <TableFilters>
-      <el-input v-model="searchKey" placeholder="鎼滅储琛ㄥ悕..." :prefix-icon="Search" style="width: 280px" clearable />
-    </TableFilters>
+    <!-- 绛涢€夊尯 -->
+    <TableFilters :items="filterItems" v-model:filter-values="filterValues" />
 
     <el-row :gutter="16">
       <el-col :span="7">
@@ -20,7 +18,7 @@
             <div class="tname">{{ t.table_name }}</div>
             <div class="tinfo">{{ t.row_count?.toLocaleString() }} 琛?/div>
           </div>
-          <div v-if="filteredTables.length === 0 && !searchKey" class="empty">鏆傛棤鏁版嵁</div>
+          <div v-if="filteredTables.length === 0 && !filterValues.keyword" class="empty">鏆傛棤鏁版嵁</div>
         </div>
       </el-col>
 
@@ -67,6 +65,8 @@ import { Search } from '@element-plus/icons-vue'
 import { api } from '@/api'
 import { TableFilters, Pagination } from '@/components/crud'
 
+import type { FilterItem } from '@/components/crud'
+
 interface RawTable {
   table_name: string
   row_count: number
@@ -77,11 +77,15 @@ const loading = ref(false)
 const activeTable = ref('')
 const sampleData = ref<Record<string, unknown>[]>([])
 const sampleLoading = ref(false)
+const filterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '鎼滅储琛ㄥ悕...', width: '280px' },
+]
+const filterValues = ref<Record<string, any>>({})
 const searchKey = ref('')
 
 const filteredTables = computed(() => {
-  if (!searchKey.value) return tables.value
-  return tables.value.filter(t => t.table_name.includes(searchKey.value))
+  if (!filterValues.value.keyword) return tables.value
+  return tables.value.filter(t => t.table_name.includes(filterValues.value.keyword || ''))
 })
 
 // ---- 鎶芥牱鏁版嵁鍒嗛〉 ----

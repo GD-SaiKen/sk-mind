@@ -1,35 +1,10 @@
-﻿﻿<template>
-  <Index title="数据源管理" :pagination="paginationConfig">
-    <!-- 筛选区 -->
-    <template #filters>
-      <el-input
-        v-model="searchKey"
-        placeholder="搜索名称..."
-        :prefix-icon="Search"
-        style="width: 220px"
-        clearable
-        @change="load"
-      />
-      <el-select v-model="typeFilter" placeholder="类型" clearable style="width: 120px" @change="load">
-        <el-option label="数据库" value="database" />
-        <el-option label="API 接口" value="api" />
-        <el-option label="Excel" value="excel" />
-        <el-option label="CSV" value="csv" />
-      </el-select>
-      <el-select v-model="statusFilter" placeholder="状态" clearable style="width: 100px" @change="load">
-        <el-option label="正常" value="active" />
-        <el-option label="草稿" value="draft" />
-        <el-option label="停用" value="paused" />
-      </el-select>
-      <el-input
-        v-model="ownerFilter"
-        placeholder="负责人..."
-        :prefix-icon="Search"
-        style="width: 160px"
-        clearable
-        @change="load"
-      />
-    </template>
+﻿<template>
+  <Crud
+    :filter-items="filterItems"
+    v-model:filter-values="filterValues"
+    :pagination="paginationConfig"
+    @filter-change="load"
+  >
 
     <!-- 操作区 -->
     <template #actions>
@@ -46,12 +21,16 @@
       >
         <!-- 名称列 -->
         <template #col-name="{ row }">
-          <el-link type="primary" :underline="false" @click="handleView(row)">{{ row.name }}</el-link>
+          <el-link
+            type="primary"
+            :underline="false"
+            @click="handleView(row)"
+          >{{ row.name }}</el-link>
           <div class="row-sub">{{ row.description }}</div>
         </template>
       </Table>
     </template>
-  </Index>
+  </Crud>
 
   <!-- 编辑/新建弹窗 -->
   <el-dialog
@@ -114,11 +93,11 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dataSourceService } from '@/api/services/data-source'
-import { Index, Table } from '@/components/crud'
-import type { ColumnSchema } from '@/components/crud'
+import { Crud, Table } from '@/components/crud'
+import type { ColumnSchema, FilterItem } from '@/components/crud'
 
 const router = useRouter()
 
@@ -141,10 +120,24 @@ interface DS {
 const tableRef = ref()
 const sources = ref<DS[]>([])
 const loading = ref(false)
-const searchKey = ref('')
-const typeFilter = ref('')
-const statusFilter = ref('')
-const ownerFilter = ref('')
+const filterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '数据源名称...', width: '220px' },
+  { key: 'type', type: 'select', placeholder: '类型', width: '120px',
+    options: [
+      { label: '数据库', value: 'database' },
+      { label: 'API 接口', value: 'api' },
+      { label: 'Excel', value: 'excel' },
+      { label: 'CSV', value: 'csv' },
+    ] },
+  { key: 'status', type: 'select', placeholder: '状态', width: '100px',
+    options: [
+      { label: '正常', value: 'active' },
+      { label: '草稿', value: 'draft' },
+      { label: '停用', value: 'paused' },
+    ] },
+  { key: 'owner', placeholder: '负责人...', width: '160px' },
+]
+const filterValues = ref<Record<string, any>>({})
 
 // ---- 分页 ----
 const page = ref(1)
@@ -245,15 +238,17 @@ const columns: ColumnSchema[] = [
     label: '操作',
     width: 200,
     buttons: [
-      { label: '查看', onClick: (row) => handleView(row as DS) },
-      { label: '编辑', onClick: (row) => openEdit(row as DS) },
+      { label: '查看', icon: View, onClick: (row) => handleView(row as DS) },
+      { label: '编辑', icon: Edit, onClick: (row) => openEdit(row as DS) },
       {
         label: '创建接入任务',
+        icon: Plus,
         onClick: (row) => handleCreateTask(row as DS),
       },
       {
         label: '停用',
         type: 'danger',
+        icon: Delete,
         onClick: (row) => handleDisable(row as DS),
         hidden: (row) => (row as DS).status === 'paused' || (row as DS).status === 'archived',
       },
@@ -295,10 +290,10 @@ async function load() {
   loading.value = true
   try {
     const r = await dataSourceService.getList({
-      keyword: searchKey.value || undefined,
-      sourceType: typeFilter.value || undefined,
-      status: statusFilter.value || undefined,
-      owner: ownerFilter.value || undefined,
+      keyword: filterValues.value.keyword || undefined,
+      sourceType: filterValues.value.type || undefined,
+      status: filterValues.value.status || undefined,
+      owner: filterValues.value.owner || undefined,
       page: page.value,
       pageSize: pageSize.value,
     })

@@ -13,10 +13,7 @@
     </el-row>
 
     <!-- 关系边列表 -->
-    <Index v-if="activeTab === '关系边列表'" :pagination="edgesPagination">
-      <template #filters>
-        <el-input v-model="searchTerm" placeholder="搜索关系..." :prefix-icon="Search" class="search-input" clearable />
-      </template>
+    <Crud :filter-items="searchFilterItems" v-model:filter-values="searchValues" v-if="activeTab === '关系边列表'" :pagination="edgesPagination">
       <template #actions>
         <el-button type="primary" :icon="Plus">创建关系边</el-button>
       </template>
@@ -32,7 +29,7 @@
           </template>
         </Table>
       </template>
-    </Index>
+    </Crud>
 
     <!-- 关系查询 -->
     <el-card v-if="activeTab === '关系查询'" shadow="never">
@@ -80,10 +77,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Connection, CircleCheckFilled, Link, WarningFilled } from '@element-plus/icons-vue'
-import { Index, Table } from '@/components/crud'
-import type { ColumnSchema } from '@/components/crud'
+import { Crud, Table } from '@/components/crud'
+import type { ColumnSchema, FilterItem } from '@/components/crud'
 
 const activeTab = ref('关系边列表')
+const searchFilterItems: FilterItem[] = [
+  { key: 'keyword', placeholder: '搜索关系...', width: '260px' },
+]
+const searchValues = ref<Record<string, any>>({})
 const searchTerm = ref('')
 const queryType = ref('customer')
 const queryId = ref('')
@@ -101,7 +102,7 @@ const relationEdges: Edge[] = [
 
 const filteredEdges = computed(() =>
   relationEdges.filter(e => {
-    const s = searchTerm.value
+    const s = searchValues.value.keyword || ''
     return !s || e.fromEntity.includes(s) || e.toEntity.includes(s) || e.relation.includes(s) || e.source.includes(s)
   })
 )
@@ -140,7 +141,7 @@ const edgesColumns: ColumnSchema[] = [
     formatter: (v: boolean) => v ? '已确认' : '待确认',
     tagMap: { true: 'success', false: 'warning' },
   } as ColumnSchema,
-  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: 'Edit', onClick: () => {} }] },
+  { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: Edit, onClick: () => {} }] },
 ]
 </script>
 
