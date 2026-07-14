@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -209,13 +210,13 @@ async def get_batch_progress(
     if not batch:
         raise HTTPException(status_code=404, detail="not found")
     if batch.status == "running":
-        progress, step = -1, "running..."
+        progress, step = -1, "同步中..."
     elif batch.status in ("success", "partial_success"):
-        progress, step = 100, "done"
+        progress, step = 100, "完成"
     elif batch.status == "failed":
-        progress, step = 100, f"failed: {batch.error_summary or ''}"
+        progress, step = 100, f"失败: {batch.error_summary or ''}"
     else:
-        progress, step = 0, "pending"
+        progress, step = 0, "等待中"
     return _ok(_dump(BatchProgressResponse(
         batchId=str(batch.id), status=batch.status,
         progress=progress, step=step, lastHeartbeat=batch.started_at,

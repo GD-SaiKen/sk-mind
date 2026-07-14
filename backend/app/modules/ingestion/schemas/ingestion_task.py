@@ -4,21 +4,9 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
-
-def _to_camel(snake: str) -> str:
-    """snake_case → camelCase"""
-    parts = snake.split("_")
-    return parts[0] + "".join(p.capitalize() for p in parts[1:])
-
-
-class CamelModel(BaseModel):
-    """自动将 snake_case 字段转为 camelCase 别名的基础模型。"""
-    model_config = ConfigDict(
-        alias_generator=_to_camel,
-        populate_by_name=True,  # 允许同时使用 snake_case 和 camelCase
-    )
+from app.core.schemas import CamelModel
 
 
 # ── 请求 ─────────────────────────────────────
@@ -55,11 +43,7 @@ class IngestionTaskUpdate(CamelModel):
 class IngestionTaskResponse(CamelModel):
     """接入任务响应。"""
 
-    model_config = ConfigDict(
-        alias_generator=_to_camel,
-        populate_by_name=True,
-        from_attributes=True,
-    )
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
@@ -82,11 +66,7 @@ class IngestionTaskResponse(CamelModel):
 class IngestionBatchResponse(CamelModel):
     """接入批次响应。"""
 
-    model_config = ConfigDict(
-        alias_generator=_to_camel,
-        populate_by_name=True,
-        from_attributes=True,
-    )
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     task_id: uuid.UUID
@@ -110,7 +90,7 @@ class BatchProgressResponse(CamelModel):
 
     batchId: str
     status: str
-    progress: int = Field(..., ge=0, le=100, description="进度百分比 0-100")
+    progress: int = Field(..., ge=-1, le=100, description="进度百分比 -1=未知, 0-100=已知")
     step: str = Field("", description="当前步骤描述")
     lastHeartbeat: Optional[datetime] = None
 
@@ -118,11 +98,7 @@ class BatchProgressResponse(CamelModel):
 class ImportErrorResponse(CamelModel):
     """导入错误响应。"""
 
-    model_config = ConfigDict(
-        alias_generator=_to_camel,
-        populate_by_name=True,
-        from_attributes=True,
-    )
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     batch_id: uuid.UUID
