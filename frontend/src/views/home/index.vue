@@ -1,6 +1,5 @@
-﻿﻿<template>
+﻿<template>
   <div class="home-page">
-    <!-- 标签页 -->
     <div class="tab-bar">
       <button
         v-for="tab in tabs"
@@ -13,9 +12,10 @@
       </button>
     </div>
 
-    <!-- 运行状态 -->
-    <div v-if="activeTab === 'status'" class="tab-content">
-      <!-- 状态总览卡片 3x2 -->
+    <div
+      v-if="activeTab === 'status'"
+      class="tab-content"
+    >
       <div class="cards-grid">
         <el-card
           v-for="card in statusCards"
@@ -23,7 +23,6 @@
           shadow="hover"
           class="stat-card"
         >
-          <!-- 第一层：认知层 -->
           <div class="card-header-row">
             <div class="card-title-wrap">
               <div :class="['card-icon', card.iconBg]">
@@ -33,32 +32,34 @@
               </div>
               <span class="card-title">{{ card.label }}</span>
             </div>
-            <span
-              :class="['status-badge', card.statusType]"
-            >
+            <span :class="['status-badge', card.statusType]">
               <span :class="['status-dot', card.statusType]" />
               {{ card.statusText }}
             </span>
           </div>
 
-          <!-- 第二层：数据层 3列 -->
           <div class="card-stats-row">
             <div
               v-for="stat in card.stats"
               :key="stat.label"
               class="card-stat-item"
             >
-              <div class="card-stat-value" :style="{ color: stat.color }">
+              <div
+                class="card-stat-value"
+                :style="{ color: stat.color }"
+              >
                 {{ stat.value }}
               </div>
               <div class="card-stat-label">{{ stat.label }}</div>
             </div>
           </div>
 
-          <!-- 第三层：元数据+操作 -->
           <div class="card-footer-row">
             <span class="card-meta">{{ card.meta }}</span>
-            <router-link :to="card.linkTo" class="card-link">
+            <router-link
+              :to="card.linkTo"
+              class="card-link"
+            >
               查看详情
               <el-icon :size="12"><ArrowRight /></el-icon>
             </router-link>
@@ -66,7 +67,6 @@
         </el-card>
       </div>
 
-      <!-- 快捷操作 -->
       <div class="section">
         <h3 class="section-title">快捷操作</h3>
         <div class="quick-actions">
@@ -85,12 +85,22 @@
       </div>
     </div>
 
-    <!-- 待处理事项 -->
-    <div v-if="activeTab === 'pending'" class="tab-content">
-      <el-card shadow="never" class="pending-section">
+    <div
+      v-if="activeTab === 'pending'"
+      class="tab-content"
+    >
+      <el-card
+        shadow="never"
+        class="pending-section"
+      >
         <template #header>
           <div class="section-header-row">
-            <el-icon :size="18" class="text-warning"><WarningFilled /></el-icon>
+            <el-icon
+              :size="18"
+              class="text-warning"
+            >
+              <WarningFilled />
+            </el-icon>
             <span>待处理事项</span>
           </div>
         </template>
@@ -123,8 +133,10 @@
       </el-card>
     </div>
 
-    <!-- 最近任务 -->
-    <div v-if="activeTab === 'recent'" class="tab-content">
+    <div
+      v-if="activeTab === 'recent'"
+      class="tab-content"
+    >
       <el-card shadow="never">
         <template #header>
           <span>最近接入任务</span>
@@ -158,16 +170,19 @@
       </el-card>
     </div>
 
-    <!-- 系统状态 -->
-    <el-card shadow="never" class="sys-status-card">
+    <el-card
+      shadow="never"
+      class="sys-status-card"
+    >
       <template #header>
         <span>系统状态</span>
       </template>
-      <el-descriptions :column="3" border>
+      <el-descriptions
+        :column="3"
+        border
+      >
         <el-descriptions-item label="后端服务">
-          <el-tag
-            :type="healthStatus === '运行正常' ? 'success' : 'danger'"
-          >
+          <el-tag :type="healthStatus === '运行正常' ? 'success' : 'danger'">
             {{ healthStatus }}
           </el-tag>
         </el-descriptions-item>
@@ -190,9 +205,18 @@ import { api } from '@/api'
 const activeTab = ref('status')
 
 const tabs = [
-  { key: 'status', label: '运行状态' },
-  { key: 'pending', label: '待处理事项' },
-  { key: 'recent', label: '最近任务' },
+  {
+    key: 'status',
+    label: '运行状态',
+  },
+  {
+    key: 'pending',
+    label: '待处理事项',
+  },
+  {
+    key: 'recent',
+    label: '最近任务',
+  },
 ]
 
 const statusCards = [
@@ -203,9 +227,21 @@ const statusCards = [
     statusType: 'success',
     statusText: '正常',
     stats: [
-      { label: '运行状态', value: '—', color: '#1f2937' },
-      { label: '当前状态', value: '正常', color: '#1f2937' },
-      { label: '最后同步', value: '10:00', color: '#1f2937' },
+      {
+        label: '总数',
+        value: '6',
+        color: '#1f2937',
+      },
+      {
+        label: '正常',
+        value: '5',
+        color: '#16a34a',
+      },
+      {
+        label: '异常',
+        value: '1',
+        color: '#dc2626',
+      },
     ],
     meta: '连接池 5/10',
     linkTo: '/data-sources',
@@ -217,9 +253,21 @@ const statusCards = [
     statusType: 'warning',
     statusText: '部分异常',
     stats: [
-      { label: '成功', value: '2', color: '#16a34a' },
-      { label: '部分', value: '1', color: '#ca8a04' },
-      { label: '失败', value: '1', color: '#dc2626' },
+      {
+        label: '成功',
+        value: '2',
+        color: '#16a34a',
+      },
+      {
+        label: '部分',
+        value: '1',
+        color: '#ca8a04',
+      },
+      {
+        label: '失败',
+        value: '1',
+        color: '#dc2626',
+      },
     ],
     meta: '上次执行：10:30',
     linkTo: '/ingestion',
@@ -231,9 +279,21 @@ const statusCards = [
     statusType: 'success',
     statusText: '正常',
     stats: [
-      { label: '已注册', value: '47', color: '#1f2937' },
-      { label: '有数据', value: '38', color: '#1f2937' },
-      { label: '新发现', value: '3', color: '#1f2937' },
+      {
+        label: '总数',
+        value: '47',
+        color: '#1f2937',
+      },
+      {
+        label: 'Agent 开放',
+        value: '38',
+        color: '#16a34a',
+      },
+      {
+        label: '新增',
+        value: '3',
+        color: '#4f46e5',
+      },
     ],
     meta: '昨日新增 2 张表',
     linkTo: '/tables',
@@ -245,9 +305,21 @@ const statusCards = [
     statusType: 'warning',
     statusText: '5 条警告',
     stats: [
-      { label: '质检通过率', value: '96.4%', color: '#16a34a' },
-      { label: '空值率', value: '0.8%', color: '#ca8a04' },
-      { label: '待确认', value: '5', color: '#dc2626' },
+      {
+        label: '质检通过率',
+        value: '96.4%',
+        color: '#16a34a',
+      },
+      {
+        label: '空值率',
+        value: '0.8%',
+        color: '#ca8a04',
+      },
+      {
+        label: '待确认',
+        value: '5',
+        color: '#dc2626',
+      },
     ],
     meta: '昨日扫描 1,250 条',
     linkTo: '/quality',
@@ -259,9 +331,21 @@ const statusCards = [
     statusType: 'success',
     statusText: '已构建',
     stats: [
-      { label: '领域模型', value: '3', color: '#1f2937' },
-      { label: '实体数', value: '28', color: '#1f2937' },
-      { label: '关系数', value: '56', color: '#1f2937' },
+      {
+        label: '对象数',
+        value: '3',
+        color: '#1f2937',
+      },
+      {
+        label: '关系数',
+        value: '56',
+        color: '#1f2937',
+      },
+      {
+        label: '映射数',
+        value: '28',
+        color: '#1f2937',
+      },
     ],
     meta: '最后更新：09:45',
     linkTo: '/semantic',
@@ -273,9 +357,21 @@ const statusCards = [
     statusType: 'success',
     statusText: '运行中',
     stats: [
-      { label: '今日调用', value: '128', color: '#1f2937' },
-      { label: '成功', value: '124', color: '#16a34a' },
-      { label: '平均耗时', value: '1.2s', color: '#1f2937' },
+      {
+        label: '今日调用',
+        value: '128',
+        color: '#1f2937',
+      },
+      {
+        label: '成功',
+        value: '124',
+        color: '#16a34a',
+      },
+      {
+        label: '失败',
+        value: '4',
+        color: '#dc2626',
+      },
     ],
     meta: '峰值 QPS：12',
     linkTo: '/agent',
@@ -283,11 +379,31 @@ const statusCards = [
 ]
 
 const quickActions = [
-  { label: '新增数据源', to: '/data-sources', icon: Coin },
-  { label: '创建任务', to: '/ingestion', icon: Upload },
-  { label: '数据目录', to: '/catalog', icon: Collection },
-  { label: '质量检查', to: '/quality', icon: CircleCheck },
-  { label: 'Agent 查询', to: '/agent', icon: Service },
+  {
+    label: '新增数据源',
+    to: '/data-sources',
+    icon: Coin,
+  },
+  {
+    label: '创建任务',
+    to: '/ingestion',
+    icon: Upload,
+  },
+  {
+    label: '数据目录',
+    to: '/catalog',
+    icon: Collection,
+  },
+  {
+    label: '质量检查',
+    to: '/quality',
+    icon: CircleCheck,
+  },
+  {
+    label: 'Agent 查询',
+    to: '/agent',
+    icon: Service,
+  },
 ]
 
 const pendingItems = [
@@ -306,6 +422,30 @@ const pendingItems = [
     desc: '每日考勤表存在 5 条空值记录',
     tag: '待处理',
     icon: Clock,
+  },
+  {
+    id: 3,
+    level: 'warning',
+    title: '待确认字段说明',
+    desc: '3 张数据表存在未填写的字段说明',
+    tag: '待处理',
+    icon: Clock,
+  },
+  {
+    id: 4,
+    level: 'warning',
+    title: '待确认关系边',
+    desc: 'AI 生成了 1 条新的实体关系待审核',
+    tag: '待处理',
+    icon: Clock,
+  },
+  {
+    id: 5,
+    level: 'error',
+    title: 'Excel 解析失败: 供应商导入',
+    desc: '模板字段不匹配，3 个文件解析失败',
+    tag: '紧急',
+    icon: WarningFilled,
   },
 ]
 
@@ -365,7 +505,6 @@ onMounted(() => {
   max-width: 1200px;
 }
 
-/* 标签页 */
 .tab-bar {
   display: flex;
   gap: 0;
@@ -400,7 +539,6 @@ onMounted(() => {
   gap: 24px;
 }
 
-/* 状态卡片网格 */
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -448,12 +586,35 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
 
-  &.bg-blue { background: #dbeafe; color: $color-primary; }
-  &.bg-purple { background: #ede9fe; color: #7c3aed; }
-  &.bg-green { background: #dcfce7; color: $color-success; }
-  &.bg-orange { background: #fff7ed; color: #ea580c; }
-  &.bg-indigo { background: #e0e7ff; color: #4f46e5; }
-  &.bg-cyan { background: #cffafe; color: #0891b2; }
+  &.bg-blue {
+    background: #dbeafe;
+    color: $color-primary;
+  }
+
+  &.bg-purple {
+    background: #ede9fe;
+    color: #7c3aed;
+  }
+
+  &.bg-green {
+    background: #dcfce7;
+    color: $color-success;
+  }
+
+  &.bg-orange {
+    background: #fff7ed;
+    color: #ea580c;
+  }
+
+  &.bg-indigo {
+    background: #e0e7ff;
+    color: #4f46e5;
+  }
+
+  &.bg-cyan {
+    background: #cffafe;
+    color: #0891b2;
+  }
 }
 
 .card-title {
@@ -489,8 +650,13 @@ onMounted(() => {
   border-radius: 50%;
   display: inline-block;
 
-  &.success { background: $color-success; }
-  &.warning { background: $color-warning; }
+  &.success {
+    background: $color-success;
+  }
+
+  &.warning {
+    background: $color-warning;
+  }
 }
 
 .card-stats-row {
@@ -535,7 +701,6 @@ onMounted(() => {
   }
 }
 
-/* 快捷操作 */
 .section {
   margin: 0;
 }
@@ -573,7 +738,6 @@ onMounted(() => {
   }
 }
 
-/* 待处理事项 */
 .section-header-row {
   display: flex;
   align-items: center;
@@ -582,9 +746,17 @@ onMounted(() => {
   font-weight: $font-weight-medium;
 }
 
-.text-warning { color: $color-warning; }
-.text-danger { color: $color-danger; }
-.text-success { color: $color-success; }
+.text-warning {
+  color: $color-warning;
+}
+
+.text-danger {
+  color: $color-danger;
+}
+
+.text-success {
+  color: $color-success;
+}
 
 .pending-list,
 .recent-list {
@@ -637,7 +809,6 @@ onMounted(() => {
   color: $color-text-secondary;
 }
 
-/* 最近任务 */
 .recent-item {
   display: flex;
   align-items: center;
@@ -653,9 +824,7 @@ onMounted(() => {
   gap: 12px;
 }
 
-/* 系统状态 */
 .sys-status-card {
   margin-top: 24px;
 }
 </style>
-

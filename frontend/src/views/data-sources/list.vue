@@ -121,21 +121,60 @@ const tableRef = ref()
 const sources = ref<DS[]>([])
 const loading = ref(false)
 const filterItems: FilterItem[] = [
-  { key: 'keyword', placeholder: '数据源名称...', width: '220px' },
-  { key: 'type', type: 'select', placeholder: '类型', width: '120px',
+  {
+    key: 'keyword',
+    placeholder: '数据源名称...',
+    width: '220px',
+  },
+  {
+    key: 'type',
+    type: 'select',
+    placeholder: '类型',
+    width: '120px',
     options: [
-      { label: '数据库', value: 'database' },
-      { label: 'API 接口', value: 'api' },
-      { label: 'Excel', value: 'excel' },
-      { label: 'CSV', value: 'csv' },
-    ] },
-  { key: 'status', type: 'select', placeholder: '状态', width: '100px',
+      {
+        label: '数据库',
+        value: 'database',
+      },
+      {
+        label: 'API 接口',
+        value: 'api',
+      },
+      {
+        label: 'Excel',
+        value: 'excel',
+      },
+      {
+        label: 'CSV',
+        value: 'csv',
+      },
+    ],
+  },
+  {
+    key: 'status',
+    type: 'select',
+    placeholder: '状态',
+    width: '100px',
     options: [
-      { label: '正常', value: 'active' },
-      { label: '草稿', value: 'draft' },
-      { label: '停用', value: 'paused' },
-    ] },
-  { key: 'owner', placeholder: '负责人...', width: '160px' },
+      {
+        label: '正常',
+        value: 'active',
+      },
+      {
+        label: '草稿',
+        value: 'draft',
+      },
+      {
+        label: '停用',
+        value: 'paused',
+      },
+    ],
+  },
+  {
+    key: 'owner',
+    placeholder: '负责人...',
+    width: '160px',
+  },
 ]
 const filterValues = ref<Record<string, any>>({})
 
@@ -238,8 +277,16 @@ const columns: ColumnSchema[] = [
     label: '操作',
     width: 200,
     buttons: [
-      { label: '查看', icon: View, onClick: (row) => handleView(row as DS) },
-      { label: '编辑', icon: Edit, onClick: (row) => openEdit(row as DS) },
+      {
+        label: '查看',
+        icon: View,
+        onClick: (row) => handleView(row as DS),
+      },
+      {
+        label: '编辑',
+        icon: Edit,
+        onClick: (row) => openEdit(row as DS),
+      },
       {
         label: '创建接入任务',
         icon: Plus,
@@ -369,7 +416,7 @@ function handleView(row: DS) {
 }
 
 function handleCreateTask(row: DS) {
-  router.push(`/ingestion/create?sourceId=${row.id}`)
+  router.push(`/ingestion?sourceId=${row.id}`)
 }
 
 async function handleDisable(row: DS) {

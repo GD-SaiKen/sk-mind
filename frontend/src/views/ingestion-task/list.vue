@@ -37,7 +37,7 @@
     <Crud :filter-items="filterItems" v-model:filter-values="filterValues" :pagination="paginationConfig">
       <template #title-extra>
 
-        <el-button :icon="DataAnalysis" @click="router.push('/data-browse')">Raw 数据浏览</el-button>
+        <el-button :icon="DataAnalysis" @click="router.push('/tables')">数据浏览</el-button>
 
       </template>
 

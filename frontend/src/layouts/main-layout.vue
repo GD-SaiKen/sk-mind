@@ -1,9 +1,14 @@
 ﻿<template>
   <div class="root">
-    <!-- 左侧导航 — 白色背景，非 menu 组件 -->
-    <aside class="aside" :class="{ collapsed: !sidebarOpen }">
+    <aside
+      class="aside"
+      :class="{ collapsed: !sidebarOpen }"
+    >
       <div class="aside-header">
-        <span v-if="sidebarOpen" class="aside-logo">AI 数据平台</span>
+        <span
+          v-if="sidebarOpen"
+          class="aside-logo"
+        >AI 数据平台</span>
       </div>
       <nav class="aside-nav">
         <router-link
@@ -11,19 +16,22 @@
           :key="item.path"
           :to="item.path"
           class="nav-item"
-          :class="{ active: route.path === item.path || (item.path !== '/' && route.path.startsWith(item.path)) }"
+          :class="{
+            active: route.path === item.path || (item.path !== '/' && route.path.startsWith(item.path)),
+          }"
         >
           <el-icon :size="18">
             <component :is="item.icon" />
           </el-icon>
-          <span v-if="sidebarOpen" class="nav-label">{{ item.label }}</span>
+          <span
+            v-if="sidebarOpen"
+            class="nav-label"
+          >{{ item.label }}</span>
         </router-link>
       </nav>
     </aside>
-    
-    <!-- 右侧主区域 -->
+
     <div class="main-area">
-      <!-- 顶栏 -->
       <header class="topbar">
         <div class="topbar-left">
           <el-button
@@ -34,12 +42,18 @@
           />
           <div class="search-wrap">
             <el-input
-              placeholder="搜索数据源、数据表、数据集、字段..."
+              placeholder="搜索数据源、数据表、数据集、字段、业务对象、接入任务..."
               :prefix-icon="Search"
             />
           </div>
         </div>
         <div class="topbar-right">
+          <el-tag
+            effect="plain"
+            class="env-tag"
+          >
+            测试环境
+          </el-tag>
           <el-button
             text
             size="default"
@@ -63,7 +77,7 @@
               <div class="avatar">管</div>
               <div class="user-meta">
                 <div class="user-name">管理员</div>
-                <div class="user-email">admin@company.com</div>
+                <div class="user-role">超级管理员</div>
               </div>
             </div>
             <template #dropdown>
@@ -74,11 +88,15 @@
           </el-dropdown>
         </div>
       </header>
-      
-      <!-- 面包屑 + 标签（同一容器） -->
+
       <div class="bread-tab-bar">
         <div class="breadcrumb-row">
-          <router-link to="/" class="bread-link">首页</router-link>
+          <router-link
+            to="/"
+            class="bread-link"
+          >
+            首页
+          </router-link>
           <template v-if="activeTabPath !== '/'">
             <span class="bread-sep">/</span>
             <span class="bread-current">{{ currentNav?.label }}</span>
@@ -106,8 +124,7 @@
           </router-link>
         </div>
       </div>
-      
-      <!-- 内容区 — 白底 -->
+
       <main class="content">
         <router-view />
       </main>
@@ -129,29 +146,74 @@ const route = useRoute()
 const sidebarOpen = ref(true)
 
 const navItems: { path: string; icon: Component; label: string }[] = [
-  { path: '/home', icon: HomeFilled, label: '首页' },
-  { path: '/data-sources', icon: Coin, label: '数据源' },
-  { path: '/ingestion', icon: Tickets, label: '接入任务' },
-  { path: '/tables', icon: Collection, label: '数据表' },
-  { path: '/catalog', icon: Collection, label: '数据目录' },
-  { path: '/quality', icon: CircleCheck, label: '数据质量' },
-  { path: '/permissions', icon: User, label: '权限审计' },
-  { path: '/semantic', icon: DataAnalysis, label: '语义模型' },
-  { path: '/graph', icon: Connection, label: '关系图谱' },
-  { path: '/agent', icon: Service, label: 'Agent 服务' },
-  { path: '/settings', icon: Setting, label: '系统设置' },
+  {
+    path: '/home',
+    icon: HomeFilled,
+    label: '首页',
+  },
+  {
+    path: '/data-sources',
+    icon: Coin,
+    label: '数据源',
+  },
+  {
+    path: '/ingestion',
+    icon: Tickets,
+    label: '接入任务',
+  },
+  {
+    path: '/tables',
+    icon: Collection,
+    label: '数据表',
+  },
+  {
+    path: '/catalog',
+    icon: Collection,
+    label: '数据目录',
+  },
+  {
+    path: '/quality',
+    icon: CircleCheck,
+    label: '数据质量',
+  },
+  {
+    path: '/permissions',
+    icon: User,
+    label: '权限审计',
+  },
+  {
+    path: '/semantic',
+    icon: DataAnalysis,
+    label: '语义模型',
+  },
+  {
+    path: '/graph',
+    icon: Connection,
+    label: '关系图谱',
+  },
+  {
+    path: '/agent',
+    icon: Service,
+    label: 'Agent 服务',
+  },
+  {
+    path: '/settings',
+    icon: Setting,
+    label: '系统设置',
+  },
 ]
 
 function matchNav(pathname: string) {
   return [...navItems].reverse().find(item =>
-    item.path === '/' ? pathname === '/' : pathname === item.path || pathname.startsWith(item.path + '/')
+    item.path === '/'
+      ? pathname === '/'
+      : pathname === item.path || pathname.startsWith(item.path + '/'),
   ) ?? navItems[0]
 }
 
-// Browser tabs
 interface Tab {
-  path: string;
-  label: string;
+  path: string
+  label: string
   icon: Component
 }
 
@@ -162,7 +224,11 @@ watch(() => route.path, (pathname) => {
   const item = matchNav(pathname)
   activeTabPath.value = item.path
   if (!tabs.value.find(t => t.path === item.path)) {
-    tabs.value.push({ path: item.path, label: item.label, icon: item.icon })
+    tabs.value.push({
+      path: item.path,
+      label: item.label,
+      icon: item.icon,
+    })
   }
 }, { immediate: true })
 
@@ -184,22 +250,21 @@ function logout() {
 const currentNav = computed(() => matchNav(route.path))
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .root {
   display: flex;
   height: 100vh;
   background: #f9fafb;
 }
 
-/* -- 侧边栏 -- */
 .aside {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
   width: 240px;
   background: #fff;
   border-right: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
   transition: width 0.2s;
-  flex-shrink: 0;
 }
 
 .aside.collapsed {
@@ -207,12 +272,12 @@ const currentNav = computed(() => matchNav(route.path))
 }
 
 .aside-header {
-  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid #e5e7eb;
+  height: 52px;
   padding: 0 12px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .aside-logo {
@@ -222,12 +287,12 @@ const currentNav = computed(() => matchNav(route.path))
 }
 
 .aside-nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px;
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  padding: 6px;
 }
 
 .nav-item {
@@ -240,15 +305,15 @@ const currentNav = computed(() => matchNav(route.path))
   text-decoration: none;
   font-size: 14px;
   transition: background 0.15s;
-}
 
-.nav-item:hover {
-  background: #f9fafb;
-}
+  &:hover {
+    background: #f9fafb;
+  }
 
-.nav-item.active {
-  background: #eff6ff;
-  color: #2563eb;
+  &.active {
+    background: #eff6ff;
+    color: #2563eb;
+  }
 }
 
 .collapsed .nav-item {
@@ -260,58 +325,61 @@ const currentNav = computed(() => matchNav(route.path))
   white-space: nowrap;
 }
 
-/* -- 主区域 -- */
 .main-area {
-  flex: 1;
   display: flex;
+  flex: 1;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* -- 顶栏 -- */
 .topbar {
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 52px;
   flex-shrink: 0;
+  height: 52px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex: 1;
-  max-width: 420px;
+  gap: 8px;
+  max-width: 460px;
 }
 
 .search-wrap {
   flex: 1;
-}
 
-.search-wrap :deep(.el-input__wrapper) {
-  background: #f3f4f6;
-  border-radius: 8px;
-  box-shadow: none;
-  transition: background 0.2s;
-}
+  :deep(.el-input__wrapper) {
+    background: #f3f4f6;
+    border-radius: 8px;
+    box-shadow: none;
+    transition: background 0.2s;
 
-.search-wrap :deep(.el-input__wrapper:hover) {
-  background: #e5e7eb;
-}
+    &:hover {
+      background: #e5e7eb;
+    }
+  }
 
-.search-wrap :deep(.el-input__inner::placeholder) {
-  color: #9ca3af;
-  font-size: 13px;
+  :deep(.el-input__inner::placeholder) {
+    color: #9ca3af;
+    font-size: 13px;
+  }
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.env-tag {
+  margin-right: 4px;
+  font-size: 12px;
 }
 
 .user-area {
@@ -323,22 +391,22 @@ const currentNav = computed(() => matchNav(route.path))
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
-}
 
-.user-area:hover {
-  background: #f3f4f6;
+  &:hover {
+    background: #f3f4f6;
+  }
 }
 
 .avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
   border-radius: 50%;
   background: #dbeafe;
   color: #2563eb;
   font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .user-name {
@@ -346,34 +414,33 @@ const currentNav = computed(() => matchNav(route.path))
   color: #1f2937;
 }
 
-.user-email {
+.user-role {
   font-size: 12px;
-  color: #6b7280;
+  color: #9ca3af;
 }
 
-/* -- 面包屑 + 标签 -- */
 .bread-tab-bar {
-  background: #f3f4f6;
-  border-bottom: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .breadcrumb-row {
-  padding: 4px 12px 0;
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 4px 12px 0;
   font-size: 13px;
 }
 
 .bread-link {
   color: #9ca3af;
   text-decoration: none;
-}
 
-.bread-link:hover {
-  color: #4b5563;
+  &:hover {
+    color: #4b5563;
+  }
 }
 
 .bread-sep {
@@ -397,36 +464,36 @@ const currentNav = computed(() => matchNav(route.path))
   align-items: center;
   gap: 5px;
   padding: 6px 14px;
-  font-size: 13px;
-  text-decoration: none;
-  color: #6b7280;
   border-radius: 6px 6px 0 0;
-  transition: all 0.15s;
+  color: #6b7280;
+  text-decoration: none;
+  font-size: 13px;
   white-space: nowrap;
   max-width: 160px;
-}
+  transition: all 0.15s;
 
-.tab-item:hover {
-  color: #374151;
-  background: rgba(255, 255, 255, 0.5);
-}
+  &:hover {
+    color: #374151;
+    background: rgba(255, 255, 255, 0.5);
+  }
 
-.tab-item.active {
-  background: #fff;
-  color: #1f2937;
-  border: 1px solid #e5e7eb;
-  border-bottom-color: #fff;
-  position: relative;
-}
+  &.active {
+    position: relative;
+    background: #fff;
+    color: #1f2937;
+    border: 1px solid #e5e7eb;
+    border-bottom-color: #fff;
 
-.tab-item.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: #fff;
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: #fff;
+    }
+  }
 }
 
 .tab-text {
@@ -438,32 +505,31 @@ const currentNav = computed(() => matchNav(route.path))
   display: flex;
   align-items: center;
   opacity: 0;
-  transition: opacity 0.1s;
   color: #9ca3af;
+  transition: opacity 0.1s;
+
+  &:hover {
+    color: #ef4444;
+  }
 }
 
 .tab-item:hover .tab-close {
   opacity: 1;
 }
 
-.tab-close:hover {
-  color: #ef4444;
-}
-
 .tab-item.active .tab-close {
   opacity: 1;
   color: #d1d5db;
+
+  &:hover {
+    color: #ef4444;
+  }
 }
 
-.tab-item.active .tab-close:hover {
-  color: #ef4444;
-}
-
-/* -- 内容区 -- */
 .content {
   flex: 1;
   overflow: auto;
-  background: #fff;
   padding: 20px;
+  background: #fff;
 }
 </style>
