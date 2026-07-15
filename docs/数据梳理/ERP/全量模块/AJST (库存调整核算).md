@@ -7,13 +7,15 @@ tables: 0
 columns: 0
 category: inventory
 tags: ["ERP", "E10", "inventory"]
-created: 2026-06-25 10:52
+created: 2026-06-25 10:52
+
 ---
 
 # AJST (库存调整核算)
 
 > [!info] Database Info
-> Database: E10_3.0.0.2_CHS | **Server**: .\SQLEXPRESS | **Tables**: 1,989 | **Columns**: 90599
+> Database: E10_3.0.0.2_CHS | **Server**: .\SQLEXPRESS | **Tables**: 1,989 | **Columns**: 90599
+
 > Tables: 0 | Columns: 0
 
 ## Related Modules
