@@ -1,13 +1,9 @@
-<template>
-  <div class="detail-page">
-    <div class="breadcrumb">
-      <router-link to="/" class="bread-link">首页</router-link>
-      <span class="bread-sep">/</span>
-      <router-link to="/data-sources" class="bread-link">数据源</router-link>
-      <span class="bread-sep">/</span>
-      <span class="bread-current">新增数据源</span>
-    </div>
-    <div class="title-row"><h1>新增数据源</h1></div>
+﻿<template>
+  <div class="page-layout detail-page">
+    <PageHeader
+      title="新增数据源"
+      :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据源', to: '/data-sources' }, { label: '新增数据源' }]"
+    />
     <el-card shadow="never">
       <el-empty description="新增数据源向导功能开发中" />
     </el-card>
@@ -15,13 +11,8 @@
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/page-header.vue'
 </script>
 
 <style lang="scss" scoped>
-.detail-page { display: flex; flex-direction: column; gap: 16px; }
-.breadcrumb { display: flex; align-items: center; gap: 6px; font-size: $font-size-sm; }
-.bread-link { color: $color-text-placeholder; text-decoration: none; &:hover { color: $color-text-secondary; } }
-.bread-sep { color: $color-border; }
-.bread-current { color: $color-text-secondary; }
-.title-row h1 { font-size: $font-size-xl; }
 </style>

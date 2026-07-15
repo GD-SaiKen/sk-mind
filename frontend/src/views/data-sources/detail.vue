@@ -1,48 +1,33 @@
 ﻿<template>
-  <div class="detail-page">
-    <!-- 面包屑 -->
-    <div class="breadcrumb">
-      <router-link to="/" class="bread-link">首页</router-link>
-      <span class="bread-sep">/</span>
-      <router-link to="/data-sources" class="bread-link">数据源</router-link>
-      <span class="bread-sep">/</span>
-      <span class="bread-current">{{ ds?.name }}</span>
-    </div>
+  <div class="page-layout detail-page">
+    <PageHeader
+      :title="ds?.name ?? '数据源详情'"
+      :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据源', to: '/data-sources' }, { label: ds?.name ?? '...' }]"
+    >
+      <template #tags>
+        <el-tag v-if="ds" :type="statusTag(ds.status)" effect="plain">{{ statusLabel(ds.status) }}</el-tag>
+        <el-tag v-if="ds" effect="plain">{{ ds.type }}</el-tag>
+      </template>
+      <template #actions>
+        <el-button :icon="Edit" plain>编辑</el-button>
+        <el-button :icon="VideoPlay" plain>创建任务</el-button>
+        <el-button plain>检测连接</el-button>
+        <el-button :icon="SwitchButton" plain type="danger">停用</el-button>
+      </template>
+    </PageHeader>
 
     <div v-if="!ds">
       <el-empty description="数据源不存在" />
     </div>
     <template v-else>
-      <!-- 标题行 -->
-      <div class="title-row">
-        <div class="title-left">
-          <h1>{{ ds.name }}</h1>
-          <el-tag :type="statusTag(ds.status)" effect="plain">{{ statusLabel(ds.status) }}</el-tag>
-          <el-tag effect="plain">{{ ds.type }}</el-tag>
-        </div>
-        <div class="actions">
-          <el-button :icon="Edit" plain>编辑</el-button>
-          <el-button :icon="VideoPlay" plain>创建任务</el-button>
-          <el-button plain>检测连接</el-button>
-          <el-button :icon="SwitchButton" plain type="danger">停用</el-button>
-        </div>
-      </div>
       <p class="desc">{{ ds.description }}</p>
 
       <!-- 信息卡片 -->
       <el-row :gutter="16" class="info-row">
-        <el-col :span="6">
-          <el-card shadow="never"><div class="info-label">接入方式</div><div>{{ ds.method }}</div></el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="never"><div class="info-label">业务负责人</div><div>{{ ds.businessOwner }}</div></el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="never"><div class="info-label">技术负责人</div><div>{{ ds.techOwner }}</div></el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="never"><div class="info-label">最近接入时间</div><div>{{ ds.lastSync }}</div></el-card>
-        </el-col>
+        <el-col :span="6"><el-card shadow="never"><div class="info-label">接入方式</div><div>{{ ds.method }}</div></el-card></el-col>
+        <el-col :span="6"><el-card shadow="never"><div class="info-label">业务负责人</div><div>{{ ds.businessOwner }}</div></el-card></el-col>
+        <el-col :span="6"><el-card shadow="never"><div class="info-label">技术负责人</div><div>{{ ds.techOwner }}</div></el-card></el-col>
+        <el-col :span="6"><el-card shadow="never"><div class="info-label">最近接入时间</div><div>{{ ds.lastSync }}</div></el-card></el-col>
       </el-row>
 
       <!-- 标签页内容 -->
@@ -65,28 +50,19 @@
 
         <el-tab-pane label="接入任务 (2)" name="tasks">
           <el-card shadow="never">
-            <div class="tab-header">
-              <h3>关联的接入任务</h3>
-              <el-button type="primary">创建新任务</el-button>
-            </div>
+            <div class="tab-header"><h3>关联的接入任务</h3><el-button type="primary">创建新任务</el-button></div>
             <div class="link-list">
               <div class="link-item">
                 <div class="link-item-left">
                   <el-icon :size="18" class="text-success"><CircleCheckFilled /></el-icon>
-                  <div>
-                    <div>SAP 销售订单同步</div>
-                    <div class="link-item-sub">最近执行: 2026-06-29 09:30 · 导入 1,250 条</div>
-                  </div>
+                  <div><div>SAP 销售订单同步</div><div class="link-item-sub">最近执行: 2026-06-29 09:30 · 导入 1,250 条</div></div>
                 </div>
                 <span>成功 1,250 / 失败 0</span>
               </div>
               <div class="link-item">
                 <div class="link-item-left">
                   <el-icon :size="18" class="text-warning"><WarningFilled /></el-icon>
-                  <div>
-                    <div>MES 生产记录同步</div>
-                    <div class="link-item-sub">最近执行: 2026-06-29 09:00 · 部分成功</div>
-                  </div>
+                  <div><div>MES 生产记录同步</div><div class="link-item-sub">最近执行: 2026-06-29 09:00 · 部分成功</div></div>
                 </div>
                 <span>成功 800 / 失败 56</span>
               </div>
@@ -98,17 +74,8 @@
           <el-card shadow="never">
             <h3>产出的数据表</h3>
             <div class="link-list">
-              <router-link to="/tables/1" class="link-item">
-                <div>
-                  <span>销售订单表</span>
-                  <el-tag effect="plain" class="ml-sm">Serving</el-tag>
-                </div>
-                <span>1,250 条 · 24 字段</span>
-              </router-link>
-              <router-link to="/tables/2" class="link-item">
-                <div><span>客户信息表</span><el-tag effect="plain" class="ml-sm">Serving</el-tag></div>
-                <span>180 条 · 15 字段</span>
-              </router-link>
+              <router-link to="/tables/1" class="link-item"><div><span>销售订单表</span><el-tag effect="plain" class="ml-sm">Serving</el-tag></div><span>1,250 条 · 24 字段</span></router-link>
+              <router-link to="/tables/2" class="link-item"><div><span>客户信息表</span><el-tag effect="plain" class="ml-sm">Serving</el-tag></div><span>180 条 · 15 字段</span></router-link>
             </div>
           </el-card>
         </el-tab-pane>
@@ -143,6 +110,7 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Edit, VideoPlay, SwitchButton, CircleCheckFilled, WarningFilled } from '@element-plus/icons-vue'
+import PageHeader from '@/components/page-header.vue'
 
 const route = useRoute()
 const activeTab = ref('info')
@@ -168,48 +136,22 @@ const ds = computed(() => {
 })
 
 function statusTag(s: string) { return s === 'success' ? 'success' : s === 'warning' ? 'warning' : s === 'error' ? 'danger' : 'info' }
-function statusLabel(s: string) {
-  const m: Record<string, string> = { success: '正常', warning: '警告', error: '异常', inactive: '停用' }
-  return m[s] ?? s
-}
+function statusLabel(s: string) { const m: Record<string, string> = { success: '正常', warning: '警告', error: '异常', inactive: '停用' }; return m[s] ?? s }
 </script>
 
 <style lang="scss" scoped>
-.detail-page { display: flex; flex-direction: column; gap: 16px; }
-.breadcrumb { display: flex; align-items: center; gap: 6px; font-size: $font-size-sm; }
-.bread-link { color: $color-text-placeholder; text-decoration: none; &:hover { color: $color-text-secondary; } }
-.bread-sep { color: $color-border; }
-.bread-current { color: $color-text-secondary; }
-
-.title-row { display: flex; align-items: flex-start; justify-content: space-between; }
-.title-left { display: flex; align-items: center; gap: 8px; flex: 1; }
-h1 { font-size: $font-size-xl; }
-.actions { display: flex; gap: 8px; }
-.desc { color: $color-text-secondary; font-size: $font-size-base; }
-
+.desc { color: $color-text-secondary; font-size: $font-size-base; margin: 0; }
 .info-row { margin: 0 !important; }
 .info-label { font-size: $font-size-sm; color: $color-text-secondary; margin-bottom: 4px; }
-
 .tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 h3 { font-size: $font-size-body; margin-bottom: 16px; }
-
 .link-list { display: flex; flex-direction: column; gap: 8px; }
-.link-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px; border: 1px solid $color-border; border-radius: $radius-base;
-  text-decoration: none; color: inherit;
-  &:hover { background: #f9fafb; }
-}
+.link-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid $color-border; border-radius: $radius-base; text-decoration: none; color: inherit; &:hover { background: #f9fafb; } }
 .link-item-left { display: flex; align-items: center; gap: 12px; }
 .link-item-sub { font-size: $font-size-sm; color: $color-text-secondary; }
 .text-success { color: $color-success; }
 .text-warning { color: $color-warning; }
 .ml-sm { margin-left: 8px; }
-
 .log-list { display: flex; flex-direction: column; }
-.log-item {
-  padding: 10px 12px; border-left: 2px solid $color-border;
-  font-size: $font-size-base; color: $color-text-regular;
-  &.highlight { border-left-color: $color-primary; background: #eff6ff; }
-}
+.log-item { padding: 10px 12px; border-left: 2px solid $color-border; font-size: $font-size-base; color: $color-text-regular; &.highlight { border-left-color: $color-primary; background: #eff6ff; } }
 </style>

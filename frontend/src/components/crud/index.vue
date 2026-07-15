@@ -1,44 +1,26 @@
 <template>
   <el-card class="crud-root">
-    <!-- 1. 标题 + 筛选区 + 操作按钮 -->
-    <template #header>
-      <div
-        class="crud-top"
-        v-if="title
-        || $slots['title-extra']
-        || filterItems.length
-        || $slots.filters
-        || $slots.actions"
-      >
-        <div class="crud-top-left">
-          <span class="crud-title-text" v-if="title">{{ title }}</span>
-          <slot name="title-extra" />
-        </div>
-        <div
-          class="crud-top-right"
-          v-if="filterItems.length || $slots.filters || $slots.actions"
-        >
-          <TableFilters
-            :items="filterItems"
-            v-model:filter-values="filterValues"
-            @change="(k: any, v: any) => emit('filterChange', k, v)"
-          />
-          <slot name="filters" />
-          <div
-            class="crud-spacer"
-            v-if="(filterItems.length || $slots.filters) && $slots.actions"
-          />
-          <slot name="actions" />
-        </div>
-      </div>
-    </template>
+    <!-- 筛选区（卡片 body 顶部） -->
+    <div
+      class="crud-filters"
+      v-if="filterItems.length || $slots.filters || $slots['filters-actions']"
+    >
+      <TableFilters
+        :items="filterItems"
+        v-model:filter-values="filterValues"
+        @change="(k: any, v: any) => emit('filterChange', k, v)"
+      />
+      <slot name="filters" />
+      <div class="crud-filters-spacer" v-if="$slots['filters-actions']" />
+      <slot name="filters-actions" />
+    </div>
 
-    <!-- 2. 表格 -->
+    <!-- 表格 -->
     <div class="crud-table">
       <slot name="table" />
     </div>
 
-    <!-- 3. 分页导航 -->
+    <!-- 分页导航 -->
     <div class="crud-pagination" v-if="pagination">
       <el-pagination
         v-model:current-page="pagination.page"
@@ -59,7 +41,6 @@ import TableFilters from './table-filters.vue'
 import type { FilterItem } from './types'
 
 withDefaults(defineProps<{
-  title?: string
   filterItems?: FilterItem[]
   pagination?: {
     page: number
@@ -79,7 +60,6 @@ const filterValues = defineModel<Record<string, any>>('filterValues', { default:
 const emit = defineEmits<{
   filterChange: [key: string, value: any]
 }>()
-
 </script>
 
 <style scoped>
@@ -97,36 +77,18 @@ const emit = defineEmits<{
   overflow: hidden;
 }
 
-.crud-top {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.crud-top-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.crud-top-right {
+.crud-filters {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
   flex-wrap: wrap;
-  min-width: 0;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
 }
 
-.crud-title-text {
-  font-size: 15px;
-  font-weight: 600;
-  color: #303133;
-  white-space: nowrap;
-}
-
-.crud-spacer {
+.crud-filters-spacer {
   flex: 1;
 }
 
