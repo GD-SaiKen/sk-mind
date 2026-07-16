@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.modules.auth.models import User
 from app.modules.data_sources import dao
+from app.modules.data_sources.service import check_connection
 from app.modules.data_sources.models import DataSource
 from app.modules.data_sources.schemas import (
     DataSourceCreate,
@@ -80,6 +81,19 @@ async def update_source(
         setattr(ds, k, v)
     ds = await dao.update(db, ds)
     return _ok(DataSourceResponse.model_validate(ds).model_dump(**_DUMP_OPTS), msg="更新成功")
+
+
+
+
+@router.post("/{ds_id}/check-connection")
+async def check_source_connection(
+    ds_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Manually trigger DataSource connectivity health check."""
+    result = await check_connection(ds_id, db)
+    return _ok(result)
 
 
 @router.delete("/{ds_id}")

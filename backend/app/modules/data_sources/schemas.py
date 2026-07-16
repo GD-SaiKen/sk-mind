@@ -48,6 +48,9 @@ class DataSourceResponse(CamelModel):
     sensitivity_level: str
     status: str
     is_agent_accessible: bool = False
+    source_category: Optional[str] = None
+    connection_status: Optional[str] = None
+    last_health_check_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

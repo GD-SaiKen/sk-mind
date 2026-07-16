@@ -1,6 +1,14 @@
-"""RQ Worker 任务入口。
+"""RQ Worker task entry points for the sync engine.
 
-对应策略文档：04-同步引擎技术实现 §4。
+Corresponds to: 04-???????? .
+
+New entry points for sync engine v2:
+- run_sync_task: unified pipeline (Fetcher -> SchemaManager -> Validator -> RawWriter)
+
+Legacy entry points kept for backward compat:
+- run_full_sync: database full sync
+- run_api_pull: API pull sync
+- run_echo_sync: mock sync for testing
 """
 
 import logging
@@ -8,10 +16,37 @@ import uuid
 
 from rq import get_current_job
 
-from app.modules.ingestion.services.connector_service import ConnectorService
 from app.modules.ingestion.services.sync_service import SyncService
 
 logger = logging.getLogger(__name__)
+
+
+# --- Sync engine v2 entry point ---
+
+
+def run_sync_task(task_id: str):
+    """Execute a single SyncTask through the unified sync pipeline.
+
+    This is the primary entry point for sync engine v2.
+    It replaces the old run_full_sync / run_api_pull split.
+
+    Args:
+        task_id: Task ID (UUID string).
+    """
+    job = get_current_job()
+    task_uuid = uuid.UUID(task_id)
+
+    try:
+        service = SyncService()
+        result = service.execute_task(task_id=task_uuid, rq_job=job)
+        logger.info("Sync complete: task=%s result=%s", task_id[:8], result)
+
+    except Exception as e:
+        logger.exception("Sync failed: task=%s", task_id)
+        raise
+
+
+# --- Legacy entry points (kept for backward compatibility) ---
 
 
 def run_full_sync(
@@ -20,22 +55,27 @@ def run_full_sync(
     connector_config: dict,
     raw_table_name: str,
 ):
-    """RQ 任务：执行数据库全量同步。
+    """Legacy: execute database full sync via direct connector.
 
     Args:
-        task_id: 任务 ID（UUID 字符串）。
-        source_object_name: 源表名。
-        connector_config: 连接器配置字典。
-        raw_table_name: 目标 Raw 表名。
+        task_id: Task ID (UUID string).
+        source_object_name: Source table name.
+        connector_config: Connector config dict.
+        raw_table_name: Target raw table name.
     """
     job = get_current_job()
     task_uuid = uuid.UUID(task_id)
 
     try:
+        from app.modules.ingestion.services.connector_service import ConnectorService
+        from app.modules.ingestion.services.sync_database import get_sync_db
+
         connector = ConnectorService.create_sqlserver(connector_config)
         connector.connect()
 
-        service = SyncService()
+        # Use the legacy SyncService method
+        from app.modules.ingestion.services.sync_service import _LegacySyncService
+        service = _LegacySyncService()
         result = service.execute_full_sync(
             task_id=task_uuid,
             source_object_name=source_object_name,
@@ -43,10 +83,10 @@ def run_full_sync(
             raw_table_name=raw_table_name,
             rq_job=job,
         )
-        logger.info("全量同步完成: %s", result)
+        logger.info("Full sync complete: %s", result)
 
     except Exception as e:
-        logger.exception("全量同步失败: task=%s, table=%s", task_id, source_object_name)
+        logger.exception("Full sync failed: task=%s, table=%s", task_id, source_object_name)
         raise
     finally:
         if "connector" in locals():
@@ -63,26 +103,29 @@ def run_api_pull(
     page_size: int = 100,
     max_pages: int | None = None,
 ):
-    """RQ 任务：执行 API 拉取同步。
+    """Legacy: execute API pull sync.
 
     Args:
-        task_id: 任务 ID（UUID 字符串）。
-        endpoint: API 端点。
-        method: HTTP 方法。
-        body: 请求体模板。
-        source_system: 来源系统标识。
-        connector_config: API 连接器配置字典。
-        page_size: 每页数量。
-        max_pages: 最大页数。
+        task_id: Task ID (UUID string).
+        endpoint: API endpoint.
+        method: HTTP method.
+        body: Request body template.
+        source_system: Source system identifier.
+        connector_config: Connector config dict.
+        page_size: Records per page.
+        max_pages: Maximum pages to fetch.
     """
     job = get_current_job()
     task_uuid = uuid.UUID(task_id)
 
     try:
+        from app.modules.ingestion.services.connector_service import ConnectorService
+        from app.modules.ingestion.services.sync_service import _LegacySyncService
+
         connector = ConnectorService.create_api(connector_config)
         connector.connect()
 
-        service = SyncService()
+        service = _LegacySyncService()
         result = service.execute_api_pull(
             task_id=task_uuid,
             endpoint=endpoint,
@@ -94,10 +137,10 @@ def run_api_pull(
             max_pages=max_pages,
             rq_job=job,
         )
-        logger.info("API 拉取完成: %s", result)
+        logger.info("API pull complete: %s", result)
 
     except Exception as e:
-        logger.exception("API 拉取失败: task=%s, endpoint=%s", task_id, endpoint)
+        logger.exception("API pull failed: task=%s, endpoint=%s", task_id, endpoint)
         raise
     finally:
         if "connector" in locals():
@@ -105,7 +148,7 @@ def run_api_pull(
 
 
 def run_echo_sync(task_id: str, batch_id: str, task_name: str):
-    """RQ 任务：模拟同步 — 验证数据源可用后执行模拟流程。"""
+    """Legacy: mock sync for testing connectivity and flow."""
     import json
     import time
     import random
@@ -113,7 +156,7 @@ def run_echo_sync(task_id: str, batch_id: str, task_name: str):
 
     job = get_current_job()
 
-    # ── 数据源验证 ─────────────────────────
+    # Data source validation
     task_uuid = _uuid.UUID(task_id)
     from app.modules.ingestion.services.sync_database import get_sync_db
     _db = get_sync_db()
@@ -123,20 +166,19 @@ def run_echo_sync(task_id: str, batch_id: str, task_name: str):
         _task = _db.get(IT, task_uuid)
         if _task and _task.data_source_id:
             _ds = _db.get(DataSource, _task.data_source_id)
-            ds_name = _ds.name if _ds else "未知数据源"
+            ds_name = _ds.name if _ds else "?????"
         else:
             ds_name = None
     finally:
         _db.close()
 
-    # 没有数据源 → 直接失败（不跑模拟）
     if not ds_name:
-        _fail_batch(batch_id, "未配置数据源，请先在「数据源管理」中登记 ERP/MES/SRM", task_id[:8])
+        _fail_batch(batch_id, "???????????????????? ERP/MES/SRM", task_id[:8])
         return
 
-    logger.info("同步开始: task=%s batch=%s ds=%s", task_id[:8] if task_id else '-', batch_id[:8], ds_name)
+    logger.info("Sync start: task=%s batch=%s ds=%s", task_id[:8], batch_id[:8], ds_name)
 
-    # Redis pub/sub 通道（用于 SSE 推送 + 取消信号）
+    # Redis pub/sub
     try:
         from app.core.queue import redis_conn as _redis
         _channel = f"batch:{batch_id}:progress"
@@ -150,7 +192,6 @@ def run_echo_sync(task_id: str, batch_id: str, task_name: str):
         _pubsub = None
 
     def _pub(pct: int, step: str, status: str = "running"):
-        """同时写入 job.meta 和 Redis pub/sub。"""
         if job:
             job.meta["progress"] = pct
             job.meta["step"] = step
@@ -162,7 +203,6 @@ def run_echo_sync(task_id: str, batch_id: str, task_name: str):
                 pass
 
     def _cancelled() -> bool:
-        """检查是否收到取消信号。"""
         if not _pubsub:
             return False
         msg = _pubsub.get_message()
@@ -173,15 +213,15 @@ def run_echo_sync(task_id: str, batch_id: str, task_name: str):
         return False
 
     stages = [
-        (0, 20, "连接数据源..."),
-        (20, 40, "获取表结构..."),
-        (40, 70, "拉取数据中..."),
-        (70, 90, "写入 Raw 层..."),
-        (90, 100, "完成"),
+        (0, 20, "?????..."),
+        (20, 40, "?????..."),
+        (40, 70, "?????..."),
+        (70, 90, "?? Raw ?..."),
+        (90, 100, "??"),
     ]
 
     total_rows = random.randint(5000, 50000)
-    fail_rows = random.randint(0, 3)  # 模拟少量格式异常行（跳过不写入）
+    fail_rows = random.randint(0, 3)
     retry_count = 0
     max_retries = 3
     cancelled = False
@@ -191,39 +231,37 @@ def run_echo_sync(task_id: str, batch_id: str, task_name: str):
         time.sleep(random.uniform(0.8, 1.5))
         if _cancelled():
             cancelled = True
-            _pub(pct_start, f"已取消 ({step})", "cancelled")
+            _pub(pct_start, f"??? ({step})", "cancelled")
             break
 
-        # 模拟偶尔的阶段性失败 → 自动重试
         if random.random() < 0.15 and retry_count < max_retries:
             retry_count += 1
-            _pub(pct_start, f"{step} 失败，第 {retry_count}/{max_retries} 次重试...", "running")
+            _pub(pct_start, f"{step} ???? {retry_count}/{max_retries} ???...", "running")
             time.sleep(1.5)
             if retry_count >= max_retries and random.random() < 0.5:
                 failed = True
-                _pub(pct_start, f"{step} 重试耗尽，中止", "failed")
+                _pub(pct_start, f"{step} ???????", "failed")
                 break
 
         _pub(pct_end, f"{step} ({pct_end}%%)")
 
-    # 更新批次状态
-    from app.modules.ingestion.services.sync_database import get_sync_db
-    db = get_sync_db()
+    # Update batch
+    db2 = get_sync_db()
     try:
         from app.modules.ingestion.models import IngestionBatch as IB
         from datetime import datetime as dt, timezone
 
-        batch = db.get(IB, _uuid.UUID(batch_id))
+        batch = db2.get(IB, _uuid.UUID(batch_id))
         if batch:
             if cancelled:
                 batch.status = "cancelled"
                 batch.finished_at = dt.now(timezone.utc)
-                batch.error_summary = "用户手动取消"
+                batch.error_summary = "??????"
             elif failed:
                 batch.status = "failed"
                 batch.finished_at = dt.now(timezone.utc)
-                batch.error_summary = f"重试 {max_retries} 次后仍失败"
-                _pub(0, "重试耗尽，任务失败", "failed")
+                batch.error_summary = f"?? {max_retries} ?????"
+                _pub(0, "?????????", "failed")
             else:
                 batch.status = "success" if fail_rows == 0 else "partial_success"
                 batch.record_count = total_rows
@@ -231,20 +269,22 @@ def run_echo_sync(task_id: str, batch_id: str, task_name: str):
                 batch.fail_count = fail_rows
                 batch.finished_at = dt.now(timezone.utc)
                 if fail_rows > 0:
-                    batch.error_summary = f"{fail_rows} 行格式异常，已跳过"
-                _pub(100, "同步完成" if fail_rows == 0 else f"完成 ({fail_rows} 行跳过)", "success")
-            db.commit()
-            logger.info("同步%s: batch=%s", "已取消" if cancelled else "失败" if failed else "完成", batch_id[:8])
+                    batch.error_summary = f"{fail_rows} ?????????"
+                _pub(100, "????" if fail_rows == 0 else f"?? ({fail_rows} ???)", "success")
+            db2.commit()
+            logger.info("Sync %s: batch=%s",
+                "cancelled" if cancelled else ("failed" if failed else "complete"),
+                batch_id[:8])
     finally:
-        db.close()
+        db2.close()
         if _pubsub:
             _pubsub.unsubscribe(_ctrl_channel)
             _pubsub.close()
 
 
 def _fail_batch(batch_id: str, reason: str, task_short: str = ""):
-    """标记批次失败并推送 SSE 失败事件（用于前置校验失败）。"""
-    import json as _j, logging as _log
+    """Mark batch as failed and push SSE failure event."""
+    import json as _j
     import uuid as _uuid
     from app.modules.ingestion.services.sync_database import get_sync_db as _gsdb
     from app.modules.ingestion.models import IngestionBatch as IB
@@ -267,4 +307,4 @@ def _fail_batch(batch_id: str, reason: str, task_short: str = ""):
     except Exception:
         pass
 
-    _log.getLogger(__name__).warning("前置失败: batch=%s %s", batch_id[:8] if batch_id else '-', reason)
+    logger.warning("Pre-flight failure: batch=%s %s", batch_id[:8] if batch_id else '-', reason)

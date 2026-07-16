@@ -1,4 +1,4 @@
-"""数据源管理 ORM 模型。
+﻿"""数据源管理 ORM 模型。
 
 对应 PRD：数据源登记、连接配置、负责人、敏感等级和状态管理。
 """
@@ -6,7 +6,7 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import Mapped, mapped_column
 

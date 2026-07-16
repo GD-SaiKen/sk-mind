@@ -46,6 +46,13 @@ class IngestionTask(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )  # full / incremental
 
     # 同步追踪
+
+    # --- sync engine v2 (003_sync_engine_v2) ---
+    fetch_config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    column_rules: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    last_sync_marker: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    target_table: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    source_category: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -106,6 +113,12 @@ class IngestionBatch(Base, UUIDPrimaryKeyMixin):
     affected_datasets: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
 
     error_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # --- sync engine v2 (003_sync_engine_v2) ---
+    rejected_rows: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    last_sync_marker: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    error_items: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    source_signature: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False, index=True
