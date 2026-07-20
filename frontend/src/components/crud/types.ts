@@ -222,3 +222,134 @@ export interface PaginationProps {
   /** 是否固定在底部 */
   fixed?: boolean
 }
+
+// ==================== 表单配置 ====================
+
+/** 表单字段类型 */
+export type FormFieldType =
+  | 'input'        // 文本输入
+  | 'textarea'     // 多行文本
+  | 'select'       // 下拉选择
+  | 'radio'        // 单选组
+  | 'checkbox'     // 多选组
+  | 'switch'       // 开关
+  | 'date'         // 日期选择
+  | 'number'       // 数字输入
+  | 'readonly'     // 只读展示（详情页用）
+  | 'custom'       // 自定义插槽
+
+/** 表单校验规则 */
+export interface FormFieldRule {
+  required?: boolean
+  message?: string
+  trigger?: string | string[]
+  min?: number
+  max?: number
+  pattern?: RegExp
+  validator?: (rule: any, value: any, callback: (error?: Error) => void) => void
+}
+
+/** 单个表单字段配置 */
+export interface FormField {
+  /** 字段类型 */
+  type: FormFieldType
+  /** 字段名，对应 model 的 key */
+  prop: string
+  /** 标签文字 */
+  label?: string
+  /** 占位文字 */
+  placeholder?: string
+  /** 校验规则 */
+  rules?: FormFieldRule | FormFieldRule[]
+  /** 是否禁用 */
+  disabled?: boolean
+  /** 是否只读 */
+  readonly?: boolean
+  /** 是否隐藏（支持动态） */
+  hidden?: boolean | ((model: Record<string, any>) => boolean)
+  /** 控件宽度（如 '100%'、'200px'） */
+  width?: string
+
+  // ---- 类型特有配置 ----
+  /** select / radio / checkbox 的选项 */
+  options?: { label: string; value: string | number | boolean }[]
+  /** textarea 行数 */
+  rows?: number
+  /** number 最小值 */
+  min?: number
+  /** number 最大值 */
+  max?: number
+  /** number 步长 */
+  step?: number
+  /** date 显示格式 */
+  format?: string
+  /** date 值格式（回传 model 用） */
+  valueFormat?: string
+  /** 是否可清空（select / date / input） */
+  clearable?: boolean
+  /** 是否可筛选（select） */
+  filterable?: boolean
+  /** 是否多选（select） */
+  multiple?: boolean
+  /** readonly 的格式化函数 */
+  formatter?: (value: any, model: Record<string, any>) => string
+  /** 字段下方提示文字 */
+  tip?: string
+  /** 后缀文字 */
+  suffix?: string
+  /** 前置图标组件 */
+  prefixIcon?: Component
+  /** 后置图标组件 */
+  suffixIcon?: Component
+  /** 最大长度（input / textarea） */
+  maxlength?: number
+  /** 是否显示字数统计（input / textarea） */
+  showWordLimit?: boolean
+  /** 插槽名（type='custom' 时生效，默认 `form-{prop}`） */
+  slotName?: string
+  /** 字段占几列（1=继承分区col，2=占满一行），默认 1 */
+  colSpan?: number
+
+  /** 值变化回调 */
+  onChange?: (value: any, model: Record<string, any>) => void
+}
+
+/** 表单分区（一组字段） */
+export interface FormSection {
+  /** 分区标题（如"一、基本信息"） */
+  title?: string
+  /** 分区描述 */
+  description?: string
+  /** 是否隐藏（支持动态判断） */
+  hidden?: boolean | ((model: Record<string, any>) => boolean)
+  /** 是否可折叠 */
+  collapsible?: boolean
+  /** 默认折叠状态 */
+  defaultCollapsed?: boolean
+  /** 分区内字段列表 */
+  fields: FormField[]
+  /** 每行列数（默认 1），设置 2 则一行 2 个字段 */
+  cols?: number
+  /** 插槽名，渲染自定义内容（如 section-basic，会忽略 fields） */
+  slotName?: string
+}
+
+/** 表单 Props */
+export interface FormProps {
+  /** v-model 绑定数据 */
+  modelValue: Record<string, any>
+  /** 表单分区配置 */
+  sections: FormSection[]
+  /** 标签宽度，默认 '100px' */
+  labelWidth?: string
+  /** 标签位置 */
+  labelPosition?: 'left' | 'top' | 'right'
+  /** 表单尺寸 */
+  size?: '' | 'small' | 'large'
+  /** 是否全局禁用 */
+  disabled?: boolean
+  /** 是否包一层白色边框盒子（默认 false，父容器自行处理边框） */
+  box?: boolean
+  /** HTML class */
+  className?: string
+}
