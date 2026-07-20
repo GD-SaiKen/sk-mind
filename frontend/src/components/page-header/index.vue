@@ -44,6 +44,12 @@ withDefaults(defineProps<{
 }>(), {
   breadcrumb: () => [],
 })
+
+defineSlots<{
+  tags?: (props: Record<string, never>) => unknown
+  actions?: (props: Record<string, never>) => unknown
+  description?: (props: Record<string, never>) => unknown
+}>()
 </script>
 
 <style lang="scss" scoped>
