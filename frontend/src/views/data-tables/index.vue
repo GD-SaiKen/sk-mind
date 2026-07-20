@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="数据表"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据表' }]"
       description="查看平台中已接入的数据表，了解表结构、字段信息和质量状态。"
@@ -8,7 +8,7 @@
       <template #actions>
         <el-button :icon="DataAnalysis" @click="router.push('/tables/browse')">Raw 数据浏览</el-button>
       </template>
-    </PageHeader>
+    </Index>
 
     <Crud
       :filter-items="filterItems"
@@ -49,7 +49,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { DataAnalysis, Edit, View, Setting, Connection } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 

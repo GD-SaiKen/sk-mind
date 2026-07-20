@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout detail-page">
-    <PageHeader
+    <Index
       :title="datasetName"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据目录', to: '/catalog' }, { label: datasetName }]"
     />
@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 
 const route = useRoute()
 const activeTab = ref('desc')

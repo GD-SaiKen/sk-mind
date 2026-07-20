@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout detail-page">
-    <PageHeader
+    <Index
       :title="`字段: ${fieldName}`"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据表', to: '/tables' }, { label: tableName, to: `/tables/${tableId}` }, { label: fieldName }]"
     />
@@ -13,7 +13,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 
 const route = useRoute()
 const tableId = route.params.tableId as string || ''

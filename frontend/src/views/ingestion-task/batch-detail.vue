@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout detail-page">
-    <PageHeader
+    <Index
       title="批次详情"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '接入任务', to: '/ingestion' }, { label: taskName, to: `/ingestion/${taskId}` }, { label: '批次详情' }]"
     />
@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 
 const route = useRoute()
 const activeTab = ref('summary')

@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="权限审计"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '权限审计' }]"
       description="管理用户权限、角色和数据访问控制，查看审计日志，确保数据安全合规。"
@@ -108,7 +108,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, View, User, Lock, CircleCheckFilled, WarningFilled, Edit, Coin, Upload, Service } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 

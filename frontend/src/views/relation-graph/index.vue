@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="关系图谱"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '关系图谱' }]"
       description="管理实体之间的关系边，查询关系路径，确认 AI 生成的关系，构建企业知识图谱。"
@@ -149,7 +149,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Connection, CircleCheckFilled, Link, WarningFilled } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 

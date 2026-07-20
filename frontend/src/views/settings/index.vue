@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="系统设置"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '系统设置' }]"
       description="管理系统基础字典和参数，包括数据源类型、接入方式、质量状态、敏感字段类型和平台参数。"
@@ -97,7 +97,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Setting } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 

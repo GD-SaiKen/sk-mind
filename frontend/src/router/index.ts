@@ -33,6 +33,12 @@ const router = createRouter({
           meta: { title: '新增数据源', icon: 'Coin', hidden: true },
         },
         {
+          path: 'data-sources/:id/edit',
+          name: 'DataSourceEdit',
+          component: () => import('@/views/data-sources/edit.vue'),
+          meta: { title: '编辑数据源', icon: 'Coin', hidden: true },
+        },
+        {
           path: 'data-sources/:id',
           name: 'DataSourceDetail',
           component: () => import('@/views/data-sources/detail.vue'),

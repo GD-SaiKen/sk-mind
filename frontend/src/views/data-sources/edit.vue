@@ -1,37 +1,41 @@
 <template>
   <div class="page-layout detail-page">
     <PageHeader
-      title="新增数据源"
+      :title="`编辑数据源 - ${originalName}`"
       :breadcrumb="[
         { label: '首页', to: '/' },
         { label: '数据源', to: '/data-sources' },
-        { label: '新增数据源' },
+        { label: originalName, to: `/data-sources/${id}` },
+        { label: '编辑' },
       ]"
-    />
+    >
+      <template #tags>
+        <el-tag
+          v-if="source"
+          :type="STATUS_TAG_MAP[source.status]"
+          effect="plain"
+        >{{ STATUS_LABELS[source.status] }}</el-tag>
+      </template>
+    </PageHeader>
 
-    <el-card shadow="never">
+    <div v-if="loading" class="loading-wrap">
+      <el-skeleton :rows="8" />
+    </div>
+    <el-card v-else shadow="never">
       <Form
         ref="formRef"
         v-model="form"
         :sections="sections"
-        label-width="120px"
+        label-width="110px"
       />
-
       <template #footer>
         <div class="form-footer">
           <el-button @click="router.back()">取消</el-button>
-          <div class="form-footer-right">
-            <el-button
-              type="primary"
-              :loading="saving"
-              @click="handleSave"
-            >保存</el-button>
-            <el-button
-              type="success"
-              :loading="saving"
-              @click="handleSaveAndCreateTask"
-            >保存并创建接入任务</el-button>
-          </div>
+          <el-button
+            type="primary"
+            :loading="saving"
+            @click="handleSave"
+          >保存</el-button>
         </div>
       </template>
     </el-card>
@@ -39,19 +43,29 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { dataSourceService } from '@/api'
-import type { DataSourceFormData } from '@/api'
-import { SOURCE_TYPE_OPTIONS, ACCESS_METHOD_OPTIONS } from '@/constants/data-source'
+import type { DataSource, DataSourceFormData } from '@/api'
+import {
+  SOURCE_TYPE_OPTIONS,
+  ACCESS_METHOD_OPTIONS,
+  STATUS_LABELS,
+  STATUS_TAG_MAP,
+} from '@/constants/data-source'
 import PageHeader from '@/components/page-header/index.vue'
 import { Form } from '@/components/crud'
 import type { FormSection } from '@/components/crud'
 
+const route = useRoute()
 const router = useRouter()
+const id = route.params.id as string
 const formRef = ref<InstanceType<typeof Form>>()
+const loading = ref(true)
 const saving = ref(false)
+const source = ref<DataSource | null>(null)
+const originalName = ref('')
 
 const form = reactive<DataSourceFormData & { remark: string }>({
   name: '',
@@ -68,26 +82,20 @@ const form = reactive<DataSourceFormData & { remark: string }>({
 const sections: FormSection[] = [
   {
     title: '一、基本信息',
-    cols: 2,
-    description: '描述数据源的基本属性',
     fields: [
       {
         type: 'input',
         prop: 'name',
         label: '数据源名称',
-        placeholder: '如"生产订单数据"，只描述数据内容',
         rules: { required: true, message: '名称不能为空' },
         maxlength: 200,
-        tip: '建议只描述数据内容，不包含系统名',
       },
       {
         type: 'input',
         prop: 'code',
         label: '编码',
-        placeholder: '系统唯一标识',
-        rules: { required: true, message: '编码不能为空' },
-        maxlength: 100,
-        tip: '创建后不可修改',
+        disabled: true,
+        tip: '编码创建后不可修改',
       },
       {
         type: 'select',
@@ -95,22 +103,17 @@ const sections: FormSection[] = [
         label: '类型',
         options: SOURCE_TYPE_OPTIONS,
         rules: { required: true, message: '请选择类型' },
-        tip: '选择最贴切的类型即可。如"ERP"或"数据库"',
       },
       {
         type: 'textarea',
         prop: 'description',
         label: '备注',
-        placeholder: '为什么要建、有什么注意事项',
         rows: 2,
-        colSpan: 2
       },
     ],
   },
   {
     title: '二、接入配置',
-    cols: 2,
-    description: '决定用什么技术手段把数据搬进平台',
     fields: [
       {
         type: 'select',
@@ -123,7 +126,6 @@ const sections: FormSection[] = [
   },
   {
     title: '三、负责人与标签',
-    description: '指定数据源的责任人和业务分类',
     cols: 2,
     fields: [
       {
@@ -131,34 +133,54 @@ const sections: FormSection[] = [
         prop: 'businessOwner',
         label: '业务负责人',
         placeholder: '姓名',
-        tip: '出问题时优先确认数据含义和业务影响',
       },
       {
         type: 'input',
         prop: 'techOwner',
         label: '技术负责人',
         placeholder: '姓名',
-        tip: '排查连接/配置/执行问题',
+      },
+      {
+        type: 'input',
+        prop: 'ownerDept',
+        label: '所属部门',
       },
       {
         type: 'input',
         prop: 'remark',
         label: '标签',
         placeholder: '自由文本（后续切换为选择模式）⏸️',
-        tip: '标签字典未建立，暂时自由输入',
       },
     ],
   },
 ]
 
-async function doSave(): Promise<string | null> {
-  const valid = await formRef.value?.validate()
-  if (!valid) return null
+onMounted(async () => {
   try {
-    saving.value = true
-    const result = await dataSourceService.create({
+    const ds: DataSource = await dataSourceService.get(id)
+    source.value = ds
+    originalName.value = ds.name ?? ''
+    form.name = ds.name ?? ''
+    form.code = ds.code ?? ''
+    form.sourceType = ds.sourceType ?? 'erp'
+    form.accessMethod = ds.accessMethod ?? 'db_sync'
+    form.description = ds.description ?? ''
+    form.businessOwner = ds.businessOwner ?? ''
+    form.techOwner = ds.techOwner ?? ''
+    form.ownerDept = ds.ownerDept ?? ''
+    form.remark = ''
+  } finally {
+    loading.value = false
+  }
+})
+
+async function handleSave() {
+  const valid = await formRef.value?.validate()
+  if (!valid) return
+  saving.value = true
+  try {
+    await dataSourceService.update(id, {
       name: form.name,
-      code: form.code,
       sourceType: form.sourceType,
       accessMethod: form.accessMethod,
       description: form.description,
@@ -166,35 +188,24 @@ async function doSave(): Promise<string | null> {
       techOwner: form.techOwner,
       ownerDept: form.ownerDept,
     })
-    ElMessage.success('数据源创建成功')
-    return result?.id ?? null
+    ElMessage.success('已保存')
+    router.replace(`/data-sources/${id}`)
   } catch {
-    return null
+    /* handled */
   } finally {
     saving.value = false
   }
 }
-
-async function handleSave() {
-  const id = await doSave()
-  if (id) router.replace(`/data-sources/${id}`)
-}
-
-async function handleSaveAndCreateTask() {
-  const id = await doSave()
-  if (id) router.replace(`/ingestion?sourceId=${id}`)
-}
 </script>
 
 <style lang="scss" scoped>
+.loading-wrap {
+  padding: 40px;
+}
+
 .form-footer {
   display: flex;
   justify-content: space-between;
   width: 100%;
-}
-
-.form-footer-right {
-  display: flex;
-  gap: 8px;
 }
 </style>

@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="数据目录"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据目录' }]"
       description="以业务视角浏览平台中的数据集和字段，了解数据来源、质量状态和可用性。"
@@ -157,7 +157,7 @@ import {
   Search, Coin, CircleCheckFilled, WarningFilled, Lock, Service,
   OfficeBuilding, Clock, Grid, Collection,
 } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 
 const activeTab = ref('全部数据集')
 const searchTerm = ref('')

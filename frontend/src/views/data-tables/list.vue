@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page">
-    <PageHeader
+    <Index
       title="Raw 数据浏览"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据表', to: '/tables' }, { label: 'Raw 数据浏览' }]"
       :description="`${tables.length} 张表`"
@@ -44,7 +44,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { api } from '@/api'
 import { TableFilters, Pagination } from '@/components/crud'
 import type { FilterItem } from '@/components/crud'

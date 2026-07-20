@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout home-page">
-    <PageHeader
+    <Index
       title="首页"
       :breadcrumb="[{ label: '首页' }]"
       description="平台运行状态总览，快速了解数据源、接入、质量、语义和 Agent 服务的整体情况，发现异常并及时处理。"
@@ -114,7 +114,7 @@ import {
   ArrowRight, Coin, Upload, Collection, CircleCheck,
   Cpu, Service, WarningFilled, Clock, CircleCheckFilled, Setting,
 } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { api } from '@/api'
 
 const statusCards = [

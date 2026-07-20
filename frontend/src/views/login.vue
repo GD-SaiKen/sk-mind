@@ -1,6 +1,3 @@
-<!--
-  login.vue — 登录页
--->
 <template>
   <div class="login-page">
     <div class="login-card">

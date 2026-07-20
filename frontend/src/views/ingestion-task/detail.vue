@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout" v-if="task">
-    <PageHeader
+    <Index
       :title="task.name"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '接入任务', to: '/ingestion' }, { label: task.name }]"
     >
@@ -22,7 +22,7 @@
         </el-dropdown>
         <el-button>编辑</el-button>
       </template>
-    </PageHeader>
+    </Index>
 
     <div class="summary-row">
       <div v-for="s in summary" :key="s.label" class="sum-item">
@@ -122,7 +122,7 @@ import { useRoute } from 'vue-router'
 import { Clock, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask } from '@/api'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema } from '@/components/crud'
 

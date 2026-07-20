@@ -9,4 +9,9 @@ export type {
   IngestionBatch,
   BatchProgress,
   ImportError,
+  DataSource,
+  DataSourceType,
+  AccessMethod,
+  DataSourceStatus,
+  DataSourceFormData,
 } from './types';

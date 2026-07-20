@@ -6,6 +6,60 @@ export interface LoginParams {
   password: string
 }
 
+// ── DataSource ──
+export type DataSourceType =
+  | 'erp'
+  | 'mes'
+  | 'purchase'
+  | 'attendance'
+  | 'database'
+  | 'api'
+  | 'excel'
+  | 'share_drive'
+  | 'other'
+
+export type AccessMethod =
+  | 'db_sync'
+  | 'api_pull'
+  | 'file_upload'
+  | 'excel_import'
+  | 'share_scan'
+
+export type DataSourceStatus =
+  | 'unconnected'
+  | 'syncing'
+  | 'active'
+  | 'error'
+  | 'paused'
+
+export interface DataSource {
+  id: string
+  name: string
+  code: string
+  sourceType: DataSourceType
+  accessMethod: AccessMethod
+  description: string
+  businessOwner: string
+  techOwner: string
+  ownerDept: string
+  status: DataSourceStatus
+  lastSyncAt: string | null
+  taskCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DataSourceFormData {
+  name: string
+  code: string
+  sourceType: DataSourceType
+  accessMethod: AccessMethod
+  description: string
+  businessOwner: string
+  techOwner: string
+  ownerDept: string
+}
+
 // ── Ingestion ──
 export interface IngestionTask {
   id: string

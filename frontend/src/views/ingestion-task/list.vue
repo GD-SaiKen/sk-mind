@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="接入任务"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '接入任务' }]"
       description="管理数据接入任务，配置同步策略，跟踪执行状态和结果。"
@@ -8,7 +8,7 @@
       <template #actions>
         <el-button type="primary" :icon="Plus">创建任务</el-button>
       </template>
-    </PageHeader>
+    </Index>
 
     <!-- 统计卡片 -->
     <div class="stat-grid">
@@ -78,7 +78,7 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ingestionService, type IngestionTask } from '@/api'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 

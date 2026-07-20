@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="Agent 数据服务"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: 'Agent 服务' }]"
       description="通过自然语言查询已授权的企业数据，查看数据来源、质量状态和调用记录。"
@@ -116,7 +116,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Edit, Service, CircleCheckFilled, Setting, Timer, Promotion, View } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 

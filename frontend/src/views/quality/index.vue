@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="数据质量"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '数据质量' }]"
       description="配置和执行数据质量规则，查看执行记录，跟踪和处理质量问题。"
@@ -123,7 +123,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, CircleCheckFilled, WarningFilled, CircleCloseFilled, Setting, VideoPlay, Edit, View } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 

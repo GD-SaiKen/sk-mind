@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="page-layout">
-    <PageHeader
+    <Index
       title="语义模型"
       :breadcrumb="[{ label: '首页', to: '/' }, { label: '语义模型' }]"
       description="维护业务对象、属性、语义关系和数据映射，为 Agent 提供业务语义理解能力。"
@@ -100,7 +100,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Service, Collection, Connection, Link, Select } from '@element-plus/icons-vue'
-import PageHeader from '@/components/page-header.vue'
+import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
 
