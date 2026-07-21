@@ -78,6 +78,28 @@ export interface IngestionTask {
   updatedAt: string
 }
 
+// ── API Interfaces (for task creation) ──
+export interface ApiInterfaceItem {
+  name: string
+  endpoint: string
+  method: string
+  targetTable: string
+  order: number
+  isTimeBased: boolean
+  pkFields: string[]
+}
+
+export interface IngestionTaskFormData {
+  name: string
+  code: string
+  dataSourceId: string
+  syncMode: string
+  scheduleType: string
+  cronExpression: string | null
+  description: string
+  selectedInterfaces: string[]
+}
+
 export interface IngestionBatch {
   id: string
   taskId: string

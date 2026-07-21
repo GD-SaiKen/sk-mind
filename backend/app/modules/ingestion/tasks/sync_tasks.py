@@ -310,12 +310,13 @@ def _fail_batch(batch_id: str, reason: str, task_short: str = ""):
     logger.warning("Pre-flight failure: batch=%s %s", batch_id[:8] if batch_id else '-', reason)
 
 
-def run_api_full_sync(task_id: str, config_path: str):
+def run_api_full_sync(task_id: str, config_path: str, interfaces: list[str] | None = None):
     """Execute full backfill sync via ApiSyncEngine.
 
     Args:
         task_id: IngestionTask UUID.
         config_path: absolute path to data source YAML config.
+        interfaces: optional list of interface names to sync (syncs all if None).
     """
     import uuid as _uuid
     from app.modules.ingestion.engines.api_sync_engine import ApiSyncEngine, load_config
@@ -329,7 +330,8 @@ def run_api_full_sync(task_id: str, config_path: str):
         engine = ApiSyncEngine(config, db)
         result = engine.sync_full(
             task_id=task_uuid,
-            data_source_id=task_uuid,  # temporary; real DS ID comes from task
+            data_source_id=task_uuid,
+            interfaces=interfaces,
         )
         logger.info("API full sync done: %s", {k: v["success"] for k, v in result.items()})
     finally:

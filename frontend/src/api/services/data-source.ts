@@ -1,5 +1,5 @@
 import api from '../client'
-import type { DataSource, DataSourceFormData } from '../types'
+import type { DataSource, DataSourceFormData, ApiInterfaceItem } from '../types'
 
 export class DataSourceService {
   getList(params?: Record<string, unknown>) {
@@ -32,6 +32,11 @@ export class DataSourceService {
 
   testConnection(id: string) {
     return api.post(`/data-sources/${id}/test-connection`).then(r => r.data.data)
+  }
+
+  /** Get API interfaces for a data source (from YAML config) */
+  getInterfaces(id: string): Promise<ApiInterfaceItem[]> {
+    return api.get(`/data-sources/${id}/interfaces`).then(r => r.data.data)
   }
 }
 

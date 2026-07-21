@@ -54,14 +54,14 @@ def _enqueue(task_id, batch_id, task_name, timeout=60):
     return job.id
 
 
-def _enqueue_api_sync(task_id, batch_id, config_path, timeout=7200):
+def _enqueue_api_sync(task_id, batch_id, config_path, interfaces=None, timeout=7200):
     """Enqueue API full sync task to RQ."""
     from app.core.queue import redis_conn
     from rq import Queue
     queue = Queue("ingestion", connection=redis_conn)
     job = queue.enqueue(
         "app.modules.ingestion.tasks.sync_tasks.run_api_full_sync",
-        str(task_id), config_path,
+        str(task_id), config_path, interfaces,
         job_timeout=timeout,
     )
     return job.id
@@ -282,8 +282,9 @@ async def execute_task(
         config_path = task.config.get("config_path", "")
         if not config_path:
             raise HTTPException(status_code=400, detail="config_path required for API sync")
+        interfaces = task.config.get("interfaces")
         try:
-            job_id = _enqueue_api_sync(task.id, batch.id, config_path)
+            job_id = _enqueue_api_sync(task.id, batch.id, config_path, interfaces)
         except Exception as e:
             batch.status = "failed"
             batch.error_summary = f"enqueue failed: {e}"

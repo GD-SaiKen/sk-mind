@@ -23,10 +23,10 @@ class IngestionTask(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
 
     data_source_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("data_sources.id"), nullable=False, index=True
+        UUID(as_uuid=True), nullable=False, index=True
     )
     source_object_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("source_objects.id"), nullable=True
+        UUID(as_uuid=True), nullable=True
     )
 
     # 目标层级
@@ -51,7 +51,7 @@ class IngestionTask(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     fetch_config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     column_rules: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     last_sync_marker: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    target_table: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    target_table: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True, default=None)
     source_category: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

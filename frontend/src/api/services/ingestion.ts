@@ -16,6 +16,32 @@ export class IngestionService {
     return this.api.post('/ingestion-tasks', data).then(r => r.data.data)
   }
 
+  /** Create a task with selected API interfaces */
+  createApiTask(
+    name: string,
+    code: string,
+    dataSourceId: string,
+    interfaces: string[],
+    syncMode: string = 'full',
+    scheduleType: string = 'manual',
+    description: string = '',
+  ) {
+    return this.api.post('/ingestion-tasks', {
+      name,
+      code,
+      dataSourceId,
+      targetLayer: 'raw',
+      syncMode,
+      scheduleType,
+      config: {
+        accessMethod: 'api',
+        configPath: 'config/data_sources/mes_light.yaml',
+        interfaces,
+      },
+      description,
+    }).then(r => r.data.data)
+  }
+
   delete(id: string) {
     return this.api.delete(`/ingestion-tasks/${id}`).then(r => r.data)
   }

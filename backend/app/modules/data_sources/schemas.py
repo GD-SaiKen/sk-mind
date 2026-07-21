@@ -58,3 +58,14 @@ class DataSourceResponse(CamelModel):
 class DataSourceListResponse(CamelModel):
     items: list[DataSourceResponse]
     total: int
+
+
+class InterfaceItem(CamelModel):
+    """Single API interface entry returned by GET /data-sources/{id}/interfaces."""
+    name: str
+    endpoint: str
+    method: str = "POST"
+    target_table: str = ""
+    order: int = 0
+    is_time_based: bool = True
+    pk_fields: list[str] = []

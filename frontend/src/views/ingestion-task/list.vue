@@ -6,7 +6,7 @@
       description="管理数据接入任务，配置同步策略，跟踪执行状态和结果。"
     >
       <template #actions>
-        <el-button type="primary" :icon="Plus">创建任务</el-button>
+        <el-button type="primary" :icon="Plus" @click="router.push('/ingestion/create')">创建任务</el-button>
       </template>
     </Index>
 
