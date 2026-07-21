@@ -1,8 +1,8 @@
-"""add MES raw tables (16 tables)
+"""add MES raw tables — 25 tables, one per API endpoint (v2)
 
 Revision ID: 006
 Revises: 005
-Create Date: 2026-07-20
+Create Date: 2026-07-21
 """
 from typing import Sequence, Union
 from alembic import op
@@ -17,9 +17,33 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 3.1 raw.mes_workorders — 工单
+    # ── Step 1: Drop old 16 tables (if they exist) ──
+    old_tables = [
+        "raw.mes_workorders",
+        "raw.mes_procedure_reports",
+        "raw.mes_production_schedules",
+        "raw.mes_task_actions",
+        "raw.mes_material_usages",
+        "raw.mes_materials",
+        "raw.mes_machines",
+        "raw.mes_oee_reports",
+        "raw.mes_andon_records",
+        "raw.mes_error_reports",
+        "raw.mes_trilight_statuses",
+        "raw.mes_trilight_efficiencies",
+        "raw.mes_trilight_color_changes",
+        "raw.mes_trilight_counts",
+        "raw.mes_completion_reports",
+        "raw.mes_custom_field_defs",
+    ]
+    for tbl in old_tables:
+        op.execute(f"DROP TABLE IF EXISTS {tbl} CASCADE")
+
+    # ── Step 2: Create 25 new tables ──
+
+    # 3.1 raw.mes_filter_workorder (interface #1)
     op.execute("""
-    CREATE TABLE raw.mes_workorders (
+    CREATE TABLE raw.mes_filter_workorder (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -93,17 +117,46 @@ def upgrade() -> None:
         custom_fields       JSONB
     )
     """)
-    op.execute("CREATE INDEX idx_mwo_woid      ON raw.mes_workorders (woid)")
-    op.execute("CREATE INDEX idx_mwo_no        ON raw.mes_workorders (workorder_no)")
-    op.execute("CREATE INDEX idx_mwo_material  ON raw.mes_workorders (material_no)")
-    op.execute("CREATE INDEX idx_mwo_customer  ON raw.mes_workorders (customer_no)")
-    op.execute("CREATE INDEX idx_mwo_status    ON raw.mes_workorders (status)")
-    op.execute("CREATE INDEX idx_mwo_ctime     ON raw.mes_workorders (create_time)")
-    op.execute("CREATE UNIQUE INDEX uq_mwo_dedup ON raw.mes_workorders (_batch_id, _row_hash)")
+    op.execute("CREATE INDEX idx_mfwo_woid      ON raw.mes_filter_workorder (woid)")
+    op.execute("CREATE INDEX idx_mfwo_no        ON raw.mes_filter_workorder (workorder_no)")
+    op.execute("CREATE INDEX idx_mfwo_material  ON raw.mes_filter_workorder (material_no)")
+    op.execute("CREATE INDEX idx_mfwo_customer  ON raw.mes_filter_workorder (customer_no)")
+    op.execute("CREATE INDEX idx_mfwo_status    ON raw.mes_filter_workorder (status)")
+    op.execute("CREATE INDEX idx_mfwo_ctime     ON raw.mes_filter_workorder (create_time)")
+    op.execute("CREATE UNIQUE INDEX uq_mfwo_dedup ON raw.mes_filter_workorder (_batch_id, _row_hash)")
 
-    # 3.2 raw.mes_procedure_reports — 工序报工
+    # 3.2 raw.mes_select_complish_report (interface #2)
     op.execute("""
-    CREATE TABLE raw.mes_procedure_reports (
+    CREATE TABLE raw.mes_select_complish_report (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sid                 BIGINT,
+        shift_name          VARCHAR(64),
+        work_date           DATE,
+        department_name     VARCHAR(128),
+        task_count          INTEGER,
+        completed_task_count INTEGER,
+        un_completed_task_count INTEGER,
+        task_qty            NUMERIC,
+        completed_task_qty  NUMERIC,
+        un_completed_task_qty NUMERIC,
+        complete_rate       NUMERIC,
+        qty_complete_rate   NUMERIC
+    )
+    """)
+    op.execute("CREATE INDEX idx_mscr_date ON raw.mes_select_complish_report (work_date)")
+    op.execute("CREATE UNIQUE INDEX uq_mscr_dedup ON raw.mes_select_complish_report (_batch_id, _row_hash)")
+
+    # 3.3 raw.mes_select_procedures_report_data_by_time (interface #3)
+    op.execute("""
+    CREATE TABLE raw.mes_select_procedures_report_data_by_time (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -180,14 +233,14 @@ def upgrade() -> None:
         rear_outrigger_code VARCHAR(64)
     )
     """)
-    op.execute("CREATE INDEX idx_mpr_woid     ON raw.mes_procedure_reports (woid)")
-    op.execute("CREATE INDEX idx_mpr_wno      ON raw.mes_procedure_reports (workorder_no)")
-    op.execute("CREATE INDEX idx_mpr_pno      ON raw.mes_procedure_reports (procedure_no)")
-    op.execute("CREATE UNIQUE INDEX uq_mpr_dedup ON raw.mes_procedure_reports (_batch_id, _row_hash)")
+    op.execute("CREATE INDEX idx_msprd_woid     ON raw.mes_select_procedures_report_data_by_time (woid)")
+    op.execute("CREATE INDEX idx_msprd_wno      ON raw.mes_select_procedures_report_data_by_time (workorder_no)")
+    op.execute("CREATE INDEX idx_msprd_pno      ON raw.mes_select_procedures_report_data_by_time (procedure_no)")
+    op.execute("CREATE UNIQUE INDEX uq_msprd_dedup ON raw.mes_select_procedures_report_data_by_time (_batch_id, _row_hash)")
 
-    # 3.3 raw.mes_production_schedules — 工序排产
+    # 3.4 raw.mes_select_production_back_params_by_time (interface #4)
     op.execute("""
-    CREATE TABLE raw.mes_production_schedules (
+    CREATE TABLE raw.mes_select_production_back_params_by_time (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -216,13 +269,168 @@ def upgrade() -> None:
         production_back_workcenters JSONB
     )
     """)
-    op.execute("CREATE INDEX idx_mps_wopid    ON raw.mes_production_schedules (wopid)")
-    op.execute("CREATE INDEX idx_mps_wno      ON raw.mes_production_schedules (workorder_no)")
-    op.execute("CREATE UNIQUE INDEX uq_mps_dedup ON raw.mes_production_schedules (_batch_id, _row_hash)")
+    op.execute("CREATE INDEX idx_mspbp_wopid    ON raw.mes_select_production_back_params_by_time (wopid)")
+    op.execute("CREATE INDEX idx_mspbp_wno      ON raw.mes_select_production_back_params_by_time (workorder_no)")
+    op.execute("CREATE UNIQUE INDEX uq_mspbp_dedup ON raw.mes_select_production_back_params_by_time (_batch_id, _row_hash)")
 
-    # 3.4 raw.mes_task_actions — 报工明细
+    # 3.5 raw.mes_select_task_use_material (interface #5)
     op.execute("""
-    CREATE TABLE raw.mes_task_actions (
+    CREATE TABLE raw.mes_select_task_use_material (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        workorder_no        VARCHAR(64),
+        task_no             VARCHAR(64),
+        did                 BIGINT,
+        work_shop           VARCHAR(128),
+        product_line        VARCHAR(128),
+        wcid                BIGINT,
+        workcenter_no       VARCHAR(64),
+        workcenter_name     VARCHAR(128),
+        procedure_no        VARCHAR(32),
+        procedure_name      VARCHAR(128),
+        use_material        VARCHAR(64),
+        use_material_desc   VARCHAR(256),
+        material_batch_no   VARCHAR(64),
+        use_qty             NUMERIC,
+        use_unit            VARCHAR(16),
+        quantity            NUMERIC,
+        use_time            TIMESTAMPTZ,
+        uid                 BIGINT,
+        user_name           VARCHAR(64),
+        url_str             TEXT,
+
+        urls                JSONB
+    )
+    """)
+    op.execute("CREATE INDEX idx_mstum_wno      ON raw.mes_select_task_use_material (workorder_no)")
+    op.execute("CREATE INDEX idx_mstum_material ON raw.mes_select_task_use_material (use_material)")
+    op.execute("CREATE UNIQUE INDEX uq_mstum_dedup ON raw.mes_select_task_use_material (_batch_id, _row_hash)")
+
+    # 3.6 raw.mes_select_workorder_procedure (interface #6) — NEW
+    op.execute("""
+    CREATE TABLE raw.mes_select_workorder_procedure (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        wopid               BIGINT NOT NULL,
+        workorder_no        VARCHAR(64),
+        salesorder_no       VARCHAR(64),
+        material_no         VARCHAR(64),
+        material_desc       VARCHAR(256),
+        material_spec       VARCHAR(256),
+        plan_follow_word_no VARCHAR(64),
+        procedure_no        VARCHAR(32),
+        procedure_name      VARCHAR(128),
+        plan_qty            NUMERIC,
+        pending_qty         NUMERIC,
+        arranged_qty        NUMERIC,
+        completed_qty       NUMERIC
+    )
+    """)
+    op.execute("CREATE INDEX idx_mswp_wopid ON raw.mes_select_workorder_procedure (wopid)")
+    op.execute("CREATE INDEX idx_mswp_wno   ON raw.mes_select_workorder_procedure (workorder_no)")
+    op.execute("CREATE UNIQUE INDEX uq_mswp_dedup ON raw.mes_select_workorder_procedure (_batch_id, _row_hash)")
+
+    # 3.7 raw.mes_select_workorder_report_data_by_time (interface #7)
+    op.execute("""
+    CREATE TABLE raw.mes_select_workorder_report_data_by_time (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        woid                BIGINT,
+        workorder_no        VARCHAR(64),
+        workorder_type      VARCHAR(32),
+        salesorder_no       VARCHAR(64),
+        plan_follow_word_no VARCHAR(64),
+        material_no         VARCHAR(64),
+        material_desc       VARCHAR(256),
+        material_spec       VARCHAR(256),
+        material_code       VARCHAR(64),
+        unit                VARCHAR(16),
+        wtaid               BIGINT,
+        tid                 BIGINT,
+        procedure_no        VARCHAR(32),
+        procedure_order     INTEGER,
+        procedure_name      VARCHAR(128),
+        procedure_remark    TEXT,
+        good_qty            NUMERIC,
+        bad_qty             NUMERIC,
+        bad_qty_manufacturing NUMERIC,
+        bad_qty_incoming    NUMERIC,
+        in_stock_qty        NUMERIC,
+        workorder_plan_qty  NUMERIC,
+        plan_qty            NUMERIC,
+        single_trip_qty     NUMERIC,
+        actual_time         NUMERIC,
+        earned_hours        NUMERIC,
+        single_trip_time    NUMERIC,
+        frequency_size      INTEGER,
+        machine_no          VARCHAR(64),
+        machine_name        VARCHAR(128),
+        workcenter_no       VARCHAR(64),
+        workcenter_name     VARCHAR(128),
+        workshop_name       VARCHAR(128),
+        product_line        VARCHAR(128),
+        mould_no            VARCHAR(64),
+        mould_name          VARCHAR(128),
+        user_names          VARCHAR(512),
+        employee_nos        VARCHAR(256),
+        approver_name       VARCHAR(64),
+        one_level_reason    VARCHAR(256),
+        two_level_reason    VARCHAR(256),
+        three_level_reason  VARCHAR(256),
+        approver_time       TIMESTAMPTZ,
+        task_start_time     TIMESTAMPTZ,
+        task_end_time       TIMESTAMPTZ,
+        work_date           DATE,
+        create_time         TIMESTAMPTZ,
+        warehouse           VARCHAR(128),
+        production_batch_no VARCHAR(64),
+        material_batch_no   VARCHAR(64),
+        material_qty        NUMERIC,
+        weight              NUMERIC,
+        material_unit       VARCHAR(16),
+        knife_weight        NUMERIC,
+        material_weight     NUMERIC,
+        piece_weight        NUMERIC,
+        scrap_weight        NUMERIC,
+        task_action_remark  TEXT,
+        transfer_card_no    VARCHAR(64),
+        component           VARCHAR(128),
+        shift_name          VARCHAR(64),
+        note                TEXT,
+        completion_stage    INTEGER,
+        chassis_no          VARCHAR(64),
+        rear_outrigger_code VARCHAR(64)
+    )
+    """)
+    op.execute("CREATE INDEX idx_mswrd_woid     ON raw.mes_select_workorder_report_data_by_time (woid)")
+    op.execute("CREATE INDEX idx_mswrd_wno      ON raw.mes_select_workorder_report_data_by_time (workorder_no)")
+    op.execute("CREATE INDEX idx_mswrd_pno      ON raw.mes_select_workorder_report_data_by_time (procedure_no)")
+    op.execute("CREATE UNIQUE INDEX uq_mswrd_dedup ON raw.mes_select_workorder_report_data_by_time (_batch_id, _row_hash)")
+
+    # 3.8 raw.mes_select_workorder_task_action_statistics (interface #8)
+    op.execute("""
+    CREATE TABLE raw.mes_select_workorder_task_action_statistics (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -364,14 +572,14 @@ def upgrade() -> None:
         product_specifications JSONB
     )
     """)
-    op.execute("CREATE INDEX idx_mta_wtaid    ON raw.mes_task_actions (wtaid)")
-    op.execute("CREATE INDEX idx_mta_woid     ON raw.mes_task_actions (woid)")
-    op.execute("CREATE INDEX idx_mta_wno      ON raw.mes_task_actions (workorder_no)")
-    op.execute("CREATE UNIQUE INDEX uq_mta_dedup ON raw.mes_task_actions (_batch_id, _row_hash)")
+    op.execute("CREATE INDEX idx_mswtas_wtaid    ON raw.mes_select_workorder_task_action_statistics (wtaid)")
+    op.execute("CREATE INDEX idx_mswtas_woid     ON raw.mes_select_workorder_task_action_statistics (woid)")
+    op.execute("CREATE INDEX idx_mswtas_wno      ON raw.mes_select_workorder_task_action_statistics (workorder_no)")
+    op.execute("CREATE UNIQUE INDEX uq_mswtas_dedup ON raw.mes_select_workorder_task_action_statistics (_batch_id, _row_hash)")
 
-    # 3.5 raw.mes_material_usages — 投料明细
+    # 3.9 raw.mes_andon_api_controller (interface #9)
     op.execute("""
-    CREATE TABLE raw.mes_material_usages (
+    CREATE TABLE raw.mes_andon_api_controller (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -381,114 +589,188 @@ def upgrade() -> None:
         _quality_flags      JSONB DEFAULT '[]',
         _ingested_at        TIMESTAMP DEFAULT now(),
 
-        workorder_no        VARCHAR(64),
-        task_no             VARCHAR(64),
-        did                 BIGINT,
-        work_shop           VARCHAR(128),
-        product_line        VARCHAR(128),
-        wcid                BIGINT,
-        workcenter_no       VARCHAR(64),
-        workcenter_name     VARCHAR(128),
-        procedure_no        VARCHAR(32),
-        procedure_name      VARCHAR(128),
-        use_material        VARCHAR(64),
-        use_material_desc   VARCHAR(256),
-        material_batch_no   VARCHAR(64),
-        use_qty             NUMERIC,
-        use_unit            VARCHAR(16),
-        quantity            NUMERIC,
-        use_time            TIMESTAMPTZ,
-        uid                 BIGINT,
-        user_name           VARCHAR(64),
-        url_str             TEXT,
-
-        urls                JSONB
-    )
-    """)
-    op.execute("CREATE INDEX idx_mmu_wno      ON raw.mes_material_usages (workorder_no)")
-    op.execute("CREATE INDEX idx_mmu_material ON raw.mes_material_usages (use_material)")
-
-    # 3.6 raw.mes_materials — 物料主数据
-    op.execute("""
-    CREATE TABLE raw.mes_materials (
-        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _source_id          UUID NOT NULL,
-        _batch_id           UUID NOT NULL,
-        _pulled_at          TIMESTAMP NOT NULL,
-        _source_signature   TEXT,
-        _row_hash           TEXT,
-        _quality_flags      JSONB DEFAULT '[]',
-        _ingested_at        TIMESTAMP DEFAULT now(),
-
-        mtid                BIGINT NOT NULL,
-        material_no         VARCHAR(64),
-        material_desc       VARCHAR(256),
-        material_spec       VARCHAR(256),
-        unit                VARCHAR(16),
-        auxiliary_unit      VARCHAR(16),
-        conversion_coefficient NUMERIC,
-        create_time         TIMESTAMPTZ,
-        update_time         TIMESTAMPTZ,
-        update_user_name    VARCHAR(64),
-        create_user_name    VARCHAR(64),
-        material_nature     INTEGER,
-        confirm             INTEGER,
-        material_ledger_desc VARCHAR(256),
-        material_ledger_spec VARCHAR(256),
-        update_qty          INTEGER,
-        gantt_color         VARCHAR(32),
-        bind_sop            INTEGER,
-        bind_first_inspect_scheme  INTEGER,
-        bind_self_inspect_scheme   INTEGER,
-        bind_final_inspect_scheme  INTEGER,
-        bind_process_supervision_scheme INTEGER,
-
-        procedure_names     JSONB
-    )
-    """)
-    op.execute("CREATE INDEX idx_mmat_mtid    ON raw.mes_materials (mtid)")
-    op.execute("CREATE INDEX idx_mmat_no      ON raw.mes_materials (material_no)")
-
-    # 3.7 raw.mes_machines — 设备主数据
-    op.execute("""
-    CREATE TABLE raw.mes_machines (
-        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _source_id          UUID NOT NULL,
-        _batch_id           UUID NOT NULL,
-        _pulled_at          TIMESTAMP NOT NULL,
-        _source_signature   TEXT,
-        _row_hash           TEXT,
-        _quality_flags      JSONB DEFAULT '[]',
-        _ingested_at        TIMESTAMP DEFAULT now(),
-
-        mid                 BIGINT NOT NULL,
+        ar_id               BIGINT NOT NULL,
         machine_no          VARCHAR(64),
-        machine_name        VARCHAR(128),
-        sim                 VARCHAR(64),
-        status              INTEGER,
-        machine_brand       VARCHAR(128),
-        machine_model       VARCHAR(128),
-        machine_function    TEXT,
-        machine_image       TEXT,
-        serial_number       VARCHAR(128),
-        fixed_assets_code   VARCHAR(128),
-        supplier            VARCHAR(128),
-        manufacturer        VARCHAR(128),
-        production_date     DATE,
-        receive_date        DATE,
-        first_date          DATE,
-        documents           TEXT,
-        use_time            VARCHAR(64),
-        department_name     VARCHAR(128)
+        create_date         TIMESTAMPTZ,
+        andon_title         VARCHAR(128),
+        receive_date        TIMESTAMPTZ,
+        receive_time        NUMERIC,
+        finish_date         TIMESTAMPTZ,
+        finish_time         NUMERIC,
+        all_time            NUMERIC,
+        submit_name         VARCHAR(64),
+        finish_name         VARCHAR(64),
+        mes_explain         TEXT,
+        remark              TEXT,
+        mes_url             TEXT,
+        url_type            INTEGER,
+        note                TEXT,
+        note_url            TEXT,
+        note_type           INTEGER,
+        task_remark         TEXT,
+        andon_status        INTEGER,
+        standard_duration   NUMERIC,
+        standard_response_time NUMERIC,
+        standard_processing_time NUMERIC,
+        response_timeout    NUMERIC,
+        processing_timeout  NUMERIC,
+        can_print_oa        INTEGER,
+
+        user_names           JSONB
     )
     """)
-    op.execute("CREATE INDEX idx_mmc_mid     ON raw.mes_machines (mid)")
-    op.execute("CREATE INDEX idx_mmc_no      ON raw.mes_machines (machine_no)")
-    op.execute("CREATE INDEX idx_mmc_sim     ON raw.mes_machines (sim)")
+    op.execute("CREATE INDEX idx_maac_arid    ON raw.mes_andon_api_controller (ar_id)")
+    op.execute("CREATE INDEX idx_maac_machine ON raw.mes_andon_api_controller (machine_no)")
+    op.execute("CREATE UNIQUE INDEX uq_maac_dedup ON raw.mes_andon_api_controller (_batch_id, _row_hash)")
 
-    # 3.8 raw.mes_oee_reports — 设备 OEE
+    # 3.10 raw.mes_get_timecount_messages_by_time_sim (interface #10)
     op.execute("""
-    CREATE TABLE raw.mes_oee_reports (
+    CREATE TABLE raw.mes_get_timecount_messages_by_time_sim (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sim                 VARCHAR(64) NOT NULL,
+        count_messages      JSONB
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgtm_sim ON raw.mes_get_timecount_messages_by_time_sim (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgtm_dedup ON raw.mes_get_timecount_messages_by_time_sim (_batch_id, _row_hash)")
+
+    # 3.11 raw.mes_get_trilight_count_by_time_sim (interface #11) — NEW
+    op.execute("""
+    CREATE TABLE raw.mes_get_trilight_count_by_time_sim (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sim                 VARCHAR(64) NOT NULL,
+        count_size          BIGINT
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgtc_sim ON raw.mes_get_trilight_count_by_time_sim (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgtc_dedup ON raw.mes_get_trilight_count_by_time_sim (_batch_id, _row_hash)")
+
+    # 3.12 raw.mes_get_trilight_current_color (interface #12)
+    op.execute("""
+    CREATE TABLE raw.mes_get_trilight_current_color (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sim                 VARCHAR(64) NOT NULL,
+        current_state       VARCHAR(8),
+        update_date         TIMESTAMPTZ,
+        on_line_status      BOOLEAN
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgtcc_sim ON raw.mes_get_trilight_current_color (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgtcc_dedup ON raw.mes_get_trilight_current_color (_batch_id, _row_hash)")
+
+    # 3.13 raw.mes_get_trilight_current_color_list (interface #13)
+    op.execute("""
+    CREATE TABLE raw.mes_get_trilight_current_color_list (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sim                 VARCHAR(64) NOT NULL,
+        current_state       VARCHAR(8),
+        update_date         TIMESTAMPTZ,
+        on_line_status      BOOLEAN
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgtccl_sim ON raw.mes_get_trilight_current_color_list (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgtccl_dedup ON raw.mes_get_trilight_current_color_list (_batch_id, _row_hash)")
+
+    # 3.14 raw.mes_get_trilight_efficiency_duration_time (interface #14)
+    op.execute("""
+    CREATE TABLE raw.mes_get_trilight_efficiency_duration_time (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sim                 VARCHAR(64) NOT NULL,
+        red_time            BIGINT,
+        green_time          BIGINT,
+        yellow_time         BIGINT,
+        close_time          BIGINT
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgtedt_sim ON raw.mes_get_trilight_efficiency_duration_time (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgtedt_dedup ON raw.mes_get_trilight_efficiency_duration_time (_batch_id, _row_hash)")
+
+    # 3.15 raw.mes_get_trilight_efficiency_one_day (interface #15)
+    op.execute("""
+    CREATE TABLE raw.mes_get_trilight_efficiency_one_day (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sim                 VARCHAR(64) NOT NULL,
+        red_time            BIGINT,
+        green_time          BIGINT,
+        yellow_time         BIGINT,
+        close_time          BIGINT
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgteod_sim ON raw.mes_get_trilight_efficiency_one_day (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgteod_dedup ON raw.mes_get_trilight_efficiency_one_day (_batch_id, _row_hash)")
+
+    # 3.16 raw.mes_get_trilight_summary_duration_time (interface #16)
+    op.execute("""
+    CREATE TABLE raw.mes_get_trilight_summary_duration_time (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        sim                 VARCHAR(64) NOT NULL,
+        start_time          TIMESTAMPTZ,
+        end_time            TIMESTAMPTZ,
+        color               VARCHAR(8)
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgtsdt_sim ON raw.mes_get_trilight_summary_duration_time (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgtsdt_dedup ON raw.mes_get_trilight_summary_duration_time (_batch_id, _row_hash)")
+
+    # 3.17 raw.mes_select_oee_report (interface #17)
+    op.execute("""
+    CREATE TABLE raw.mes_select_oee_report (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -547,12 +829,13 @@ def upgrade() -> None:
         shift_green_time    NUMERIC
     )
     """)
-    op.execute("CREATE INDEX idx_moee_mid    ON raw.mes_oee_reports (mid)")
-    op.execute("CREATE INDEX idx_moee_date   ON raw.mes_oee_reports (sim_date)")
+    op.execute("CREATE INDEX idx_msoer_mid    ON raw.mes_select_oee_report (mid)")
+    op.execute("CREATE INDEX idx_msoer_date   ON raw.mes_select_oee_report (sim_date)")
+    op.execute("CREATE UNIQUE INDEX uq_msoer_dedup ON raw.mes_select_oee_report (_batch_id, _row_hash)")
 
-    # 3.9 raw.mes_andon_records — 安灯记录
+    # 3.18 raw.mes_get_machine_count (interface #18) — NEW
     op.execute("""
-    CREATE TABLE raw.mes_andon_records (
+    CREATE TABLE raw.mes_get_machine_count (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -562,45 +845,211 @@ def upgrade() -> None:
         _quality_flags      JSONB DEFAULT '[]',
         _ingested_at        TIMESTAMP DEFAULT now(),
 
-        ar_id               BIGINT NOT NULL,
-        machine_no          VARCHAR(64),
-        create_date         TIMESTAMPTZ,
-        andon_title         VARCHAR(128),
-        receive_date        TIMESTAMPTZ,
-        receive_time        NUMERIC,
-        finish_date         TIMESTAMPTZ,
-        finish_time         NUMERIC,
-        all_time            NUMERIC,
-        submit_name         VARCHAR(64),
-        finish_name         VARCHAR(64),
-        mes_explain         TEXT,
-        remark              TEXT,
-        mes_url             TEXT,
-        url_type            INTEGER,
-        note                TEXT,
-        note_url            TEXT,
-        note_type           INTEGER,
-        task_remark         TEXT,
-        andon_status        INTEGER,
-        standard_duration   NUMERIC,
-        standard_response_time NUMERIC,
-        standard_processing_time NUMERIC,
-        response_timeout    NUMERIC,
-        processing_timeout  NUMERIC,
-        can_print_oa        INTEGER,
-
-        user_names           JSONB,
-        finish_url_list      JSONB,
-        supplement_url_list  JSONB,
-        andon_record_log_list JSONB
+        data                INTEGER
     )
     """)
-    op.execute("CREATE INDEX idx_mar_arid    ON raw.mes_andon_records (ar_id)")
-    op.execute("CREATE INDEX idx_mar_machine ON raw.mes_andon_records (machine_no)")
 
-    # 3.10 raw.mes_error_reports — 异常上报
+    # 3.19 raw.mes_get_machine_detail_by_id (interface #19)
     op.execute("""
-    CREATE TABLE raw.mes_error_reports (
+    CREATE TABLE raw.mes_get_machine_detail_by_id (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        mid                 BIGINT NOT NULL,
+        machine_no          VARCHAR(64),
+        machine_name        VARCHAR(128),
+        sim                 VARCHAR(64),
+        status              INTEGER,
+        machine_brand       VARCHAR(128),
+        machine_model       VARCHAR(128),
+        machine_function    TEXT,
+        machine_image       TEXT,
+        serial_number       VARCHAR(128),
+        fixed_assets_code   VARCHAR(128),
+        supplier            VARCHAR(128),
+        manufacturer        VARCHAR(128),
+        production_date     DATE,
+        receive_date        DATE,
+        first_date          DATE,
+        documents           TEXT,
+        use_time            VARCHAR(64),
+        department_name     VARCHAR(128)
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgmdbi_mid     ON raw.mes_get_machine_detail_by_id (mid)")
+    op.execute("CREATE INDEX idx_mgmdbi_no      ON raw.mes_get_machine_detail_by_id (machine_no)")
+    op.execute("CREATE INDEX idx_mgmdbi_sim     ON raw.mes_get_machine_detail_by_id (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgmdbi_dedup ON raw.mes_get_machine_detail_by_id (_batch_id, _row_hash)")
+
+    # 3.20 raw.mes_get_machine_list (interface #20)
+    op.execute("""
+    CREATE TABLE raw.mes_get_machine_list (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        mid                 BIGINT NOT NULL,
+        machine_no          VARCHAR(64),
+        machine_name        VARCHAR(128),
+        sim                 VARCHAR(64),
+        status              INTEGER,
+        department_name     VARCHAR(128)
+    )
+    """)
+    op.execute("CREATE INDEX idx_mgml_mid     ON raw.mes_get_machine_list (mid)")
+    op.execute("CREATE INDEX idx_mgml_no      ON raw.mes_get_machine_list (machine_no)")
+    op.execute("CREATE INDEX idx_mgml_sim     ON raw.mes_get_machine_list (sim)")
+    op.execute("CREATE UNIQUE INDEX uq_mgml_dedup ON raw.mes_get_machine_list (_batch_id, _row_hash)")
+
+    # 3.21 raw.mes_list_defs (interface #21)
+    op.execute("""
+    CREATE TABLE raw.mes_list_defs (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        ecfd_id             BIGINT NOT NULL,
+        entity_type         VARCHAR(64),
+        web_id              BIGINT,
+        field_code          VARCHAR(64),
+        field_label         VARCHAR(128),
+        field_type          VARCHAR(32),
+        required            INTEGER,
+        sort_no             INTEGER,
+        max_length          INTEGER,
+        options_json        TEXT,
+        enabled             INTEGER
+    )
+    """)
+    op.execute("CREATE INDEX idx_mld_entity ON raw.mes_list_defs (entity_type)")
+    op.execute("CREATE UNIQUE INDEX uq_mld_dedup ON raw.mes_list_defs (_batch_id, _row_hash)")
+
+    # 3.22 raw.mes_list_optional_custom_field_codes (interface #22) — NEW
+    op.execute("""
+    CREATE TABLE raw.mes_list_optional_custom_field_codes (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        field_code          VARCHAR(64),
+        field_label         VARCHAR(128)
+    )
+    """)
+    op.execute("CREATE UNIQUE INDEX uq_mlocfc_dedup ON raw.mes_list_optional_custom_field_codes (_batch_id, _row_hash)")
+
+    # 3.23 raw.mes_query_craft_hours (interface #23)
+    op.execute("""
+    CREATE TABLE raw.mes_query_craft_hours (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        mtid                BIGINT NOT NULL,
+        material_no         VARCHAR(64),
+        material_desc       VARCHAR(256),
+        material_spec       VARCHAR(256),
+        unit                VARCHAR(16),
+        auxiliary_unit      VARCHAR(16),
+        conversion_coefficient NUMERIC,
+        create_time         TIMESTAMPTZ,
+        update_time         TIMESTAMPTZ,
+        update_user_name    VARCHAR(64),
+        create_user_name    VARCHAR(64),
+        material_nature     INTEGER,
+        confirm             INTEGER,
+        material_ledger_desc VARCHAR(256),
+        material_ledger_spec VARCHAR(256),
+        update_qty          INTEGER,
+        gantt_color         VARCHAR(32),
+        bind_sop            INTEGER,
+        bind_first_inspect_scheme  INTEGER,
+        bind_self_inspect_scheme   INTEGER,
+        bind_final_inspect_scheme  INTEGER,
+        bind_process_supervision_scheme INTEGER,
+
+        procedure_names     JSONB
+    )
+    """)
+    op.execute("CREATE INDEX idx_mqch_mtid    ON raw.mes_query_craft_hours (mtid)")
+    op.execute("CREATE INDEX idx_mqch_no      ON raw.mes_query_craft_hours (material_no)")
+    op.execute("CREATE UNIQUE INDEX uq_mqch_dedup ON raw.mes_query_craft_hours (_batch_id, _row_hash)")
+
+    # 3.24 raw.mes_query_craft_hours_details (interface #24) — NEW
+    op.execute("""
+    CREATE TABLE raw.mes_query_craft_hours_details (
+        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        _source_id          UUID NOT NULL,
+        _batch_id           UUID NOT NULL,
+        _pulled_at          TIMESTAMP NOT NULL,
+        _source_signature   TEXT,
+        _row_hash           TEXT,
+        _quality_flags      JSONB DEFAULT '[]',
+        _ingested_at        TIMESTAMP DEFAULT now(),
+
+        rid                 BIGINT NOT NULL,
+        material_no         VARCHAR(64),
+        material_desc       VARCHAR(256),
+        material_spec       VARCHAR(256),
+        unit                VARCHAR(16),
+        material_ledger_desc VARCHAR(256),
+        material_ledger_spec VARCHAR(256),
+        material_ledger_brand VARCHAR(128),
+        remark              TEXT,
+        conversion_coefficient NUMERIC,
+        auxiliary_unit      VARCHAR(16),
+        material_weight     NUMERIC,
+        material_price      NUMERIC,
+        routings_name       VARCHAR(128),
+        customization_no    VARCHAR(64),
+        customization_name  VARCHAR(128),
+        customer_requirement TEXT,
+        completion_stage    INTEGER,
+        file_url            TEXT,
+        gantt_color         VARCHAR(32),
+        utilization_rate    NUMERIC,
+        customer_material_no VARCHAR(64),
+        material_nature     INTEGER,
+        psf_id              BIGINT,
+        series_name         VARCHAR(128),
+        series_code         VARCHAR(64),
+
+        sop_path_list               JSONB,
+        routings_procedure_msg_list JSONB
+    )
+    """)
+    op.execute("CREATE INDEX idx_mqchd_rid    ON raw.mes_query_craft_hours_details (rid)")
+    op.execute("CREATE INDEX idx_mqchd_no     ON raw.mes_query_craft_hours_details (material_no)")
+    op.execute("CREATE UNIQUE INDEX uq_mqchd_dedup ON raw.mes_query_craft_hours_details (_batch_id, _row_hash)")
+
+    # 3.25 raw.mes_select_error_report (interface #25)
+    op.execute("""
+    CREATE TABLE raw.mes_select_error_report (
         _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         _source_id          UUID NOT NULL,
         _batch_id           UUID NOT NULL,
@@ -636,149 +1085,39 @@ def upgrade() -> None:
         pic_urls            JSONB
     )
     """)
-    op.execute("CREATE INDEX idx_mer_mid     ON raw.mes_error_reports (mid)")
-    op.execute("CREATE INDEX idx_mer_machine ON raw.mes_error_reports (machine_no)")
-
-    # 3.11a raw.mes_trilight_statuses — 三色灯实时状态
-    op.execute("""
-    CREATE TABLE raw.mes_trilight_statuses (
-        _raw_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _batch_id    UUID NOT NULL,
-        _pulled_at   TIMESTAMP NOT NULL,
-        _row_hash    TEXT,
-        _ingested_at TIMESTAMP DEFAULT now(),
-
-        sim          VARCHAR(64) NOT NULL,
-        current_state VARCHAR(8),
-        update_date  TIMESTAMPTZ,
-        on_line_status BOOLEAN
-    )
-    """)
-    op.execute("CREATE INDEX idx_mts_sim ON raw.mes_trilight_statuses (sim)")
-
-    # 3.11b raw.mes_trilight_efficiencies — 三色灯效率汇总
-    op.execute("""
-    CREATE TABLE raw.mes_trilight_efficiencies (
-        _raw_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _batch_id    UUID NOT NULL,
-        _pulled_at   TIMESTAMP NOT NULL,
-        _row_hash    TEXT,
-        _ingested_at TIMESTAMP DEFAULT now(),
-
-        sim          VARCHAR(64) NOT NULL,
-        red_time     BIGINT,
-        green_time   BIGINT,
-        yellow_time  BIGINT,
-        close_time   BIGINT,
-        query_date   DATE
-    )
-    """)
-    op.execute("CREATE INDEX idx_mte_sim ON raw.mes_trilight_efficiencies (sim)")
-
-    # 3.11c raw.mes_trilight_color_changes — 三色灯颜色变化明细
-    op.execute("""
-    CREATE TABLE raw.mes_trilight_color_changes (
-        _raw_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _batch_id    UUID NOT NULL,
-        _pulled_at   TIMESTAMP NOT NULL,
-        _row_hash    TEXT,
-        _ingested_at TIMESTAMP DEFAULT now(),
-
-        sim          VARCHAR(64) NOT NULL,
-        start_time   TIMESTAMPTZ,
-        end_time     TIMESTAMPTZ,
-        color        VARCHAR(8)
-    )
-    """)
-    op.execute("CREATE INDEX idx_mtcc_sim ON raw.mes_trilight_color_changes (sim)")
-
-    # 3.11d raw.mes_trilight_counts — 三色灯脉冲计数
-    op.execute("""
-    CREATE TABLE raw.mes_trilight_counts (
-        _raw_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _batch_id    UUID NOT NULL,
-        _pulled_at   TIMESTAMP NOT NULL,
-        _row_hash    TEXT,
-        _ingested_at TIMESTAMP DEFAULT now(),
-
-        sim          VARCHAR(64) NOT NULL,
-        count_size   BIGINT,
-        count_messages JSONB
-    )
-    """)
-    op.execute("CREATE INDEX idx_mtcnt_sim ON raw.mes_trilight_counts (sim)")
-
-    # 3.12 raw.mes_completion_reports — 达成率报表
-    op.execute("""
-    CREATE TABLE raw.mes_completion_reports (
-        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _source_id          UUID NOT NULL,
-        _batch_id           UUID NOT NULL,
-        _pulled_at          TIMESTAMP NOT NULL,
-        _source_signature   TEXT,
-        _row_hash           TEXT,
-        _quality_flags      JSONB DEFAULT '[]',
-        _ingested_at        TIMESTAMP DEFAULT now(),
-
-        sid                 BIGINT,
-        shift_name          VARCHAR(64),
-        work_date           DATE,
-        department_name     VARCHAR(128),
-        task_count          INTEGER,
-        completed_task_count INTEGER,
-        un_completed_task_count INTEGER,
-        task_qty            NUMERIC,
-        completed_task_qty  NUMERIC,
-        un_completed_task_qty NUMERIC,
-        complete_rate       NUMERIC,
-        qty_complete_rate   NUMERIC
-    )
-    """)
-    op.execute("CREATE INDEX idx_mcr_date ON raw.mes_completion_reports (work_date)")
-
-    # 3.13 raw.mes_custom_field_defs — 自定义字段定义
-    op.execute("""
-    CREATE TABLE raw.mes_custom_field_defs (
-        _raw_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        _source_id          UUID NOT NULL,
-        _batch_id           UUID NOT NULL,
-        _pulled_at          TIMESTAMP NOT NULL,
-        _source_signature   TEXT,
-        _row_hash           TEXT,
-        _quality_flags      JSONB DEFAULT '[]',
-        _ingested_at        TIMESTAMP DEFAULT now(),
-
-        ecfd_id             BIGINT NOT NULL,
-        entity_type         VARCHAR(64),
-        web_id              BIGINT,
-        field_code          VARCHAR(64),
-        field_label         VARCHAR(128),
-        field_type          VARCHAR(32),
-        required            INTEGER,
-        sort_no             INTEGER,
-        max_length          INTEGER,
-        options_json        TEXT,
-        enabled             INTEGER
-    )
-    """)
-    op.execute("CREATE INDEX idx_mcfd_entity ON raw.mes_custom_field_defs (entity_type)")
+    op.execute("CREATE INDEX idx_mser_mid     ON raw.mes_select_error_report (mid)")
+    op.execute("CREATE INDEX idx_mser_machine ON raw.mes_select_error_report (machine_no)")
+    op.execute("CREATE UNIQUE INDEX uq_mser_dedup ON raw.mes_select_error_report (_batch_id, _row_hash)")
 
 
 def downgrade() -> None:
-    # Drop in reverse order of creation
-    op.execute("DROP TABLE IF EXISTS raw.mes_custom_field_defs CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_completion_reports CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_trilight_counts CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_trilight_color_changes CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_trilight_efficiencies CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_trilight_statuses CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_error_reports CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_andon_records CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_oee_reports CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_machines CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_materials CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_material_usages CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_task_actions CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_production_schedules CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_procedure_reports CASCADE")
-    op.execute("DROP TABLE IF EXISTS raw.mes_workorders CASCADE")
+    # Drop all 25 tables in reverse order
+    tables = [
+        "raw.mes_select_error_report",
+        "raw.mes_query_craft_hours_details",
+        "raw.mes_query_craft_hours",
+        "raw.mes_list_optional_custom_field_codes",
+        "raw.mes_list_defs",
+        "raw.mes_get_machine_list",
+        "raw.mes_get_machine_detail_by_id",
+        "raw.mes_get_machine_count",
+        "raw.mes_select_oee_report",
+        "raw.mes_get_trilight_summary_duration_time",
+        "raw.mes_get_trilight_efficiency_one_day",
+        "raw.mes_get_trilight_efficiency_duration_time",
+        "raw.mes_get_trilight_current_color_list",
+        "raw.mes_get_trilight_current_color",
+        "raw.mes_get_trilight_count_by_time_sim",
+        "raw.mes_get_timecount_messages_by_time_sim",
+        "raw.mes_andon_api_controller",
+        "raw.mes_select_workorder_task_action_statistics",
+        "raw.mes_select_workorder_report_data_by_time",
+        "raw.mes_select_workorder_procedure",
+        "raw.mes_select_task_use_material",
+        "raw.mes_select_production_back_params_by_time",
+        "raw.mes_select_procedures_report_data_by_time",
+        "raw.mes_select_complish_report",
+        "raw.mes_filter_workorder",
+    ]
+    for tbl in tables:
+        op.execute(f"DROP TABLE IF EXISTS {tbl} CASCADE")
