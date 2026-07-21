@@ -12,6 +12,8 @@
 CLAUDE.md
 AGENTS.md
 
+docs/superpowers/
+
 # Python 字节码缓存
 __pycache__/
 
