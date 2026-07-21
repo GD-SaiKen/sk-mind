@@ -1,0 +1,266 @@
+# backend/config/data_sources/mes_light.yaml
+# 基于: docs/数据梳理/MES/MES接口梳理-按接口.md
+# 表结构: docs/数据梳理/MES/MES-Raw层表结构设计.md
+
+name: "MES-制造执行"
+source_type: MES
+access_method: api
+
+connection:
+  base_url: "https://a.lightmes.cn"
+  auth_type: dual_key
+  auth_header_name: "AccessKeyId"
+  auth_header_name_2: "AccessKeySecret"
+  qps_limit: 10
+  timeout: 30
+  auth_credentials_env: "MES_ACCESS_KEY_ID"
+  auth_credentials_2_env: "MES_ACCESS_KEY_SECRET"
+
+history_start_date: "2020-01-01"
+
+interfaces:
+  # ── 工单域 ──
+  - name: filterWorkorder
+    endpoint: "/lightmesapi/open/workorderController/filterWorkorder"
+    method: POST
+    target_table: raw.mes_workorders
+    pk_fields: [woid]
+    time_config:
+      param_start: startDate
+      param_end: endDate
+      format: "%Y-%m-%d"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+      workOrderStatus: []
+    records_path: data
+
+  # ── 报工域 ──
+  - name: selectProceduresReportDataByTime
+    endpoint: "/lightmesapi/open/workorderController/selectProceduresReportDataByTime"
+    method: POST
+    target_table: raw.mes_procedure_reports
+    pk_fields: [wtaid]
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template: {}
+    records_path: data
+
+  - name: selectWorkorderReportDataByTime
+    endpoint: "/lightmesapi/open/workorderController/selectWorkorderReportDataByTime"
+    method: POST
+    target_table: raw.mes_procedure_reports
+    pk_fields: [wtaid]
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template: {}
+    records_path: data
+
+  - name: selectWorkorderTaskActionStatistics
+    endpoint: "/lightmesapi/open/workorderController/selectWorkorderTaskActionStatistics"
+    method: POST
+    target_table: raw.mes_task_actions
+    pk_fields: [wtaid]
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+      did: 0
+      statusList: []
+      shiftStartTime: "2026-01-01 00:00:00"
+      shiftEndTime: "2026-12-31 23:59:59"
+    records_path: data
+
+  # ── 排产域 ──
+  - name: selectProductionBackParamsByTime
+    endpoint: "/lightmesapi/open/workorderController/selectProductionBackParamsByTime"
+    method: POST
+    target_table: raw.mes_production_schedules
+    pk_fields: [wopid]
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+    records_path: data
+
+  # ── 物料域 ──
+  - name: queryCraftHours
+    endpoint: "/lightmesapi/open/material/queryCraftHours"
+    method: POST
+    target_table: raw.mes_materials
+    pk_fields: [mtid]
+    time_config:
+      is_time_based: false
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+    records_path: data
+
+  - name: selectTaskUseMaterial
+    endpoint: "/lightmesapi/open/workorderController/selectTaskUseMaterial"
+    method: POST
+    target_table: raw.mes_material_usages
+    pk_fields: []
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+    records_path: data
+
+  # ── 设备域 ──
+  - name: getMachineList
+    endpoint: "/lightmesapi/open/machine/getMachineList"
+    method: POST
+    target_table: raw.mes_machines
+    pk_fields: [mid]
+    time_config:
+      is_time_based: false
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+    records_path: data
+
+  - name: selectOeeReport
+    endpoint: "/lightmesapi/open/trilightSummary/selectOeeReport"
+    method: POST
+    target_table: raw.mes_oee_reports
+    pk_fields: []
+    time_config:
+      param_start: startDate
+      param_end: endDate
+      format: "%Y-%m-%d"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+    records_path: data
+
+  - name: andonApiController
+    endpoint: "/lightmesapi/open/trilightSummary/andonApiController"
+    method: POST
+    target_table: raw.mes_andon_records
+    pk_fields: [ar_id]
+    time_config:
+      param_start: startDate
+      param_end: endDate
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+      statusList: []
+    records_path: data
+
+  - name: selectErrorReport
+    endpoint: "/lightmesapi/open/errorReportAPIController/selectErrorReport"
+    method: POST
+    target_table: raw.mes_error_reports
+    pk_fields: [lwl_id]
+    time_config:
+      param_start: date
+      param_end: date
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+    records_path: data
+
+  # ── 三色灯域 ──
+  - name: getTrilightCurrentColorList
+    endpoint: "/lightmesapi/open/trilightSummary/getTrilightCurrentColorList"
+    method: POST
+    target_table: raw.mes_trilight_statuses
+    pk_fields: []
+    time_config:
+      is_time_based: false
+    request_body_template:
+      simList: []
+    records_path: data
+
+  - name: getTrilightEfficiencyDurationTime
+    endpoint: "/lightmesapi/open/trilightSummary/getTrilightEfficiencyDurationTime"
+    method: POST
+    target_table: raw.mes_trilight_efficiencies
+    pk_fields: []
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template: {}
+    records_path: data
+
+  - name: getTrilightSummaryDurationTime
+    endpoint: "/lightmesapi/open/trilightSummary/getTrilightSummaryDurationTime"
+    method: POST
+    target_table: raw.mes_trilight_color_changes
+    pk_fields: []
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template: {}
+    records_path: data
+
+  - name: getTimecountMessagesByTimeSim
+    endpoint: "/lightmesapi/open/trilightSummary/getTimecountMessagesByTimeSim"
+    method: POST
+    target_table: raw.mes_trilight_counts
+    pk_fields: []
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template: {}
+    records_path: data
+
+  # ── 报表与配置域 ──
+  - name: selectComplishReport
+    endpoint: "/lightmesapi/open/workorderController/selectComplishReport"
+    method: POST
+    target_table: raw.mes_completion_reports
+    pk_fields: []
+    time_config:
+      param_start: startTime
+      param_end: endTime
+      format: "%Y-%m-%d %H:%M:%S"
+      is_time_based: true
+    request_body_template:
+      pageNum: 1
+      pageSize: 100
+      status: 1
+    records_path: data
+
+  - name: listDefs
+    endpoint: "/lightmesapi/open/entityCustomFieldDefController/listDefs"
+    method: POST
+    target_table: raw.mes_custom_field_defs
+    pk_fields: [ecfd_id]
+    time_config:
+      is_time_based: false
+    request_body_template:
+      entityType: "WORKORDER"
+      enabledOnly: 1
+    records_path: data
