@@ -47,7 +47,7 @@ interfaces:
     time_config:
       param_start: startTime
       param_end: endTime
-      format: "%Y-%m-%d %H:%M:%S"
+      format: "%Y-%m-%d"
       is_time_based: true
     request_body_template:
       pageNum: 1
@@ -160,13 +160,15 @@ interfaces:
     time_config:
       param_start: startDate
       param_end: endDate
-      format: "%Y-%m-%d %H:%M:%S"
+      format: "%Y-%m-%d"
       is_time_based: true
     request_body_template:
       pageNum: 1
       pageSize: 100
       statusList: []
     records_path: data
+    total_path: data.total
+    list_in_data: true
 
   # ── 三色灯域 ──
   # 10. getTimecountMessagesByTimeSim

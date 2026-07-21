@@ -182,6 +182,7 @@ def upgrade() -> None:
         procedure_order     INTEGER,
         procedure_name      VARCHAR(128),
         procedure_remark    TEXT,
+        compensate_hours    NUMERIC,
         good_qty            NUMERIC,
         bad_qty             NUMERIC,
         bad_qty_manufacturing NUMERIC,
@@ -372,6 +373,7 @@ def upgrade() -> None:
         procedure_order     INTEGER,
         procedure_name      VARCHAR(128),
         procedure_remark    TEXT,
+        compensate_hours    NUMERIC,
         good_qty            NUMERIC,
         bad_qty             NUMERIC,
         bad_qty_manufacturing NUMERIC,
@@ -569,7 +571,7 @@ def upgrade() -> None:
         pic_url             TEXT,
         pic_type            INTEGER,
 
-        product_specifications JSONB
+        product_specification_qties JSONB
     )
     """)
     op.execute("CREATE INDEX idx_mswtas_wtaid    ON raw.mes_select_workorder_task_action_statistics (wtaid)")
@@ -616,7 +618,11 @@ def upgrade() -> None:
         processing_timeout  NUMERIC,
         can_print_oa        INTEGER,
 
-        user_names           JSONB
+        user_names           JSONB,
+        finish_url_list      JSONB,
+        supplement_url_list  JSONB,
+        andon_record_log_list JSONB,
+        andon_oa_process_info_list JSONB
     )
     """)
     op.execute("CREATE INDEX idx_maac_arid    ON raw.mes_andon_api_controller (ar_id)")
@@ -826,7 +832,9 @@ def upgrade() -> None:
         andon_hour          NUMERIC,
         online_time         NUMERIC,
         shift_green_rate    NUMERIC,
-        shift_green_time    NUMERIC
+        shift_green_time    NUMERIC,
+
+        oee_users           JSONB
     )
     """)
     op.execute("CREATE INDEX idx_msoer_mid    ON raw.mes_select_oee_report (mid)")
@@ -993,7 +1001,8 @@ def upgrade() -> None:
         bind_final_inspect_scheme  INTEGER,
         bind_process_supervision_scheme INTEGER,
 
-        procedure_names     JSONB
+        procedure_names     JSONB,
+        procedure_name      JSONB
     )
     """)
     op.execute("CREATE INDEX idx_mqch_mtid    ON raw.mes_query_craft_hours (mtid)")

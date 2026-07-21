@@ -291,7 +291,12 @@ class ApiSyncEngine:
 
     @staticmethod
     def _flatten_rows(rows: list[dict], mapper: ColumnMapper) -> list[dict]:
-        """Map API rows to flat dicts via ColumnMapper."""
+        """Map API rows to flat dicts via ColumnMapper.
+
+        Raw layer stores all values as-is — no type conversion.
+        Timestamps remain as Java-millis integers; type coercion
+        to proper datetime is the Clean layer's responsibility.
+        """
         flat_rows = []
         for r in rows:
             m = mapper.map_row(r)

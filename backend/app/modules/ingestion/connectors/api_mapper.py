@@ -1,9 +1,11 @@
 """ColumnMapper: maps API JSON response rows to physical table columns.
 
-Rule: scalar values -> matching column, list/dict values -> JSONB column.
+Rule: scalar values -> matching column, list/dict values -> JSONB column
+(only if the column actually exists in the table).
 No type conversion at Raw layer — that's the Clean layer's job.
 """
 
+import json
 import re
 
 
@@ -23,18 +25,25 @@ class ColumnMapper:
 
         Returns:
             {"columns": {snake_col: value, ...},
-             "jsonb_cols": {snake_col: value, ...}}
+             "jsonb_cols": {snake_col: json_string, ...}}
         """
         columns: dict = {}
         jsonb_cols: dict = {}
         for key, value in row.items():
             col_name = self._to_snake(key)
             if col_name in self._table_columns:
-                columns[col_name] = value
+                if isinstance(value, (list, dict)):
+                    # JSONB column — serialize to string for psycopg2
+                    jsonb_cols[col_name] = json.dumps(
+                        value, ensure_ascii=False, default=str
+                    )
+                else:
+                    columns[col_name] = value
             elif isinstance(value, (list, dict)):
-                jsonb_cols[col_name] = value
+                # JSON value that has no DB column — silently drop
+                # (API added new array fields before DDL caught up)
+                pass
             # scalar not in table columns → silently drop
-            # (source API added new fields before DDL caught up)
         return {"columns": columns, "jsonb_cols": jsonb_cols}
 
     @staticmethod

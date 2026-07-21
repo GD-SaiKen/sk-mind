@@ -174,7 +174,9 @@ class HttpxApiConnector(ApiConnector):
                 f"{self._auth_token_prefix} {token}"
             )
 
-        payload = {**(body or {}), "page": page, "pageSize": page_size}
+        # Detect pagination key naming: MES uses pageNum, generic APIs use page
+        page_key = "pageNum" if (body and "pageNum" in body) else "page"
+        payload = {**(body or {}), page_key: page, "pageSize": page_size}
 
         response = self._request_with_retry(
             method=method,
