@@ -220,20 +220,18 @@ class StageWriter:
 
         Uses a transaction to ensure atomicity:
           1. DROP raw table
-          2. ALTER staging RENAME TO raw
+          2. ALTER staging SET SCHEMA + RENAME TO raw
         """
-        schema, table = staging_full.split(".", 1)
         raw_schema, raw_table = raw_full.split(".", 1)
 
         self._db.execute(text(f"DROP TABLE IF EXISTS {raw_full} CASCADE"))
+        # Move staging to raw schema and rename in one step
         self._db.execute(
-            text(f"ALTER TABLE {staging_full} RENAME TO {raw_table}")
+            text(f"ALTER TABLE {staging_full} SET SCHEMA {raw_schema}")
         )
-        # Re-set schema if needed
-        if schema != raw_schema:
-            self._db.execute(
-                text(f"ALTER TABLE {raw_schema}.{raw_table} SET SCHEMA {raw_schema}")
-            )
+        self._db.execute(
+            text(f"ALTER TABLE {raw_schema}.{staging_full.split('.', 1)[1]} RENAME TO {raw_table}")
+        )
         self._db.commit()
         logger.info("Full-sync promoted: %s -> %s", staging_full, raw_full)
 

@@ -54,6 +54,19 @@ def _enqueue(task_id, batch_id, task_name, timeout=60):
     return job.id
 
 
+def _enqueue_api_sync(task_id, batch_id, config_path, timeout=7200):
+    """Enqueue API full sync task to RQ."""
+    from app.core.queue import redis_conn
+    from rq import Queue
+    queue = Queue("ingestion", connection=redis_conn)
+    job = queue.enqueue(
+        "app.modules.ingestion.tasks.sync_tasks.run_api_full_sync",
+        str(task_id), config_path,
+        job_timeout=timeout,
+    )
+    return job.id
+
+
 def _recent_start(config: dict | None, default_days: int = 30) -> datetime:
     """从任务 config 解析默认拉取起始时间。"""
     days = config.get("default_recent_days", default_days) if config else default_days
@@ -263,17 +276,32 @@ async def execute_task(
     )
     await dao.batch_insert(db, batch)
 
-    try:
-        job_id = _enqueue(task.id, batch.id, task.name)
-        batch.status = "running"
-        batch.started_at = datetime.now(timezone.utc)
-        await dao.batch_update(db, batch)
-        return _ok({"batchId": str(batch.id), "jobId": job_id}, msg="task submitted")
-    except Exception as e:
-        batch.status = "failed"
-        batch.error_summary = f"enqueue failed: {e}"
-        await dao.batch_update(db, batch)
-        raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
+    # 根据 access_method 选择同步引擎
+    access_method = task.config.get("access_method", "") if task.config else ""
+    if access_method == "api":
+        config_path = task.config.get("config_path", "")
+        if not config_path:
+            raise HTTPException(status_code=400, detail="config_path required for API sync")
+        try:
+            job_id = _enqueue_api_sync(task.id, batch.id, config_path)
+        except Exception as e:
+            batch.status = "failed"
+            batch.error_summary = f"enqueue failed: {e}"
+            await dao.batch_update(db, batch)
+            raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
+    else:
+        try:
+            job_id = _enqueue(task.id, batch.id, task.name)
+        except Exception as e:
+            batch.status = "failed"
+            batch.error_summary = f"enqueue failed: {e}"
+            await dao.batch_update(db, batch)
+            raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
+
+    batch.status = "running"
+    batch.started_at = datetime.now(timezone.utc)
+    await dao.batch_update(db, batch)
+    return _ok({"batchId": str(batch.id), "jobId": job_id}, msg="task submitted")
 
 
 @task_router.post("/batches/{batch_id}/retry")
