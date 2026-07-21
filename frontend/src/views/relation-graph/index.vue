@@ -17,7 +17,7 @@
             <span class="info-card-label">关系边总数</span>
             <span class="subtag">图谱边</span>
           </div>
-          <div class="val-row"><span class="val">{{ relationEdges.length }}</span><span class="badge green-bg">↑ 2 较昨日</span></div>
+          <div class="val-row"><span class="val">{{ totalEdges }}</span><span class="badge green-bg">全部关系边</span></div>
           <div class="foot">全部关系边</div>
         </el-card>
       </el-col>
@@ -42,7 +42,7 @@
             <span class="info-card-label">AI 生成</span>
             <span class="subtag">智能推理</span>
           </div>
-          <div class="val-row"><span class="val">3</span><span class="badge neutral">较昨日持平</span></div>
+          <div class="val-row"><span class="val">{{ aiGeneratedCount }}</span><span class="badge neutral">智能推理</span></div>
           <div class="foot">由 AI 自动生成</div>
         </el-card>
       </el-col>
@@ -101,21 +101,22 @@
             </el-select>
           </el-col>
         </el-row>
-        <el-button type="primary" class="query-btn" @click="showResult = true">
+        <el-button type="primary" class="query-btn" @click="handleQuery">
           <el-icon :size="16"><Search /></el-icon>
           查询关系路径
         </el-button>
       </div>
       <div v-if="showResult" class="result-section">
-        <h4>查询结果示例</h4>
-        <div class="result-path">
-          <el-tag effect="plain">客户 CUST-8856</el-tag>
-          <span class="arrow">→ 下单 →</span>
-          <el-tag effect="plain">订单 SO-2026-001234</el-tag>
-          <span class="arrow">→ 包含 →</span>
-          <el-tag effect="plain">产品 PROD-5678</el-tag>
-          <span class="result-meta">可信度: 93% · 已确认</span>
+        <h4>查询结果（{{ queryResult?.total ?? 0 }} 条）</h4>
+        <div v-if="queryResult && queryResult.edges.length > 0">
+          <div v-for="(edge, idx) in queryResult.edges" :key="idx" class="result-path">
+            <el-tag effect="plain">{{ (edge as Record<string, string>).sourceType || '-' }}</el-tag>
+            <span class="arrow">→ {{ (edge as Record<string, string>).transformType || '-' }} →</span>
+            <el-tag effect="plain">{{ (edge as Record<string, string>).targetType || '-' }}</el-tag>
+            <span class="result-meta">{{ (edge as Record<string, string>).sourceName || '-' }} → {{ (edge as Record<string, string>).targetName || '-' }}</span>
+          </div>
         </div>
+        <el-empty v-else description="未找到匹配的关系路径" :image-size="60" />
       </div>
     </el-card>
 
@@ -143,13 +144,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Connection, CircleCheckFilled, Link, WarningFilled } from '@element-plus/icons-vue'
 import TabNav from '@/components/tab-nav/index.vue'
 import type { TabItem } from '@/components/tab-nav/types'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
+import { lineageService } from '@/api/services/lineage'
+import type { LineageEdge, LineageStats } from '@/api/types'
 
 const activeTab = ref('关系边列表')
 const searchFilterItems: FilterItem[] = [{ key: 'keyword', placeholder: '搜索关系...', width: '260px' }]
@@ -158,38 +161,53 @@ const queryType = ref('customer')
 const queryId = ref('')
 const queryHops = ref('2')
 const showResult = ref(false)
+const queryResult = ref<{ edges: unknown[]; total: number } | null>(null)
 const tabs: TabItem[] = [
   { key: '关系边列表', label: '关系边列表' },
   { key: '关系查询', label: '关系查询' },
   { key: '待确认关系', label: '待确认关系' },
 ]
 
-interface Edge {
+interface EdgeVm {
   id: string; fromEntity: string; fromId: string; relation: string; toEntity: string; toId: string
   source: string; generatedBy: string; confidence: number; confirmed: boolean
 }
 
-const relationEdges: Edge[] = [
-  { id: '1', fromEntity: '客户', fromId: 'CUST-8856', relation: '下单', toEntity: '订单', toId: 'SO-2026-001234', source: '销售订单表', generatedBy: '数据映射', confidence: 0.95, confirmed: true },
-  { id: '2', fromEntity: '订单', fromId: 'SO-2026-001234', relation: '包含', toEntity: '产品', toId: 'PROD-5678', source: '订单明细表', generatedBy: '数据映射', confidence: 0.98, confirmed: true },
-  { id: '3', fromEntity: '客户', fromId: 'CUST-8856', relation: '可能关联', toEntity: '客户', toId: 'CUST-7745', source: 'AI推理', generatedBy: 'AI生成', confidence: 0.65, confirmed: false },
-]
+function mapEdgeToVm(e: LineageEdge): EdgeVm {
+  return {
+    id: e.id,
+    fromEntity: e.sourceType,
+    fromId: e.sourceId,
+    relation: e.transformType,
+    toEntity: e.targetType,
+    toId: e.targetId,
+    source: e.sourceName,
+    generatedBy: e.ingestionTaskId ? '数据映射' : '人工录入',
+    confidence: 0.95,
+    confirmed: e.transformType !== 'raw_import',
+  }
+}
 
-const filteredEdges = computed(() => relationEdges.filter(e => {
+const relationEdges = ref<LineageEdge[]>([])
+const stats = ref<LineageStats | null>(null)
+
+const filteredEdges = computed(() => relationEdges.value.filter(e => {
   const s = searchValues.value.keyword || ''
-  return !s || e.fromEntity.includes(s) || e.toEntity.includes(s) || e.relation.includes(s) || e.source.includes(s)
+  return !s || e.sourceName.includes(s) || e.targetName.includes(s) || e.transformType.includes(s) || (e.description || '').includes(s)
 }))
 
 function slicePage<T>(data: T[], page: number, size: number) { return data.slice((page - 1) * size, page * size) }
 
 const edgesPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
-const pagedEdges = computed(() => slicePage(filteredEdges.value, edgesPagination.page, edgesPagination.pageSize))
+const pagedEdges = computed(() => slicePage(filteredEdges.value.map(mapEdgeToVm), edgesPagination.page, edgesPagination.pageSize))
 watch([filteredEdges, () => edgesPagination.pageSize], () => { edgesPagination.total = filteredEdges.value.length })
 
-const pendingEdges = computed(() => relationEdges.filter(e => !e.confirmed))
-const pendingCount = computed(() => pendingEdges.value.length)
-const confirmedCount = computed(() => relationEdges.filter(e => e.confirmed).length)
-const confirmRate = computed(() => relationEdges.length > 0 ? Math.round(confirmedCount.value / relationEdges.length * 100) : 0)
+const pendingEdges = computed(() => relationEdges.value.filter(e => e.transformType === 'raw_import').map(mapEdgeToVm))
+const pendingCount = computed(() => stats.value?.pendingCount ?? 0)
+const confirmedCount = computed(() => stats.value?.confirmedCount ?? 0)
+const confirmRate = computed(() => stats.value?.confirmRate ?? 0)
+const totalEdges = computed(() => stats.value?.totalEdges ?? 0)
+const aiGeneratedCount = computed(() => stats.value?.aiGeneratedCount ?? 0)
 
 const edgesColumns: ColumnSchema[] = [
   { type: 'custom', prop: 'fromEntity', label: '源实体', minWidth: 160 },
@@ -201,6 +219,35 @@ const edgesColumns: ColumnSchema[] = [
   { type: 'tag', prop: 'confirmed', label: '状态', width: 90, formatter: (v: boolean) => v ? '已确认' : '待确认', tagMap: { true: 'success', false: 'warning' } } as ColumnSchema,
   { type: 'action', label: '操作', width: 80, buttons: [{ label: '', icon: Edit, onClick: () => {} }] },
 ]
+
+async function loadData() {
+  try {
+    const [edgesRes, statsRes] = await Promise.all([
+      lineageService.getEdges({ page: 1, pageSize: 100 }),
+      lineageService.getStats(),
+    ])
+    relationEdges.value = edgesRes.items
+    stats.value = statsRes
+  } catch {
+    // API load failed
+  }
+}
+
+async function handleQuery() {
+  showResult.value = true
+  try {
+    const res = await lineageService.queryLineage({
+      type: queryType.value,
+      id: queryId.value || undefined,
+      hops: Number(queryHops.value),
+    })
+    queryResult.value = res as { edges: unknown[]; total: number }
+  } catch {
+    queryResult.value = null
+  }
+}
+
+onMounted(() => { loadData() })
 </script>
 
 <style lang="scss" scoped>

@@ -299,16 +299,20 @@
 
 <script setup lang="ts">
 import type { ColumnSchema } from '@/components/crud'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { View, Edit } from '@element-plus/icons-vue'
 import PageHeader from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
+import { datasetService } from '@/api/services/dataset'
+import { qualityService } from '@/api/services/quality'
+import type { DatasetResponse, DatasetFieldResponse, QualityRun } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
 const id = route.params.id as string
 const activeTab = ref('fields')
+const loading = ref(false)
 
 interface DataTableDetail {
   id: string
@@ -324,18 +328,70 @@ interface DataTableDetail {
   updatedAt: string
 }
 
+interface FieldRow {
+  name: string
+  displayName: string
+  type: string
+  nullRate: number
+  sampleValue: string
+  description: string
+  sensitive: boolean
+  sensitiveType: string
+  isPk: boolean
+  agentEnabled: boolean
+  mappedField: string
+}
+
+function mapFieldToRow(f: DatasetFieldResponse): FieldRow {
+  let sensitive = false
+  let sensitiveType = ''
+  if (f.sensitivityLevel && f.sensitivityLevel !== 'internal' && f.sensitivityLevel !== 'public') {
+    sensitive = true
+    sensitiveType = f.sensitivityLevel === 'sensitive' ? 'PII' : f.sensitivityLevel
+  }
+  return {
+    name: f.fieldName,
+    displayName: f.fieldAlias || f.fieldName,
+    type: f.dataType + (f.fieldLength ? `(${f.fieldLength})` : ''),
+    nullRate: f.isNullable ? 0 : 0,
+    sampleValue: f.sampleValues || '-',
+    description: f.description || '',
+    sensitive,
+    sensitiveType,
+    isPk: f.ordinalPosition === 1,
+    agentEnabled: true,
+    mappedField: '',
+  }
+}
+
+interface QualityRecord {
+  rule: string
+  time: string
+  result: string
+  issues: number
+}
+
+function mapRunToQuality(r: QualityRun): QualityRecord {
+  return {
+    rule: r.ruleIds || '质量检查',
+    time: r.createdAt,
+    result: r.status === 'completed' ? '通过' : '执行中',
+    issues: r.totalIssues,
+  }
+}
+
 const table = ref<DataTableDetail>({
   id,
-  tableName: 'sap_sales_orders',
-  displayName: '销售订单表',
-  layer: 'Serving',
-  sourceName: 'SAP ERP',
-  taskName: 'SAP 销售订单同步',
-  recordCount: 1250,
-  fieldCount: 24,
+  tableName: '',
+  displayName: '',
+  layer: '',
+  sourceName: '',
+  taskName: '',
+  recordCount: 0,
+  fieldCount: 0,
   qualityStatus: 'pass',
-  agentEnabled: true,
-  updatedAt: '2026-07-10 09:30',
+  agentEnabled: false,
+  updatedAt: '',
 })
 
 const summary = computed(() => [
@@ -346,232 +402,97 @@ const summary = computed(() => [
 ])
 
 function layerTagType(layer: string) {
-  if (layer === 'Serving') return 'success'
-  if (layer === 'Clean') return 'warning'
+  if (layer === 'serving' || layer === 'Serving') return 'success'
+  if (layer === 'clean' || layer === 'Clean') return 'warning'
   return ''
 }
 
-const sampleColumns = ['order_id', 'customer_name', 'amount', 'order_date']
+function mapDatasetToDetail(ds: DatasetResponse): DataTableDetail {
+  return {
+    id: ds.id,
+    tableName: ds.code,
+    displayName: ds.name,
+    layer: ds.dataLayer,
+    sourceName: ds.dataSourceId || '-',
+    taskName: ds.generatedByTaskId || '-',
+    recordCount: ds.recordCount ?? 0,
+    fieldCount: ds.fieldCount ?? 0,
+    qualityStatus: 'pass',
+    agentEnabled: ds.isAgentAccessible,
+    updatedAt: ds.updatedAt,
+  }
+}
 
-const sampleData = [
-  {
-    order_id: 'SO-2026-001234',
-    customer_name: '先锋科技股份有限公司',
-    amount: '756,200',
-    order_date: '2026-06-28',
-  },
-  {
-    order_id: 'SO-2026-001235',
-    customer_name: '深圳创新材料集团',
-    amount: '623,500',
-    order_date: '2026-06-28',
-  },
-  {
-    order_id: 'SO-2026-001236',
-    customer_name: '上海精密仪器有限公司',
-    amount: '498,800',
-    order_date: '2026-06-29',
-  },
-]
+const sampleColumns = ref<string[]>([])
+const sampleData = ref<Record<string, unknown>[]>([])
 
-const fieldData = [
-  {
-    name: 'order_id',
-    displayName: '订单编号',
-    type: 'VARCHAR(32)',
-    nullRate: 0,
-    sampleValue: 'SO-2026-001234',
-    description: '销售订单唯一标识',
-    sensitive: false,
-    sensitiveType: '',
-    isPk: true,
-    agentEnabled: true,
-    mappedField: '订单.订单ID',
-  },
-  {
-    name: 'customer_name',
-    displayName: '客户名称',
-    type: 'VARCHAR(128)',
-    nullRate: 0,
-    sampleValue: '先锋科技股份有限公司',
-    description: '客户企业全称',
-    sensitive: false,
-    sensitiveType: '',
-    isPk: false,
-    agentEnabled: true,
-    mappedField: '客户.客户名称',
-  },
-  {
-    name: 'amount',
-    displayName: '订单金额',
-    type: 'DECIMAL(12,2)',
-    nullRate: 0.01,
-    sampleValue: '756200.00',
-    description: '订单总金额(元)',
-    sensitive: false,
-    sensitiveType: '',
-    isPk: false,
-    agentEnabled: true,
-    mappedField: '订单.订单金额',
-  },
-  {
-    name: 'order_date',
-    displayName: '下单日期',
-    type: 'DATE',
-    nullRate: 0.02,
-    sampleValue: '2026-06-28',
-    description: '客户下单日期',
-    sensitive: false,
-    sensitiveType: '',
-    isPk: false,
-    agentEnabled: true,
-    mappedField: '',
-  },
-  {
-    name: 'phone_number',
-    displayName: '联系电话',
-    type: 'VARCHAR(20)',
-    nullRate: 0.05,
-    sampleValue: '138****1234',
-    description: '客户联系电话',
-    sensitive: true,
-    sensitiveType: 'PII',
-    isPk: false,
-    agentEnabled: false,
-    mappedField: '',
-  },
-]
-
+const fieldData = ref<FieldRow[]>([])
 const fieldsPagination = reactive({
   page: 1,
   pageSize: 20,
-  total: fieldData.length,
+  total: 0,
   onPageChange() {},
   onSizeChange() {},
 })
 
-const pagedFields = computed(() => fieldData.slice(
+const pagedFields = computed(() => fieldData.value.slice(
   (fieldsPagination.page - 1) * fieldsPagination.pageSize,
   fieldsPagination.page * fieldsPagination.pageSize,
 ))
 
 const fieldColumns: ColumnSchema[] = [
-  {
-    type: 'text',
-    prop: 'name',
-    label: '字段名',
-    width: 160,
-    showOverflowTooltip: true,
-  },
-  {
-    type: 'text',
-    prop: 'displayName',
-    label: '显示名',
-    width: 120,
-  },
-  {
-    type: 'text',
-    prop: 'type',
-    label: '类型',
-    width: 130,
-  },
-  {
-    type: 'custom',
-    prop: 'nullRate',
-    label: '空值率',
-    width: 90,
-    align: 'center',
-  },
-  {
-    type: 'text',
-    prop: 'sampleValue',
-    label: '样例值',
-    minWidth: 130,
-    showOverflowTooltip: true,
-  },
-  {
-    type: 'text',
-    prop: 'description',
-    label: '字段说明',
-    minWidth: 150,
-    formatter: (v: string) => v || '-',
-  },
-  {
-    type: 'custom',
-    prop: 'sensitive',
-    label: '敏感',
-    width: 90,
-    align: 'center',
-  },
-  {
-    type: 'custom',
-    prop: 'isPk',
-    label: '主键',
-    width: 70,
-    align: 'center',
-  },
-  {
-    type: 'custom',
-    prop: 'agentEnabled',
-    label: 'Agent可用',
-    width: 90,
-    align: 'center',
-  },
-  {
-    type: 'custom',
-    prop: 'mapped',
-    label: '已映射',
-    width: 130,
-  },
+  { type: 'text', prop: 'name', label: '字段名', width: 160, showOverflowTooltip: true },
+  { type: 'text', prop: 'displayName', label: '显示名', width: 120 },
+  { type: 'text', prop: 'type', label: '类型', width: 130 },
+  { type: 'custom', prop: 'nullRate', label: '空值率', width: 90, align: 'center' },
+  { type: 'text', prop: 'sampleValue', label: '样例值', minWidth: 130, showOverflowTooltip: true },
+  { type: 'text', prop: 'description', label: '字段说明', minWidth: 150, formatter: (v: string) => v || '-' },
+  { type: 'custom', prop: 'sensitive', label: '敏感', width: 90, align: 'center' },
+  { type: 'custom', prop: 'isPk', label: '主键', width: 70, align: 'center' },
+  { type: 'custom', prop: 'agentEnabled', label: 'Agent可用', width: 90, align: 'center' },
+  { type: 'custom', prop: 'mapped', label: '已映射', width: 130 },
 ]
 
-const qualityRecords = [
-  {
-    rule: '主键完整性检查',
-    time: '2026-06-29 09:35',
-    result: '通过',
-    issues: 0,
-  },
-  {
-    rule: '订单ID唯一性检查',
-    time: '2026-06-29 09:35',
-    result: '通过',
-    issues: 0,
-  },
-]
+const qualityRecords = ref<QualityRecord[]>([])
 
 const semanticMappings = [
-  {
-    field: 'order_id',
-    semantic: '订单.订单ID',
-    confidence: '高',
-  },
-  {
-    field: 'customer_name',
-    semantic: '客户.客户名称',
-    confidence: '高',
-  },
-  {
-    field: 'amount',
-    semantic: '订单.订单金额',
-    confidence: '高',
-  },
+  { field: 'order_id', semantic: '订单.订单ID', confidence: '高' },
+  { field: 'customer_name', semantic: '客户.客户名称', confidence: '高' },
+  { field: 'amount', semantic: '订单.订单金额', confidence: '高' },
 ]
 
 const usageRecords = [
-  {
-    time: '2026-06-29 10:15',
-    user: '张三',
-    operation: 'Agent 查询',
-    detail: '查询上月销售额前10客户',
-  },
-  {
-    time: '2026-06-28 14:20',
-    user: '李四',
-    operation: '数据浏览',
-    detail: '浏览订单表样例数据',
-  },
+  { time: '2026-06-29 10:15', user: '张三', operation: 'Agent 查询', detail: '查询上月销售额前10客户' },
+  { time: '2026-06-28 14:20', user: '李四', operation: '数据浏览', detail: '浏览订单表样例数据' },
 ]
+
+async function loadData() {
+  if (!id) return
+  loading.value = true
+  try {
+    const ds = await datasetService.get(id)
+    table.value = mapDatasetToDetail(ds)
+
+    // Load fields
+    try {
+      const fieldsRes = await datasetService.getFields(id)
+      fieldData.value = fieldsRes.items.map(mapFieldToRow)
+      fieldsPagination.total = fieldsRes.total
+    } catch { /* fields optional */ }
+
+    // Load quality records
+    try {
+      const runsRes = await qualityService.getRuns({ page: 1, pageSize: 100 })
+      qualityRecords.value = runsRes.items.map(mapRunToQuality)
+    } catch { /* quality optional */ }
+  } catch {
+    // dataset load failed
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => { loadData() })
 </script>
 
 <style lang="scss" scoped>

@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { dataSourceService } from '@/api'
@@ -53,7 +53,7 @@ const router = useRouter()
 const formRef = ref<InstanceType<typeof Form>>()
 const saving = ref(false)
 
-const form = reactive<DataSourceFormData & { remark: string }>({
+const form = ref<DataSourceFormData & { remark: string }>({
   name: '',
   code: '',
   sourceType: 'erp',
@@ -157,14 +157,14 @@ async function doSave(): Promise<string | null> {
   try {
     saving.value = true
     const result = await dataSourceService.create({
-      name: form.name,
-      code: form.code,
-      sourceType: form.sourceType,
-      accessMethod: form.accessMethod,
-      description: form.description,
-      businessOwner: form.businessOwner,
-      techOwner: form.techOwner,
-      ownerDept: form.ownerDept,
+      name: form.value.name,
+      code: form.value.code,
+      sourceType: form.value.sourceType,
+      accessMethod: form.value.accessMethod,
+      description: form.value.description,
+      businessOwner: form.value.businessOwner,
+      techOwner: form.value.techOwner,
+      ownerDept: form.value.ownerDept,
     })
     ElMessage.success('数据源创建成功')
     return result?.id ?? null

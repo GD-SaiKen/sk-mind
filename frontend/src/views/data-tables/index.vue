@@ -49,18 +49,35 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { DataAnalysis, Edit, View, Setting, Connection } from '@element-plus/icons-vue'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
+import { datasetService } from '@/api/services/dataset'
+import type { DatasetResponse } from '@/api/types'
 
 const router = useRouter()
 
 interface DataTable {
   id: string; tableName: string; displayName: string; layer: string; sourceName: string
   recordCount: number; fieldCount: number; qualityStatus: string; agentEnabled: boolean; updatedAt: string
+}
+
+function mapDatasetToTable(ds: DatasetResponse): DataTable {
+  return {
+    id: ds.id,
+    tableName: ds.code,
+    displayName: ds.name,
+    layer: ds.dataLayer || '-',
+    sourceName: ds.dataSourceId || '-',
+    recordCount: ds.recordCount ?? 0,
+    fieldCount: ds.fieldCount ?? 0,
+    qualityStatus: 'pass',
+    agentEnabled: ds.isAgentAccessible,
+    updatedAt: ds.updatedAt,
+  }
 }
 
 const tableRef = ref()
@@ -72,7 +89,7 @@ const filterItems: FilterItem[] = [
   { key: 'source', type: 'select', placeholder: '来源', width: '130px',
     options: [{ label: '全部来源', value: '' }, { label: 'SAP ERP', value: 'SAP ERP' }, { label: 'Plataine MES', value: 'Plataine MES' }, { label: 'Excel', value: 'Excel' }, { label: 'ERP API', value: 'ERP API' }, { label: 'MES MQTT', value: 'MES MQTT' }] },
   { key: 'layer', type: 'select', placeholder: '层级', width: '120px',
-    options: [{ label: '全部层级', value: '' }, { label: 'Raw', value: 'Raw' }, { label: 'Clean', value: 'Clean' }, { label: 'Serving', value: 'Serving' }] },
+    options: [{ label: '全部层级', value: '' }, { label: 'Raw', value: 'raw' }, { label: 'Clean', value: 'clean' }, { label: 'Serving', value: 'serving' }] },
   { key: 'quality', type: 'select', placeholder: '质量状态', width: '120px',
     options: [{ label: '全部', value: '' }, { label: '正常', value: 'pass' }, { label: '警告', value: 'warning' }, { label: '异常', value: 'error' }] },
   { key: 'agent', type: 'select', placeholder: 'Agent 可用', width: '130px',
@@ -91,7 +108,11 @@ const pagination = reactive({
   onSizeChange(s: number) { pageSize.value = s; page.value = 1; load() },
 })
 
-function layerTagType(layer: string) { if (layer === 'Serving') return 'success'; if (layer === 'Clean') return 'warning'; return '' }
+function layerTagType(layer: string) {
+  if (layer === 'serving' || layer === 'Serving') return 'success'
+  if (layer === 'clean' || layer === 'Clean') return 'warning'
+  return ''
+}
 function qualityTagType(status: string) { if (status === 'pass') return 'success'; if (status === 'warning') return 'warning'; if (status === 'error') return 'danger'; return 'info' }
 function qualityLabel(status: string) { const map: Record<string, string> = { pass: '正常', warning: '警告', error: '异常' }; return map[status] ?? status }
 
@@ -115,21 +136,31 @@ const columns: ColumnSchema[] = [
   },
 ]
 
-const mockTables: DataTable[] = [
-  { id: '1', tableName: 'sap_sales_orders', displayName: '销售订单表', layer: 'Serving', sourceName: 'SAP ERP', recordCount: 1250, fieldCount: 24, qualityStatus: 'pass', agentEnabled: true, updatedAt: '2026-07-10 09:30' },
-  { id: '2', tableName: 'mes_production_records', displayName: 'MES 生产记录', layer: 'Clean', sourceName: 'Plataine MES', recordCount: 856, fieldCount: 18, qualityStatus: 'pass', agentEnabled: true, updatedAt: '2026-07-10 09:00' },
-  { id: '3', tableName: 'daily_attendance', displayName: '每日考勤表', layer: 'Raw', sourceName: 'Excel', recordCount: 320, fieldCount: 12, qualityStatus: 'warning', agentEnabled: true, updatedAt: '2026-07-09 18:00' },
-  { id: '4', tableName: 'supplier_master', displayName: '供应商主数据', layer: 'Serving', sourceName: 'ERP API', recordCount: 180, fieldCount: 15, qualityStatus: 'pass', agentEnabled: true, updatedAt: '2026-07-10 08:00' },
-  { id: '5', tableName: 'finance_monthly_report', displayName: '财务月报表', layer: 'Raw', sourceName: 'Excel', recordCount: 0, fieldCount: 32, qualityStatus: 'error', agentEnabled: false, updatedAt: '2026-07-01 12:00' },
-  { id: '6', tableName: 'mes_oee_data', displayName: '设备 OEE 数据', layer: 'Raw', sourceName: 'MES MQTT', recordCount: 5200, fieldCount: 10, qualityStatus: 'pass', agentEnabled: false, updatedAt: '2026-07-10 10:15' },
-]
-
 async function load() {
   loading.value = true
-  try { tables.value = mockTables; total.value = mockTables.length } finally { loading.value = false }
+  try {
+    const params: Record<string, unknown> = {
+      page: page.value,
+      pageSize: pageSize.value,
+    }
+    const fv = filterValues.value
+    if (fv.keyword) params.keyword = fv.keyword
+    if (fv.source) params.source = fv.source
+    if (fv.layer) params.dataLayer = fv.layer
+    if (fv.quality) params.quality = fv.quality
+    if (fv.agent) params.accessibile = fv.agent
+    const res = await datasetService.getList(params)
+    tables.value = res.items.map(mapDatasetToTable)
+    total.value = res.total
+  } catch {
+    tables.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
+  }
 }
 
-load()
+onMounted(() => { load() })
 </script>
 
 <style lang="scss" scoped>

@@ -29,7 +29,6 @@
           </div>
           <div class="info-card-value-row">
             <span class="info-card-value">{{ datasets.length }}</span>
-            <span class="badge blue">+1 本周</span>
           </div>
           <div class="info-card-foot">全部数据集</div>
         </el-card>
@@ -149,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   Search, Coin, CircleCheckFilled, WarningFilled, Lock, Service,
   OfficeBuilding, Clock, Grid, Collection,
@@ -157,6 +156,8 @@ import {
 import Index from '@/components/page-header/index.vue'
 import TabNav from '@/components/tab-nav/index.vue'
 import type { TabItem } from '@/components/tab-nav/types'
+import { datasetService } from '@/api/services/dataset'
+import type { DatasetResponse } from '@/api/types'
 
 const activeTab = ref('全部数据集')
 const searchTerm = ref('')
@@ -171,31 +172,48 @@ const tabs: TabItem[] = [
 ]
 
 interface Dataset {
-  id: number; name: string; displayName: string; source: string; layer: string
-  records: number; fields: number; quality: 'success' | 'warning' | 'error'; agentEnabled: boolean; updatedAt: string
+  id: string
+  name: string
+  displayName: string
+  source: string
+  layer: string
+  records: number
+  fields: number
+  quality: 'success' | 'warning' | 'error'
+  agentEnabled: boolean
+  updatedAt: string
 }
 
-const datasets: Dataset[] = [
-  { id: 1, name: 'sap_sales_orders', displayName: '销售订单表', source: 'SAP ERP', layer: 'Raw', records: 1250, fields: 24, quality: 'success', agentEnabled: true, updatedAt: '2026-07-10 09:30' },
-  { id: 2, name: 'mes_production_records', displayName: 'MES 生产记录', source: 'Plataine MES', layer: 'Serving', records: 856, fields: 18, quality: 'success', agentEnabled: true, updatedAt: '2026-07-10 09:00' },
-  { id: 3, name: 'daily_attendance', displayName: '每日考勤表', source: 'Excel', layer: 'Raw', records: 320, fields: 12, quality: 'warning', agentEnabled: true, updatedAt: '2026-07-09 18:00' },
-  { id: 4, name: 'supplier_master', displayName: '供应商主数据', source: 'ERP API', layer: 'Serving', records: 180, fields: 15, quality: 'success', agentEnabled: true, updatedAt: '2026-07-10 08:00' },
-  { id: 5, name: 'finance_monthly_report', displayName: '财务月报表', source: 'Excel', layer: 'Raw', records: 0, fields: 32, quality: 'error', agentEnabled: true, updatedAt: '2026-07-01 12:00' },
-  { id: 6, name: 'mes_oee_data', displayName: '设备 OEE 数据', source: 'MES MQTT', layer: 'Raw', records: 5200, fields: 10, quality: 'success', agentEnabled: false, updatedAt: '2026-07-10 10:15' },
-]
+function mapToDataset(ds: DatasetResponse): Dataset {
+  let quality: 'success' | 'warning' | 'error' = 'success'
+  return {
+    id: ds.id,
+    name: ds.code,
+    displayName: ds.name,
+    source: ds.businessDomain || '-',
+    layer: ds.dataLayer || 'Raw',
+    records: ds.recordCount ?? 0,
+    fields: ds.fieldCount ?? 0,
+    quality,
+    agentEnabled: ds.isAgentAccessible,
+    updatedAt: ds.updatedAt,
+  }
+}
+
+const datasets = ref<Dataset[]>([])
 
 const filteredDatasets = computed(() =>
-  datasets.filter((ds) => {
+  datasets.value.filter((ds) => {
     const matchSearch = ds.displayName.toLowerCase().includes(searchTerm.value.toLowerCase()) || ds.name.toLowerCase().includes(searchTerm.value.toLowerCase())
     const matchQuality = !qualityFilter.value || ds.quality === qualityFilter.value
     return matchSearch && matchQuality
   }),
 )
 
-const normalCount = computed(() => datasets.filter((d) => d.quality === 'success').length)
-const warningCount = computed(() => datasets.filter((d) => d.quality === 'warning').length)
-const notAgentCount = computed(() => datasets.filter((d) => !d.agentEnabled).length)
-const healthRate = computed(() => datasets.length > 0 ? Math.round((normalCount.value / datasets.length) * 100) : 0)
+const normalCount = computed(() => datasets.value.filter((d) => d.quality === 'success').length)
+const warningCount = computed(() => datasets.value.filter((d) => d.quality === 'warning').length)
+const notAgentCount = computed(() => datasets.value.filter((d) => !d.agentEnabled).length)
+const healthRate = computed(() => datasets.value.length > 0 ? Math.round((normalCount.value / datasets.value.length) * 100) : 0)
 
 const fieldCatalogData = [
   { fieldName: 'order_id', displayName: '订单编号', dataset: '销售订单表', meaning: '销售订单唯一标识', type: 'VARCHAR(32)', sensitive: false, sensitiveType: '', quality: 'pass', semanticMapping: '订单.订单ID' },
@@ -204,6 +222,17 @@ const fieldCatalogData = [
   { fieldName: 'phone_number', displayName: '联系电话', dataset: '客户信息表', meaning: '客户主要联系电话', type: 'VARCHAR(20)', sensitive: true, sensitiveType: 'PII', quality: 'pass', semanticMapping: '' },
   { fieldName: 'check_in_time', displayName: '签到时间', dataset: '每日考勤表', meaning: '员工上班签到时间', type: 'DATETIME', sensitive: false, sensitiveType: '', quality: 'warning', semanticMapping: '' },
 ]
+
+async function loadDatasets() {
+  try {
+    const res = await datasetService.getList({ page: 1, pageSize: 100 })
+    datasets.value = res.items.map(mapToDataset)
+  } catch {
+    datasets.value = []
+  }
+}
+
+onMounted(() => { loadDatasets() })
 </script>
 
 <style lang="scss" scoped>

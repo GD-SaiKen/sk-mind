@@ -88,28 +88,28 @@
     </Crud>
 
     <div v-if="activeTab === 'issues'" class="issue-list">
-      <div v-for="issue in mockIssues" :key="issue.id" class="issue-card">
+      <el-empty v-if="issueList.length === 0" description="暂无质量问题" :image-size="60" />
+      <div v-for="issue in issueList" :key="issue.id" class="issue-card">
         <div class="issue-header">
           <div class="issue-title-row">
             <el-icon :size="18" class="text-warning"><WarningFilled /></el-icon>
             <div class="issue-info">
-              <div>{{ issue.dataset }} · {{ issue.field }}</div>
-              <div class="issue-type">{{ issue.type }}</div>
+              <div>{{ issue.datasetId || '-' }} · {{ issue.fieldId || '-' }}</div>
+              <div class="issue-type">{{ issue.issueType }}</div>
             </div>
           </div>
-          <el-tag type="warning" effect="plain">{{ issue.status }}</el-tag>
+          <el-tag :type="issue.status === 'open' ? 'warning' : issue.status === 'resolved' ? 'success' : 'info'" effect="plain">{{ issue.status }}</el-tag>
         </div>
         <div class="issue-meta-row">
-          <div class="issue-meta-item"><span class="meta-label">问题数量</span><span class="meta-value">{{ issue.count }} 条</span></div>
-          <div class="issue-meta-item"><span class="meta-label">样例值</span><span class="meta-value mono">{{ issue.sample }}</span></div>
-          <div class="issue-meta-item"><span class="meta-label">影响范围</span><span class="meta-value">{{ issue.impact }}</span></div>
-          <div class="issue-meta-item"><span class="meta-label">负责人</span><span class="meta-value">{{ issue.owner }}</span></div>
+          <div class="issue-meta-item"><span class="meta-label">影响记录数</span><span class="meta-value">{{ issue.affectedRecordCount ?? '-' }} 条</span></div>
+          <div class="issue-meta-item"><span class="meta-label">样例值</span><span class="meta-value mono">{{ issue.sampleValue || '-' }}</span></div>
+          <div class="issue-meta-item"><span class="meta-label">严重级别</span><span class="meta-value">{{ issue.severity }}</span></div>
+          <div class="issue-meta-item"><span class="meta-label">问题消息</span><span class="meta-value">{{ issue.issueMessage }}</span></div>
         </div>
         <div class="issue-actions">
           <el-button plain>查看</el-button>
-          <el-button plain>分派</el-button>
-          <el-button plain>标记为可接受</el-button>
-          <el-button plain type="danger">关闭</el-button>
+          <el-button plain>标记为已解决</el-button>
+          <el-button plain>忽略</el-button>
         </div>
       </div>
     </div>
@@ -117,13 +117,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Search, Plus, CircleCheckFilled, WarningFilled, CircleCloseFilled, Setting, VideoPlay, Edit, View } from '@element-plus/icons-vue'
 import TabNav from '@/components/tab-nav/index.vue'
 import type { TabItem } from '@/components/tab-nav/types'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
+import { qualityService } from '@/api/services/quality'
+import type { QualityRule as ApiQualityRule, QualityRun as ApiQualityRun, QualityIssue, QualityStats } from '@/api/types'
 
 const activeTab = ref('rules')
 const filterValues = ref<Record<string, any>>({})
@@ -135,48 +137,58 @@ const rulesFilterItems: FilterItem[] = [
 
 const recordsFilterItems: FilterItem[] = [{ key: 'keyword', placeholder: '搜索...', width: '260px' }]
 
-const tabs: TabItem[] = [{ key: 'rules', label: '质量规则' }, { key: 'records', label: '执行记录' }, { key: 'issues', label: '问题清单', count: 5 }]
+const tabs: TabItem[] = [{ key: 'rules', label: '质量规则' }, { key: 'records', label: '执行记录' }, { key: 'issues', label: '问题清单', count: 0 }]
 
-interface QualityRule { id: string; name: string; type: string; dataset: string; status: 'success' | 'warning' | 'error'; lastRun: string }
-const qualityRules: QualityRule[] = [
-  { id: '1', name: '主键完整性检查', type: '完整性', dataset: '销售订单表', status: 'success', lastRun: '2026-06-29 09:35' },
-  { id: '2', name: '订单ID唯一性检查', type: '唯一性', dataset: '销售订单表', status: 'success', lastRun: '2026-06-29 09:35' },
-  { id: '3', name: '考勤时间空值检查', type: '完整性', dataset: '每日考勤表', status: 'warning', lastRun: '2026-06-28 18:05' },
-  { id: '4', name: '金额格式检查', type: '格式', dataset: '财务月报表', status: 'error', lastRun: '2026-06-27 14:05' },
-]
+// Rule data from API
+const qualityRules = ref<ApiQualityRule[]>([])
+const executionRecords = ref<ApiQualityRun[]>([])
+const issueList = ref<QualityIssue[]>([])
+const stats = ref<QualityStats | null>(null)
 
-interface ExecRecord { id: string; rule: string; dataset: string; time: string; result: string; issues: number }
-const executionRecords: ExecRecord[] = [
-  { id: '1', rule: '主键完整性检查', dataset: '销售订单表', time: '2026-06-29 09:35', result: '通过', issues: 0 },
-  { id: '2', rule: '考勤时间空值检查', dataset: '每日考勤表', time: '2026-06-28 18:05', result: '发现问题', issues: 5 },
-  { id: '3', rule: '金额格式检查', dataset: '财务月报表', time: '2026-06-27 14:05', result: '发现问题', issues: 12 },
-]
+const issueCount = computed(() => stats.value?.openIssues ?? 0)
 
-const mockIssues = [
-  { id: 1, dataset: '每日考勤表', field: 'check_in_time', type: '空值', status: '未处理', count: 5, sample: 'NULL', impact: '考勤统计', owner: '李敏' },
-  { id: 2, dataset: '财务月报表', field: 'amount', type: '格式异常', status: '处理中', count: 12, sample: '"¥12,34"', impact: '财务报表', owner: '吴婷' },
-  { id: 3, dataset: '供应商主数据', field: 'contact_name', type: '重复', status: '已确认', count: 3, sample: '重复: 3 条', impact: '供应商分析', owner: '周磊' },
-  { id: 4, dataset: '生产记录表', field: 'output_qty', type: '范围异常', status: '已修复', count: 1, sample: '999999', impact: '产量统计', owner: '张涛' },
-  { id: 5, dataset: '销售订单表', field: 'order_date', type: '格式异常', status: '可接受', count: 2, sample: '"06-29-2026"', impact: '订单日期解析', owner: '刘伟' },
-]
+interface QualityRuleVm { id: string; name: string; type: string; dataset: string; status: 'success' | 'warning' | 'error'; lastRun: string }
+interface ExecRecordVm { id: string; rule: string; dataset: string; time: string; result: string; issues: number }
 
-const filteredRules = computed(() => qualityRules.filter(r => { const matchSearch = r.name.includes(filterValues.value.keyword || '') || r.dataset.includes(filterValues.value.keyword || ''); const matchType = !filterValues.value.type || r.type === filterValues.value.type; return matchSearch && matchType }))
-const filteredRecords = computed(() => executionRecords.filter(r => r.rule.includes(filterValues.value.keyword || '') || r.dataset.includes(filterValues.value.keyword || '')))
+function mapRuleToVm(r: ApiQualityRule): QualityRuleVm {
+  const typeMap: Record<string, string> = { completeness: '完整性', uniqueness: '唯一性', format: '格式', not_null: '完整性', unique: '唯一性', range: '范围', enum: '枚举', freshness: '时效性' }
+  return {
+    id: r.id,
+    name: r.name,
+    type: typeMap[r.ruleType] || r.ruleType,
+    dataset: r.datasetId || '-',
+    status: r.severity === 'error' || r.severity === 'critical' ? 'error' : r.severity === 'warning' ? 'warning' : 'success',
+    lastRun: r.updatedAt,
+  }
+}
+
+function mapRunToVm(r: ApiQualityRun): ExecRecordVm {
+  return {
+    id: r.id,
+    rule: r.ruleIds || '质量检查',
+    dataset: r.datasetIds || '-',
+    time: r.createdAt,
+    result: r.status === 'completed' ? '通过' : r.failedRules > 0 ? '发现问题' : '执行中',
+    issues: r.totalIssues,
+  }
+}
+
+const filteredRules = computed(() => qualityRules.value.filter(r => { const matchSearch = r.name.includes(filterValues.value.keyword || '') || (r.datasetId || '').includes(filterValues.value.keyword || ''); const matchType = !filterValues.value.type || r.ruleType === filterValues.value.type; return matchSearch && matchType }))
+const filteredRecords = computed(() => executionRecords.value.filter(r => (r.ruleIds || '').includes(filterValues.value.keyword || '') || (r.datasetIds || '').includes(filterValues.value.keyword || '')))
 
 function slicePage<T>(data: T[], page: number, size: number) { return data.slice((page - 1) * size, page * size) }
 
 const rulesPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
-const pagedRules = computed(() => slicePage(filteredRules.value, rulesPagination.page, rulesPagination.pageSize))
+const pagedRules = computed(() => slicePage(filteredRules.value.map(mapRuleToVm), rulesPagination.page, rulesPagination.pageSize))
 watch([filteredRules, () => rulesPagination.pageSize], () => { rulesPagination.total = filteredRules.value.length; if (rulesPagination.page > 1 && (rulesPagination.page - 1) * rulesPagination.pageSize >= rulesPagination.total) { rulesPagination.page = 1 } })
 
 const recordsPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
-const pagedRecords = computed(() => slicePage(filteredRecords.value, recordsPagination.page, recordsPagination.pageSize))
+const pagedRecords = computed(() => slicePage(filteredRecords.value.map(mapRunToVm), recordsPagination.page, recordsPagination.pageSize))
 watch([filteredRecords, () => recordsPagination.pageSize], () => { recordsPagination.total = filteredRecords.value.length; if (recordsPagination.page > 1 && (recordsPagination.page - 1) * recordsPagination.pageSize >= recordsPagination.total) { recordsPagination.page = 1 } })
 
-const throughCount = computed(() => qualityRules.filter(r => r.status === 'success').length)
-const issueCount = 2
-const errorCount = computed(() => qualityRules.filter(r => r.status === 'error').length)
-const passRate = computed(() => qualityRules.length > 0 ? Math.round((throughCount.value / qualityRules.length) * 100) : 0)
+const throughCount = computed(() => qualityRules.value.filter(r => r.severity !== 'warning' && r.severity !== 'error' && r.severity !== 'critical').length)
+const errorCount = computed(() => qualityRules.value.filter(r => r.severity === 'error' || r.severity === 'critical').length)
+const passRate = computed(() => qualityRules.value.length > 0 ? Math.round((throughCount.value / qualityRules.value.length) * 100) : 0)
 
 const rulesColumns: ColumnSchema[] = [
   { type: 'text', prop: 'name', label: '规则名称', minWidth: 180 },
@@ -195,6 +207,25 @@ const recordsColumns: ColumnSchema[] = [
   { type: 'custom', prop: 'issues', label: '发现问题', width: 100, align: 'center' },
   { type: 'action', label: '操作', width: 100, buttons: [{ label: '查看详情', icon: View, onClick: () => {} }] },
 ]
+
+async function loadData() {
+  try {
+    const [rulesRes, runsRes, issuesRes, statsRes] = await Promise.all([
+      qualityService.getRules({ page: 1, pageSize: 100 }),
+      qualityService.getRuns({ page: 1, pageSize: 100 }),
+      qualityService.getIssues({ page: 1, pageSize: 100 }),
+      qualityService.getStats(),
+    ])
+    qualityRules.value = rulesRes.items
+    executionRecords.value = runsRes.items
+    issueList.value = issuesRes.items
+    stats.value = statsRes
+  } catch {
+    // API load failed, keep empty state
+  }
+}
+
+onMounted(() => { loadData() })
 </script>
 
 <style lang="scss" scoped>

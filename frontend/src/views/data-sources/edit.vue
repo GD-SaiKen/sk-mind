@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { dataSourceService } from '@/api'
@@ -67,7 +67,7 @@ const saving = ref(false)
 const source = ref<DataSource | null>(null)
 const originalName = ref('')
 
-const form = reactive<DataSourceFormData & { remark: string }>({
+const form = ref<DataSourceFormData & { remark: string }>({
   name: '',
   code: '',
   sourceType: 'erp',
@@ -160,15 +160,15 @@ onMounted(async () => {
     const ds: DataSource = await dataSourceService.get(id)
     source.value = ds
     originalName.value = ds.name ?? ''
-    form.name = ds.name ?? ''
-    form.code = ds.code ?? ''
-    form.sourceType = ds.sourceType ?? 'erp'
-    form.accessMethod = ds.accessMethod ?? 'db_sync'
-    form.description = ds.description ?? ''
-    form.businessOwner = ds.businessOwner ?? ''
-    form.techOwner = ds.techOwner ?? ''
-    form.ownerDept = ds.ownerDept ?? ''
-    form.remark = ''
+    form.value.name = ds.name ?? ''
+    form.value.code = ds.code ?? ''
+    form.value.sourceType = ds.sourceType ?? 'erp'
+    form.value.accessMethod = ds.accessMethod ?? 'db_sync'
+    form.value.description = ds.description ?? ''
+    form.value.businessOwner = ds.businessOwner ?? ''
+    form.value.techOwner = ds.techOwner ?? ''
+    form.value.ownerDept = ds.ownerDept ?? ''
+    form.value.remark = ''
   } finally {
     loading.value = false
   }
@@ -180,13 +180,13 @@ async function handleSave() {
   saving.value = true
   try {
     await dataSourceService.update(id, {
-      name: form.name,
-      sourceType: form.sourceType,
-      accessMethod: form.accessMethod,
-      description: form.description,
-      businessOwner: form.businessOwner,
-      techOwner: form.techOwner,
-      ownerDept: form.ownerDept,
+      name: form.value.name,
+      sourceType: form.value.sourceType,
+      accessMethod: form.value.accessMethod,
+      description: form.value.description,
+      businessOwner: form.value.businessOwner,
+      techOwner: form.value.techOwner,
+      ownerDept: form.value.ownerDept,
     })
     ElMessage.success('已保存')
     router.replace(`/data-sources/${id}`)
