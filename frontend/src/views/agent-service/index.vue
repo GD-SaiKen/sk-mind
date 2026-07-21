@@ -6,11 +6,8 @@
       description="通过自然语言查询已授权的企业数据，查看数据来源、质量状态和调用记录。"
     />
 
-    <div class="tab-bar">
-      <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">
-        {{ tab }}
-      </button>
-    </div>
+    <TabNav v-model="activeTab" :tabs="tabs" />
+
 
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -116,6 +113,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Edit, Service, CircleCheckFilled, Setting, Timer, Promotion, View } from '@element-plus/icons-vue'
+import TabNav from '@/components/tab-nav/index.vue'
+import type { TabItem } from '@/components/tab-nav/types'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
@@ -125,7 +124,11 @@ const searchFilterItems: FilterItem[] = [{ key: 'keyword', placeholder: '搜索.
 const searchValues = ref<Record<string, any>>({})
 const query = ref('')
 const showAnswer = ref(false)
-const tabs = ['Agent查询', '工具管理', '调用记录']
+const tabs: TabItem[] = [
+  { key: 'Agent查询', label: 'Agent查询' },
+  { key: '工具管理', label: '工具管理' },
+  { key: '调用记录', label: '调用记录' },
+]
 
 const suggestions = ['上个月销售额最高的前10个客户是谁?', '生产线A的平均良品率是多少?', '本周有哪些订单状态异常?']
 
@@ -186,7 +189,6 @@ function submitQuery() { if (query.value.trim()) showAnswer.value = true }
 </script>
 
 <style lang="scss" scoped>
-.tab-bar { display: flex; gap: 0; border-bottom: 1px solid $color-border; }
 .tab-btn { padding: 10px 16px; border: none; background: none; font-size: $font-size-base; color: $color-text-secondary; cursor: pointer; border-bottom: 2px solid transparent; &:hover { color: $color-text-primary; } &.active { color: $color-primary; border-bottom-color: $color-primary; font-weight: $font-weight-medium; } }
 .stat-row { margin: 0 !important; :deep(.el-col) { padding-left: 8px !important; padding-right: 8px !important; } :deep(.el-col:first-child) { padding-left: 0 !important; } :deep(.el-col:last-child) { padding-right: 0 !important; } }
 .info-card { :deep(.el-card__body) { display: flex; flex-direction: column; gap: 8px; padding: 20px; } }

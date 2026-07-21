@@ -12,7 +12,8 @@
         v-for="card in statusCards"
         :key="card.label"
         shadow="hover"
-        class="stat-card"
+        class="stat-card clickable"
+        @click="router.push(card.linkTo)"
       >
         <div class="card-header-row">
           <div class="card-title-wrap">
@@ -47,7 +48,7 @@
     <!-- 待处理事项 -->
     <h2 class="section-title">待处理事项</h2>
     <div class="pending-list">
-      <div v-for="item in pendingItems" :key="item.id" :class="['pending-item', item.level]">
+      <div v-for="item in pendingItems" :key="item.id" :class="['pending-item', item.level]" @click="router.push(item.linkTo)" style="cursor: pointer;">
         <div class="pending-item-left">
           <el-icon :size="18" :class="item.level === 'error' ? 'text-danger' : 'text-warning'">
             <component :is="item.icon" />
@@ -66,7 +67,7 @@
     <!-- 最近接入任务 -->
     <h2 class="section-title">最近接入任务</h2>
     <div class="recent-list">
-      <div v-for="task in recentTasks" :key="task.id" class="recent-item">
+      <div v-for="task in recentTasks" :key="task.id" class="recent-item" @click="router.push(task.linkTo)" style="cursor: pointer;">
         <div class="recent-item-left">
           <el-icon :size="18" :class="task.status === 'success' ? 'text-success' : 'text-warning'">
             <component :is="task.icon" />
@@ -110,12 +111,15 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   ArrowRight, Coin, Upload, Collection, CircleCheck,
   Cpu, Service, WarningFilled, Clock, CircleCheckFilled, Setting,
 } from '@element-plus/icons-vue'
 import Index from '@/components/page-header/index.vue'
 import { api } from '@/api'
+
+const router = useRouter()
 
 const statusCards = [
   {
@@ -183,17 +187,17 @@ const quickActions = [
 ]
 
 const pendingItems = [
-  { id: 1, level: 'error', title: '接入任务失败: 财务月报导入', desc: 'Excel 解析失败，12 个文件无法导入', tag: '紧急', icon: WarningFilled },
-  { id: 2, level: 'warning', title: '待确认质量问题', desc: '每日考勤表存在 5 条空值记录', tag: '待处理', icon: Clock },
-  { id: 3, level: 'warning', title: '待确认字段说明', desc: '3 张数据表存在未填写的字段说明', tag: '待处理', icon: Clock },
-  { id: 4, level: 'warning', title: '待确认关系边', desc: 'AI 生成了 1 条新的实体关系待审核', tag: '待处理', icon: Clock },
-  { id: 5, level: 'error', title: 'Excel 解析失败: 供应商导入', desc: '模板字段不匹配，3 个文件解析失败', tag: '紧急', icon: WarningFilled },
+  { id: 1, level: 'error', title: '接入任务失败: 财务月报导入', desc: 'Excel 解析失败，12 个文件无法导入', tag: '紧急', icon: WarningFilled, linkTo: '/ingestion' },
+  { id: 2, level: 'warning', title: '待确认质量问题', desc: '每日考勤表存在 5 条空值记录', tag: '待处理', icon: Clock, linkTo: '/quality' },
+  { id: 3, level: 'warning', title: '待确认字段说明', desc: '3 张数据表存在未填写的字段说明', tag: '待处理', icon: Clock, linkTo: '/tables' },
+  { id: 4, level: 'warning', title: '待确认关系边', desc: 'AI 生成了 1 条新的实体关系待审核', tag: '待处理', icon: Clock, linkTo: '/graph' },
+  { id: 5, level: 'error', title: 'Excel 解析失败: 供应商导入', desc: '模板字段不匹配，3 个文件解析失败', tag: '紧急', icon: WarningFilled, linkTo: '/ingestion' },
 ]
 
 const recentTasks = [
-  { id: 1, title: 'SAP 销售订单同步', time: '2026-06-29 09:30', desc: '成功导入 1,250 条记录', status: 'success', tag: '成功', tagType: 'success', icon: CircleCheckFilled },
-  { id: 2, title: 'MES 生产记录拉取', time: '2026-06-29 09:00', desc: '成功导入 856 条记录', status: 'success', tag: '成功', tagType: 'success', icon: CircleCheckFilled },
-  { id: 3, title: '考勤数据日同步', time: '2026-06-28 18:00', desc: '成功 320 条，失败 5 条', status: 'warning', tag: '部分成功', tagType: 'warning', icon: WarningFilled },
+  { id: 1, title: 'SAP 销售订单同步', time: '2026-06-29 09:30', desc: '成功导入 1,250 条记录', status: 'success', tag: '成功', tagType: 'success', icon: CircleCheckFilled, linkTo: '/ingestion/1' },
+  { id: 2, title: 'MES 生产记录拉取', time: '2026-06-29 09:00', desc: '成功导入 856 条记录', status: 'success', tag: '成功', tagType: 'success', icon: CircleCheckFilled, linkTo: '/ingestion/2' },
+  { id: 3, title: '考勤数据日同步', time: '2026-06-28 18:00', desc: '成功 320 条，失败 5 条', status: 'warning', tag: '部分成功', tagType: 'warning', icon: WarningFilled, linkTo: '/ingestion/3' },
 ]
 
 const healthStatus = ref('检查中...')
@@ -226,6 +230,7 @@ onMounted(() => { checkHealth() })
 
 .stat-card {
   :deep(.el-card__body) { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
+  &.clickable { cursor: pointer; }
 }
 
 .card-header-row { display: flex; align-items: center; justify-content: space-between; }

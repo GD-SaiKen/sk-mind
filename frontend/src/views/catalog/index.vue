@@ -6,11 +6,8 @@
       description="以业务视角浏览平台中的数据集和字段，了解数据来源、质量状态和可用性。"
     />
 
-    <div class="tab-bar">
-      <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">
-        {{ tab }}
-      </button>
-    </div>
+    <TabNav v-model="activeTab" :tabs="tabs" />
+
 
     <div class="toolbar">
       <el-input v-model="searchTerm" placeholder="搜索数据集、字段、业务含义..." :prefix-icon="Search" class="search-input" clearable />
@@ -158,11 +155,20 @@ import {
   OfficeBuilding, Clock, Grid, Collection,
 } from '@element-plus/icons-vue'
 import Index from '@/components/page-header/index.vue'
+import TabNav from '@/components/tab-nav/index.vue'
+import type { TabItem } from '@/components/tab-nav/types'
 
 const activeTab = ref('全部数据集')
 const searchTerm = ref('')
 const qualityFilter = ref('')
-const tabs = ['全部数据集', '财务数据', '销售数据', '生产数据', '人事数据', '字段目录']
+const tabs: TabItem[] = [
+  { key: '全部数据集', label: '全部数据集' },
+  { key: '财务数据', label: '财务数据' },
+  { key: '销售数据', label: '销售数据' },
+  { key: '生产数据', label: '生产数据' },
+  { key: '人事数据', label: '人事数据' },
+  { key: '字段目录', label: '字段目录' },
+]
 
 interface Dataset {
   id: number; name: string; displayName: string; source: string; layer: string

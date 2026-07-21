@@ -87,7 +87,9 @@ const tableRef = ref()
 const tasks = ref<IngestionTask[]>([])
 const loading = ref(false)
 const filterItems: FilterItem[] = [
-  { key: 'keyword', placeholder: '搜索任务名称...', width: '260px' },
+  { key: 'keyword', placeholder: '搜索任务名称...', width: '240px' },
+  { key: 'sourceId', type: 'select', placeholder: '数据源', width: '130px',
+    options: [{ label: '全部', value: '' }, { label: 'SAP ERP', value: 'sap' }, { label: 'Plataine MES', value: 'mes' }, { label: 'Excel', value: 'excel' }] },
   { key: 'status', type: 'select', placeholder: '状态', width: '110px',
     options: [
       { label: '全部', value: '' }, { label: '正常', value: 'active' },
@@ -118,7 +120,7 @@ const statusMap: Record<string, { text: string; type: '' | 'success' | 'warning'
 const columns: ColumnSchema[] = [
   { type: 'custom', prop: 'name', label: '任务名称', minWidth: 180 },
   { type: 'text', prop: 'code', label: '编码', width: 150 },
-  { type: 'text', prop: 'scheduleType', label: '调度', width: 80 },
+  { type: 'text', prop: 'scheduleType', label: '调度频率', width: 110, formatter: (v: string) => v === 'cron' ? '定时' : v === 'manual' ? '手动触发' : v === 'interval' ? '每小时' : v || '手动触发' },
   { type: 'custom', prop: 'lastSyncAt', label: '最近同步', width: 170 },
   { type: 'tag', prop: 'syncMode', label: '模式', width: 70, formatter: (v: string) => v === 'incremental' ? '增量' : '全量', tagMap: { incremental: '', '': 'info' } },
   { type: 'tag', prop: 'status', label: '状态', width: 90, formatter: (v: string) => statusMap[v]?.text ?? v, tagMap: { active: 'success', draft: 'info', paused: 'warning', disabled: 'danger' } },

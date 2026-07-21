@@ -6,12 +6,8 @@
       description="配置和执行数据质量规则，查看执行记录，跟踪和处理质量问题。"
     />
 
-    <div class="tab-bar">
-      <button v-for="tab in tabs" :key="tab.key" class="tab-btn" :class="{ active: activeTab === tab.key }" @click="activeTab = tab.key">
-        {{ tab.label }}
-        <span v-if="tab.count" class="tab-count">{{ tab.count }}</span>
-      </button>
-    </div>
+    <TabNav v-model="activeTab" :tabs="tabs" />
+
 
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -123,6 +119,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, CircleCheckFilled, WarningFilled, CircleCloseFilled, Setting, VideoPlay, Edit, View } from '@element-plus/icons-vue'
+import TabNav from '@/components/tab-nav/index.vue'
+import type { TabItem } from '@/components/tab-nav/types'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
@@ -137,7 +135,7 @@ const rulesFilterItems: FilterItem[] = [
 
 const recordsFilterItems: FilterItem[] = [{ key: 'keyword', placeholder: '搜索...', width: '260px' }]
 
-const tabs = [{ key: 'rules', label: '质量规则' }, { key: 'records', label: '执行记录' }, { key: 'issues', label: '问题清单', count: 5 }]
+const tabs: TabItem[] = [{ key: 'rules', label: '质量规则' }, { key: 'records', label: '执行记录' }, { key: 'issues', label: '问题清单', count: 5 }]
 
 interface QualityRule { id: string; name: string; type: string; dataset: string; status: 'success' | 'warning' | 'error'; lastRun: string }
 const qualityRules: QualityRule[] = [
@@ -202,7 +200,6 @@ const recordsColumns: ColumnSchema[] = [
 <style lang="scss" scoped>
 .tab-bar { display: flex; gap: 0; border-bottom: 1px solid $color-border; margin-bottom: 0; }
 .tab-btn { padding: 10px 16px; border: none; background: none; font-size: $font-size-base; color: $color-text-secondary; cursor: pointer; border-bottom: 2px solid transparent; &:hover { color: $color-text-primary; } &.active { color: $color-primary; border-bottom-color: $color-primary; font-weight: $font-weight-medium; } }
-.tab-count { font-size: $font-size-xs; color: $color-text-placeholder; margin-left: 4px; }
 .stat-row { margin: 0 !important; :deep(.el-col) { padding-left: 8px !important; padding-right: 8px !important; } :deep(.el-col:first-child) { padding-left: 0 !important; } :deep(.el-col:last-child) { padding-right: 0 !important; } }
 .info-card { :deep(.el-card__body) { display: flex; flex-direction: column; gap: 8px; padding: 20px; } }
 .info-card-header { display: flex; align-items: center; gap: 6px; }

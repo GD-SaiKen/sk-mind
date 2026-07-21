@@ -415,6 +415,10 @@ async function handleResume() {
 }
 
 async function handleTestConnection() {
+  if (source.value?.accessMethod === 'FILE') {
+    ElMessage.info('文件导入方式无需检测连接')
+    return
+  }
   try {
     await dataSourceService.testConnection(id)
     ElMessage.success('连接正常')

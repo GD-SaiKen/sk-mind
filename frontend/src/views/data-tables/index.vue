@@ -33,6 +33,9 @@
           <template #col-layer="{ row }">
             <el-tag effect="plain" :type="layerTagType(row.layer)">{{ row.layer }}</el-tag>
           </template>
+          <template #col-sourceName="{ row }">
+            <el-link type="primary" :underline="false" @click="router.push('/data-sources')">{{ row.sourceName }}</el-link>
+          </template>
           <template #col-qualityStatus="{ row }">
             <el-tag :type="qualityTagType(row.qualityStatus)" effect="plain">{{ qualityLabel(row.qualityStatus) }}</el-tag>
           </template>
@@ -66,6 +69,8 @@ const loading = ref(false)
 
 const filterItems: FilterItem[] = [
   { key: 'keyword', placeholder: '搜索表名或显示名...', width: '220px' },
+  { key: 'source', type: 'select', placeholder: '来源', width: '130px',
+    options: [{ label: '全部来源', value: '' }, { label: 'SAP ERP', value: 'SAP ERP' }, { label: 'Plataine MES', value: 'Plataine MES' }, { label: 'Excel', value: 'Excel' }, { label: 'ERP API', value: 'ERP API' }, { label: 'MES MQTT', value: 'MES MQTT' }] },
   { key: 'layer', type: 'select', placeholder: '层级', width: '120px',
     options: [{ label: '全部层级', value: '' }, { label: 'Raw', value: 'Raw' }, { label: 'Clean', value: 'Clean' }, { label: 'Serving', value: 'Serving' }] },
   { key: 'quality', type: 'select', placeholder: '质量状态', width: '120px',
@@ -93,7 +98,7 @@ function qualityLabel(status: string) { const map: Record<string, string> = { pa
 const columns: ColumnSchema[] = [
   { type: 'custom', prop: 'name', label: '数据表', minWidth: 180 },
   { type: 'custom', prop: 'layer', label: '层级', width: 100, align: 'center' },
-  { type: 'text', prop: 'sourceName', label: '来源', width: 130 },
+  { type: 'custom', prop: 'sourceName', label: '来源', width: 130 },
   { type: 'text', prop: 'recordCount', label: '记录数', width: 100, align: 'right', formatter: (v: number) => v?.toLocaleString() ?? '-' },
   { type: 'text', prop: 'fieldCount', label: '字段数', width: 80, align: 'center' },
   { type: 'custom', prop: 'qualityStatus', label: '质量', width: 80, align: 'center' },

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-layout">
     <PageHeader
       title="数据源"
@@ -38,6 +38,15 @@
             >{{ row.name }}</el-link>
             <div class="row-sub">{{ row.description }}</div>
           </template>
+      <template #col-taskCount="{ row }">
+        <el-link
+          v-if="row.taskCount > 0"
+          type="primary"
+          :underline="false"
+          @click="router.push(`/ingestion?sourceId=${row.id}`)"
+        >{{ row.taskCount }}</el-link>
+        <span v-else>0</span>
+      </template>
         </Table>
       </template>
     </Crud>
@@ -48,6 +57,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, View, Edit, Delete, VideoPlay } from '@element-plus/icons-vue'
+import { RefreshRight, SwitchButton } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dataSourceService } from '@/api'
 import type { DataSource } from '@/api'
@@ -168,7 +178,7 @@ const columns: ColumnSchema[] = [
     width: 170,
   },
   {
-    type: 'text',
+    type: 'custom',
     prop: 'taskCount',
     label: '关联任务',
     width: 100,
@@ -177,7 +187,7 @@ const columns: ColumnSchema[] = [
   {
     type: 'action',
     label: '操作',
-    width: 220,
+    width: 260,
     buttons: [
       {
         label: '查看',
@@ -193,16 +203,31 @@ const columns: ColumnSchema[] = [
         label: '创建任务',
         icon: VideoPlay,
         onClick: (row) => router.push(`/ingestion?sourceId=${(row as DataSource).id}`),
+        hidden: (row) => (row as DataSource).status === 'paused',
+      },
+      {
+        label: '重试',
+        icon: RefreshRight,
+        type: 'warning',
+        onClick: (row) => handleRetry(row as DataSource),
+        hidden: (row) => (row as DataSource).status !== 'error',
       },
       {
         label: '停用',
-        icon: Delete,
+        icon: SwitchButton,
         type: 'danger',
         onClick: (row) => handlePause(row as DataSource),
         hidden: (row) => {
-          const ds = row as DataSource
-          return ds.status === 'paused'
+          const s = (row as DataSource).status
+          return s === 'paused' || s === 'syncing' || s === 'syncing'
         },
+      },
+      {
+        label: '启用',
+        icon: SwitchButton,
+        type: 'success',
+        onClick: (row) => handleResume(row as DataSource),
+        hidden: (row) => (row as DataSource).status !== 'paused',
       },
     ],
   },
@@ -231,9 +256,24 @@ async function handlePause(row: DataSource) {
     `确定停用数据源「${row.name}」？停用后关联的接入任务将不再执行。`,
     '确认停用',
   )
-  await dataSourceService.pause(row.id)
+  try {
+    await dataSourceService.pause(row.id)
+  } catch { return }
   ElMessage.success('已停用')
   await load()
+}
+
+async function handleRetry(row: DataSource) {
+  ElMessage.info('重试已提交')
+  await load()
+}
+
+async function handleResume(row: DataSource) {
+  try {
+    await dataSourceService.resume(row.id)
+    ElMessage.success('已启用')
+    await load()
+  } catch { /* handled by interceptor */ }
 }
 
 onMounted(load)

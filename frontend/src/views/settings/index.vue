@@ -6,11 +6,7 @@
       description="管理系统基础字典和参数，包括数据源类型、接入方式、质量状态、敏感字段类型和平台参数。"
     />
 
-    <div class="tab-bar">
-      <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">
-        {{ tab }}
-      </button>
-    </div>
+    <TabNav v-model="activeTab" :tabs="tabs" />
 
     <Crud v-if="activeTab === '数据源类型'" :filter-items="searchFilterItems" v-model:filter-values="searchValues" :pagination="dsPagination">
       <template #filters-actions>
@@ -97,6 +93,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Setting } from '@element-plus/icons-vue'
+import TabNav from '@/components/tab-nav/index.vue'
+import type { TabItem } from '@/components/tab-nav/types'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
@@ -105,7 +103,14 @@ const activeTab = ref('数据源类型')
 const searchFilterItems: FilterItem[] = [{ key: 'keyword', placeholder: '搜索...', width: '260px' }]
 const searchValues = ref<Record<string, any>>({})
 const searchTerm = ref('')
-const tabs = ['数据源类型', '接入方式', '质量状态', '敏感字段类型', '业务标签', '平台参数']
+const tabs: TabItem[] = [
+  { key: '数据源类型', label: '数据源类型' },
+  { key: '接入方式', label: '接入方式' },
+  { key: '质量状态', label: '质量状态' },
+  { key: '敏感字段类型', label: '敏感字段类型' },
+  { key: '业务标签', label: '业务标签' },
+  { key: '平台参数', label: '平台参数' },
+]
 
 const actionLabel = computed(() => {
   const map: Record<string, string> = { '数据源类型': '添加类型', '接入方式': '添加方式', '质量状态': '添加状态', '敏感字段类型': '添加类型', '业务标签': '添加标签', '平台参数': '添加参数' }
@@ -223,7 +228,7 @@ const ppColumns: ColumnSchema[] = [
 </script>
 
 <style lang="scss" scoped>
-.tab-bar { display: flex; gap: 0; border-bottom: 1px solid $color-border; }
+.tab-bar-old-removed { display: none; border-bottom: 1px solid $color-border; }
 .tab-btn { padding: 10px 16px; border: none; background: none; font-size: $font-size-base; color: $color-text-secondary; cursor: pointer; border-bottom: 2px solid transparent; &:hover { color: $color-text-primary; } &.active { color: $color-primary; border-bottom-color: $color-primary; font-weight: $font-weight-medium; } }
 .search-input { width: 280px; }
 .spacer { flex: 1; }

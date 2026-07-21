@@ -6,12 +6,8 @@
       description="管理实体之间的关系边，查询关系路径，确认 AI 生成的关系，构建企业知识图谱。"
     />
 
-    <div class="tab-bar">
-      <button v-for="tab in tabs" :key="tab" class="tab-btn" :class="{ active: activeTab === tab }" @click="activeTab = tab">
-        {{ tab }}
-        <span v-if="tab === '待确认关系'" class="tab-count">{{ pendingCount }}</span>
-      </button>
-    </div>
+    <TabNav v-model="activeTab" :tabs="tabs" />
+
 
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -149,6 +145,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Search, Plus, Edit, Connection, CircleCheckFilled, Link, WarningFilled } from '@element-plus/icons-vue'
+import TabNav from '@/components/tab-nav/index.vue'
+import type { TabItem } from '@/components/tab-nav/types'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
@@ -160,7 +158,11 @@ const queryType = ref('customer')
 const queryId = ref('')
 const queryHops = ref('2')
 const showResult = ref(false)
-const tabs = ['关系边列表', '关系查询', '待确认关系']
+const tabs: TabItem[] = [
+  { key: '关系边列表', label: '关系边列表' },
+  { key: '关系查询', label: '关系查询' },
+  { key: '待确认关系', label: '待确认关系' },
+]
 
 interface Edge {
   id: string; fromEntity: string; fromId: string; relation: string; toEntity: string; toId: string
@@ -202,9 +204,7 @@ const edgesColumns: ColumnSchema[] = [
 </script>
 
 <style lang="scss" scoped>
-.tab-bar { display: flex; gap: 0; border-bottom: 1px solid $color-border; }
 .tab-btn { padding: 10px 16px; border: none; background: none; font-size: $font-size-base; color: $color-text-secondary; cursor: pointer; border-bottom: 2px solid transparent; &:hover { color: $color-text-primary; } &.active { color: $color-primary; border-bottom-color: $color-primary; font-weight: $font-weight-medium; } }
-.tab-count { font-size: $font-size-xs; color: $color-text-placeholder; margin-left: 4px; }
 .stat-row { margin: 0 !important; :deep(.el-col) { padding-left: 8px !important; padding-right: 8px !important; } :deep(.el-col:first-child) { padding-left: 0 !important; } :deep(.el-col:last-child) { padding-right: 0 !important; } }
 .info-card { :deep(.el-card__body) { display: flex; flex-direction: column; gap: 8px; padding: 20px; } }
 .info-card-header { display: flex; align-items: center; gap: 6px; }
