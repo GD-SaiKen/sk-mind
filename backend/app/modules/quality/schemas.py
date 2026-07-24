@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
 from app.core.schemas import CamelModel
 
@@ -33,7 +33,6 @@ class QualityRuleUpdate(CamelModel):
 
 
 class QualityRuleResponse(CamelModel):
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
@@ -57,7 +56,6 @@ class QualityRuleListResponse(CamelModel):
 
 
 class QualityRunResponse(CamelModel):
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     triggered_by: Optional[str] = None
@@ -82,7 +80,6 @@ class QualityRunListResponse(CamelModel):
 
 
 class QualityIssueResponse(CamelModel):
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     quality_run_id: uuid.UUID

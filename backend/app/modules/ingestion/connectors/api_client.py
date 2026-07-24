@@ -48,6 +48,7 @@ class HttpxApiConnector(ApiConnector):
         records_path: str = "data.list",
         total_path: str = "data.total",
         default_headers: dict[str, str] | None = None,
+        ssl_verify: bool = True,
     ):
         """初始化 API 连接器。
 
@@ -68,8 +69,10 @@ class HttpxApiConnector(ApiConnector):
             records_path: 响应 JSON 中记录列表的路径（如 "data.list"）。
             total_path: 响应 JSON 中总数的路径。
             default_headers: 默认请求头。
+            ssl_verify: 是否验证 SSL 证书（自签名证书场景设为 False）。
         """
         self._base_url = base_url.rstrip("/")
+        self._ssl_verify = ssl_verify
         self._auth_type = auth_type
         self._auth_credentials = auth_credentials
         self._auth_header_name = auth_header_name
@@ -123,6 +126,7 @@ class HttpxApiConnector(ApiConnector):
             base_url=self._base_url,
             timeout=self._timeout,
             headers=headers,
+            verify=self._ssl_verify,
         )
         self._rate_limiter = TokenBucket(rate=self._qps_limit)
 

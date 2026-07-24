@@ -10,7 +10,6 @@
         # → API JSON: {"userName": "..."}
 
     class MyResponse(CamelModel):
-        model_config = ConfigDict(from_attributes=True)
         created_at: datetime  # → JSON: {"createdAt": "..."}
 """
 
@@ -32,4 +31,5 @@ class CamelModel(BaseModel):
     model_config = ConfigDict(
         alias_generator=_to_camel,
         populate_by_name=True,
+        from_attributes=True,  # 所有 CamelModel 子类均支持 ORM 对象直接构造
     )

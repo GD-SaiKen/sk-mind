@@ -23,7 +23,7 @@ class IngestionTask(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
 
     data_source_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("data_sources.id"), nullable=False, index=True
     )
     source_object_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), nullable=True
@@ -113,6 +113,9 @@ class IngestionBatch(Base, UUIDPrimaryKeyMixin):
     affected_datasets: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
 
     error_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # 实时进度（SSE 读取，worker 写入）
+    progress_step: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # --- sync engine v2 (003_sync_engine_v2) ---
     rejected_rows: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

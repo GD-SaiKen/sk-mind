@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
 from app.core.schemas import CamelModel
 
@@ -43,8 +43,6 @@ class IngestionTaskUpdate(CamelModel):
 class IngestionTaskResponse(CamelModel):
     """接入任务响应。"""
 
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     name: str
     code: str
@@ -66,8 +64,6 @@ class IngestionTaskResponse(CamelModel):
 class IngestionBatchResponse(CamelModel):
     """接入批次响应。"""
 
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     task_id: uuid.UUID
     triggered_by: Optional[str] = None
@@ -82,6 +78,8 @@ class IngestionBatchResponse(CamelModel):
     status: str
     affected_datasets: Optional[str] = None
     error_summary: Optional[str] = None
+    progress_step: Optional[str] = None
+    rejected_rows: Optional[str] = None
     created_at: datetime
 
 
@@ -97,8 +95,6 @@ class BatchProgressResponse(CamelModel):
 
 class ImportErrorResponse(CamelModel):
     """导入错误响应。"""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     batch_id: uuid.UUID
@@ -128,7 +124,6 @@ class TimeRangeResponse(CamelModel):
     last_sync_at: Optional[datetime] = None
     suggested_start: Optional[datetime] = None
     suggested_end: Optional[datetime] = None
-    history_start_date: Optional[str] = None
     next_scheduled_run: Optional[datetime] = None
     schedule_cron: Optional[str] = None
     schedule_description: Optional[str] = None

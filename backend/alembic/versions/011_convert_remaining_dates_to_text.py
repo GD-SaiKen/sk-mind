@@ -37,15 +37,42 @@ TEXT_CONVERSIONS = {
 
 def upgrade():
     for tbl, cols in TEXT_CONVERSIONS.items():
+        schema, tname = tbl.split(".")
         for col in cols:
-            op.execute(f"ALTER TABLE {tbl} ALTER COLUMN {col} TYPE TEXT")
+            op.execute(f"""
+                DO $$
+                DECLARE
+                    _type text;
+                BEGIN
+                    SELECT data_type INTO _type
+                    FROM information_schema.columns
+                    WHERE table_schema = '{schema}'
+                      AND table_name   = '{tname}'
+                      AND column_name  = '{col}';
+                    IF _type IS NOT NULL AND _type NOT IN ('text', 'character varying') THEN
+                        ALTER TABLE {tbl} ALTER COLUMN {col} TYPE TEXT;
+                    END IF;
+                END $$;
+            """)
 
 
 def downgrade():
     for tbl, cols in TEXT_CONVERSIONS.items():
+        schema, tname = tbl.split(".")
         for col in cols:
-            # Best-effort revert; may fail if data isn't valid timestamp
-            op.execute(
-                f"ALTER TABLE {tbl} ALTER COLUMN {col} TYPE TIMESTAMPTZ "
-                f"USING (CASE WHEN {col} IS NULL THEN NULL ELSE {col}::TIMESTAMPTZ END)"
-            )
+            op.execute(f"""
+                DO $$
+                DECLARE
+                    _type text;
+                BEGIN
+                    SELECT data_type INTO _type
+                    FROM information_schema.columns
+                    WHERE table_schema = '{schema}'
+                      AND table_name   = '{tname}'
+                      AND column_name  = '{col}';
+                    IF _type IS NOT NULL AND _type IN ('text', 'character varying') THEN
+                        ALTER TABLE {tbl} ALTER COLUMN {col} TYPE TIMESTAMPTZ
+                        USING (CASE WHEN {col} IS NULL THEN NULL ELSE {col}::TIMESTAMPTZ END);
+                    END IF;
+                END $$;
+            """)

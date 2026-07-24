@@ -4,10 +4,63 @@
 """
 
 import json
+import logging
 import uuid
+
+from sqlalchemy import text
 
 from app.modules.ingestion.connectors.api_client import HttpxApiConnector
 from app.modules.ingestion.connectors.sqlserver import SqlServerConnector
+
+logger = logging.getLogger(__name__)
+
+
+# ── DB 配置 → 引擎配置 ──────────────────────────────────────
+
+
+def build_engine_config(db, data_source_id: uuid.UUID) -> dict | None:
+    """从 DB ConnectorConfig 构建 ApiSyncEngine 期望的配置字典。
+
+    读取 ``ConnectorConfig.extra_config`` JSON（snake_case 键，与 YAML 的
+    ``connection`` 段同构），返回::
+
+        {
+            "connection": { base_url, auth_type, ... },
+            "interfaces": [],   # 空列表，由调用方从 YAML 合并
+        }
+
+    Args:
+        db: 同步 SQLAlchemy Session（RQ worker 使用 ``get_sync_db()``）。
+        data_source_id: 数据源 UUID。
+
+    Returns:
+        配置字典；若该数据源在 DB 中无 ConnectorConfig 记录则返回 None。
+    """
+    row = db.execute(
+        text(
+            "SELECT extra_config FROM connector_configs "
+            "WHERE data_source_id = :ds_id LIMIT 1"
+        ),
+        {"ds_id": str(data_source_id)},
+    ).fetchone()
+
+    if not row or not row[0]:
+        return None
+
+    extra = json.loads(row[0])
+
+    config: dict = {
+        "connection": extra,
+        "interfaces": [],
+    }
+
+    logger.info(
+        "Built engine config from DB for source %s: base_url=%s, auth_type=%s",
+        data_source_id,
+        extra.get("base_url", "N/A"),
+        extra.get("auth_type", "N/A"),
+    )
+    return config
 
 
 class ConnectorService:

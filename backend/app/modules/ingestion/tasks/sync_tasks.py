@@ -12,9 +12,20 @@ Legacy entry points kept for backward compat:
 """
 
 import logging
+import os
 import uuid
+from pathlib import Path
 
 from rq import get_current_job
+
+# Load .env for RQ worker process (env vars needed by sync engine connectors)
+_env_path = Path(__file__).resolve().parents[4] / ".env"
+if _env_path.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_path)
+    except ImportError:
+        pass
 
 from app.modules.ingestion.services.sync_service import SyncService
 
@@ -310,29 +321,186 @@ def _fail_batch(batch_id: str, reason: str, task_short: str = ""):
     logger.warning("Pre-flight failure: batch=%s %s", batch_id[:8] if batch_id else '-', reason)
 
 
-def run_api_full_sync(task_id: str, config_path: str, interfaces: list[str] | None = None):
-    """Execute full backfill sync via ApiSyncEngine.
+def run_api_full_sync(
+    task_id: str,
+    batch_id: str,
+    config_path: str = "",
+    interfaces: list[str] | None = None,
+    data_source_id: str | None = None,
+):
+    """Execute API sync via ApiSyncEngine.
+
+    Sync strategy per interface:
+    - First sync (no watermark): full pull — paginate all data, no date params.
+    - Incremental (watermark exists, is_time_based=True): pull only recent data
+      via API date params (start = watermark - replay_days, end = now).
+    - Non-time-based interfaces: always full pull.
+
+    Config resolution priority:
+    1. If ``config_path`` points to a valid YAML → load YAML (provides interfaces).
+    2. If ``data_source_id`` is provided → load DB ``ConnectorConfig``
+       (overrides YAML ``connection`` 段).
+    3. Merge: DB connection + YAML interfaces; if only one source, use it alone.
+    4. If neither exists → error.
 
     Args:
         task_id: IngestionTask UUID.
-        config_path: absolute path to data source YAML config.
+        batch_id: Pre-created IngestionBatch UUID (from the router).
+        config_path: Optional absolute path to data source YAML config.
         interfaces: optional list of interface names to sync (syncs all if None).
+        data_source_id: Optional DataSource UUID — used to load DB connection config.
     """
+    import os as _os
     import uuid as _uuid
+    from datetime import datetime, timezone
+    from pathlib import Path as _Path
     from app.modules.ingestion.engines.api_sync_engine import ApiSyncEngine, load_config
+    from app.modules.ingestion.models import IngestionBatch, IngestionTask
     from app.modules.ingestion.services.sync_database import get_sync_db
+    from app.modules.ingestion.services.connector_service import build_engine_config
+    from app.modules.data_sources.models import DataSource  # register FK table for commit
 
     task_uuid = _uuid.UUID(task_id)
-    config = load_config(config_path)
+    batch_uuid = _uuid.UUID(batch_id)
 
     db = get_sync_db()
+    batch = None
+    task = None
     try:
+        task = db.get(IngestionTask, task_uuid)
+        batch = db.get(IngestionBatch, batch_uuid)
+        if not task:
+            logger.error("Task not found: %s", task_id)
+            return
+        if not batch:
+            logger.error("Batch not found: %s", batch_id)
+            return
+
+        # ── Config resolution: YAML (interfaces) + DB (connection) ──
+
+        # Resolve config_path relative to the backend root (parents[4]),
+        # NOT the RQ worker's CWD which may be the project root.
+        _backend_root = _Path(__file__).resolve().parents[4]
+
+        # 1. Try YAML — provides interfaces + default connection
+        yaml_config = None
+        if config_path:
+            _actual_path = config_path
+            # If relative path doesn't resolve from CWD, try from backend root
+            if not _os.path.exists(_actual_path):
+                _from_backend = _backend_root / config_path
+                if _os.path.exists(_from_backend):
+                    _actual_path = str(_from_backend)
+                    logger.info(
+                        "Config path resolved (backend root): %s → %s",
+                        config_path, _actual_path,
+                    )
+            # Case-insensitive filename lookup as fallback
+            if not _os.path.exists(_actual_path):
+                _dir = _Path(_actual_path).parent
+                _filename = _Path(_actual_path).name.lower()
+                # Also try from backend root
+                if not _os.path.isdir(_dir):
+                    _dir_b = _backend_root / _dir
+                    if _os.path.isdir(_dir_b):
+                        _dir = _dir_b
+                if _os.path.isdir(_dir):
+                    for _entry in _os.listdir(_dir):
+                        if _entry.lower() == _filename:
+                            _actual_path = str(_Path(_dir) / _entry)
+                            logger.info(
+                                "Config path resolved (case-insensitive): %s → %s",
+                                config_path, _actual_path,
+                            )
+                            break
+            if _os.path.exists(_actual_path):
+                yaml_config = load_config(_actual_path)
+                logger.info(
+                    "Loaded YAML config: %s (%d interfaces)",
+                    _actual_path, len(yaml_config.get("interfaces", [])),
+                )
+
+        # 2. Try DB ConnectorConfig — overrides YAML connection
+        db_config = None
+        _ds_str = data_source_id or (str(task.data_source_id) if task.data_source_id else None)
+        if _ds_str:
+            try:
+                db_config = build_engine_config(db, _uuid.UUID(_ds_str))
+            except Exception:
+                logger.warning(
+                    "Failed to load DB config for source %s", _ds_str, exc_info=True,
+                )
+
+        # 3. Merge
+        if yaml_config and db_config:
+            yaml_config["connection"] = {
+                **yaml_config.get("connection", {}),
+                **db_config["connection"],
+            }
+            config = yaml_config
+            logger.info("Merged config: YAML interfaces + DB connection override")
+        elif yaml_config:
+            config = yaml_config
+            logger.info("Using YAML-only config (no DB config found)")
+        elif db_config:
+            config = db_config
+            logger.info("Using DB-only config (no YAML — interfaces empty)")
+        else:
+            raise RuntimeError(
+                f"No config available: config_path={config_path!r} not found "
+                f"and no DB config for data_source_id={data_source_id}"
+            )
+
+        ds_sync_id = task.data_source_id or task_uuid
+
         engine = ApiSyncEngine(config, db)
-        result = engine.sync_full(
+        logger.info("Syncing all data for task %s", task_id[:8])
+        result = engine.sync_all(
             task_id=task_uuid,
-            data_source_id=task_uuid,
+            data_source_id=ds_sync_id,
             interfaces=interfaces,
+            batch=batch,
         )
-        logger.info("API full sync done: %s", {k: v["success"] for k, v in result.items()})
+
+        # Update the router's batch with final stats
+        total_success = sum(v["success"] for v in result.values())
+        total_rejected = sum(v["rejected"] for v in result.values())
+        batch.record_count = total_success + total_rejected
+        batch.success_count = total_success
+        batch.fail_count = total_rejected
+        batch.status = "success" if total_rejected == 0 else "partial_success"
+        batch.finished_at = datetime.now(timezone.utc)
+
+        # Update task tracking
+        task.last_sync_at = datetime.now(timezone.utc)
+        task.last_sync_status = batch.status
+        db.commit()
+
+        logger.info("API full sync done: %s (batch %s)", {k: v["success"] for k, v in result.items()}, batch_id[:8])
+    except Exception:
+        logger.exception("API full sync failed: task=%s batch=%s", task_id[:8], batch_id[:8])
+        try:
+            db.rollback()  # reset failed transaction before touching expired attrs
+        except Exception:
+            pass
+        # Re-query fresh instances after rollback (old objects are expired)
+        try:
+            _fresh_batch = db.get(IngestionBatch, batch_uuid)
+            if _fresh_batch:
+                _fresh_batch.status = "failed"
+                _fresh_batch.finished_at = datetime.now(timezone.utc)
+        except Exception:
+            logger.warning("Failed to update batch status to 'failed'", exc_info=True)
+        try:
+            _fresh_task = db.get(IngestionTask, task_uuid)
+            if _fresh_task:
+                _fresh_task.last_sync_status = "failed"
+        except Exception:
+            logger.warning("Failed to update task last_sync_status", exc_info=True)
+        try:
+            db.commit()
+        except Exception:
+            logger.warning("Failed to commit failure status", exc_info=True)
+        raise
     finally:
         db.close()

@@ -1,5 +1,7 @@
 """Ingestion 模块路由层 — 接入任务管理 + 数据浏览。"""
 
+import asyncio
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -54,14 +56,27 @@ def _enqueue(task_id, batch_id, task_name, timeout=60):
     return job.id
 
 
-def _enqueue_api_sync(task_id, batch_id, config_path, interfaces=None, timeout=7200):
-    """Enqueue API full sync task to RQ."""
+def _enqueue_api_sync(
+    task_id, batch_id, config_path="", interfaces=None,
+    data_source_id=None, timeout=7200,
+):
+    """Enqueue API full sync task to RQ.
+
+    Args:
+        task_id: IngestionTask UUID.
+        batch_id: Pre-created IngestionBatch UUID.
+        config_path: Optional YAML config path (provides interfaces).
+        interfaces: Optional list of interface names to sync.
+        data_source_id: DataSource UUID — used to load DB connection config.
+        timeout: RQ job timeout.
+    """
     from app.core.queue import redis_conn
     from rq import Queue
     queue = Queue("ingestion", connection=redis_conn)
     job = queue.enqueue(
         "app.modules.ingestion.tasks.sync_tasks.run_api_full_sync",
-        str(task_id), config_path, interfaces,
+        str(task_id), str(batch_id), config_path or "", interfaces,
+        str(data_source_id) if data_source_id else None,
         job_timeout=timeout,
     )
     return job.id
@@ -236,6 +251,53 @@ async def get_batch_progress(
     )))
 
 
+@task_router.get("/batches/{batch_id}/stream")
+async def stream_batch_progress(
+    batch_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE endpoint that pushes batch progress updates in real-time."""
+    async def event_generator():
+        import app.modules.ingestion.dao as ingestion_dao
+        dao = ingestion_dao
+        for _ in range(360):  # max 6 min (360 × 1s)
+            db.expire_all()  # clear identity map so we see worker's committed updates
+            batch = await dao.batch_get_by_id(db, batch_id)
+            if not batch:
+                break
+
+            # Use progress_step from the worker if available, otherwise default
+            if batch.status == "running":
+                step = batch.progress_step or "同步中..."
+                pct = -1
+            elif batch.status in ("success", "partial_success"):
+                pct, step = 100, "完成"
+            elif batch.status == "failed":
+                pct, step = 100, f"失败: {batch.error_summary or ''}"
+            elif batch.status == "cancelled":
+                pct, step = 0, "已取消"
+            else:
+                pct, step = 0, "等待中"
+
+            data = json.dumps({
+                "pct": pct,
+                "step": step,
+                "status": batch.status,
+                "startedAt": batch.started_at.isoformat() if batch.started_at else None,
+                "recordCount": batch.record_count or 0,
+                "successCount": batch.success_count or 0,
+                "failCount": batch.fail_count or 0,
+            })
+            yield f"data: {data}\n\n"
+
+            if batch.status in ("success", "partial_success", "failed", "cancelled"):
+                break
+
+            await asyncio.sleep(1)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @task_router.get("/batches/{batch_id}/errors")
 async def list_batch_errors(
     batch_id: uuid.UUID,
@@ -272,23 +334,35 @@ async def execute_task(
 
     batch = IngestionBatch(
         task_id=task.id, trigger_type="manual",
-        status="pending", triggered_by=str(current_user.id),
+        status="running", started_at=datetime.now(timezone.utc),
+        triggered_by=str(current_user.id),
     )
     await dao.batch_insert(db, batch)
+    await db.commit()  # commit before enqueue so worker can see the batch
 
     # 根据 access_method 选择同步引擎
-    access_method = task.config.get("access_method", "") if task.config else ""
-    if access_method == "api":
-        config_path = task.config.get("config_path", "")
-        if not config_path:
-            raise HTTPException(status_code=400, detail="config_path required for API sync")
-        interfaces = task.config.get("interfaces")
+    # config JSON keys may be camelCase (from frontend) or snake_case
+    _cfg = (task.config or {})
+    access_method = _cfg.get("accessMethod") or _cfg.get("access_method") or ""
+    if access_method in ("api", "api_pull"):
+        config_path = _cfg.get("configPath") or _cfg.get("config_path") or ""
+        interfaces = _cfg.get("interfaces")
+        # config_path 和 data_source_id 至少有一个：YAML 提供 interfaces，DB 提供 connection
+        if not config_path and not task.data_source_id:
+            raise HTTPException(
+                status_code=400,
+                detail="API sync requires config_path or data_source_id with DB connection config",
+            )
         try:
-            job_id = _enqueue_api_sync(task.id, batch.id, config_path, interfaces)
+            job_id = _enqueue_api_sync(
+                task.id, batch.id, config_path, interfaces,
+                data_source_id=task.data_source_id,
+            )
         except Exception as e:
             batch.status = "failed"
             batch.error_summary = f"enqueue failed: {e}"
             await dao.batch_update(db, batch)
+            await db.commit()
             raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
     else:
         try:
@@ -297,11 +371,9 @@ async def execute_task(
             batch.status = "failed"
             batch.error_summary = f"enqueue failed: {e}"
             await dao.batch_update(db, batch)
+            await db.commit()
             raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
 
-    batch.status = "running"
-    batch.started_at = datetime.now(timezone.utc)
-    await dao.batch_update(db, batch)
     return _ok({"batchId": str(batch.id), "jobId": job_id}, msg="task submitted")
 
 
@@ -320,15 +392,24 @@ async def retry_batch(
 
     batch = IngestionBatch(
         task_id=task.id, trigger_type="retry",
-        status="pending", triggered_by=str(current_user.id),
+        status="running", started_at=datetime.now(timezone.utc),
+        triggered_by=str(current_user.id),
     )
     await dao.batch_insert(db, batch)
+    await db.commit()  # commit before enqueue so worker can see the batch
 
     try:
-        job_id = _enqueue(task.id, batch.id, f"{task.name} (retry)")
-        batch.status = "running"
-        batch.started_at = datetime.now(timezone.utc)
-        await dao.batch_update(db, batch)
+        _cfg = (task.config or {})
+        access_method = _cfg.get("accessMethod") or _cfg.get("access_method") or ""
+        if access_method in ("api", "api_pull"):
+            config_path = _cfg.get("configPath") or _cfg.get("config_path") or ""
+            interfaces = _cfg.get("interfaces")
+            job_id = _enqueue_api_sync(
+                task.id, batch.id, config_path, interfaces,
+                data_source_id=task.data_source_id,
+            )
+        else:
+            job_id = _enqueue(task.id, batch.id, f"{task.name} (retry)")
         return _ok(
             {"batchId": str(batch.id), "jobId": job_id, "retryFrom": str(batch_id)},
             msg="retry submitted",
@@ -337,6 +418,7 @@ async def retry_batch(
         batch.status = "failed"
         batch.error_summary = f"enqueue failed: {e}"
         await dao.batch_update(db, batch)
+        await db.commit()
         raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
 
 
@@ -350,35 +432,40 @@ async def backfill_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """全量回溯：从系统上线日期拉取全量至今（不含今天），保证 Raw 层有所有历史数据。"""
+    """全量同步：拉取所有历史数据，保证 Raw 层有完整数据。"""
     task = await dao.task_get_by_id(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="not found")
 
-    config = task.config or {}
-    history_start = config.get("history_start_date", "2020-01-01")
-    end_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-
     batch = IngestionBatch(
         task_id=task.id, trigger_type="backfill",
-        status="pending", triggered_by=str(current_user.id),
+        status="running", started_at=datetime.now(timezone.utc),
+        triggered_by=str(current_user.id),
     )
     await dao.batch_insert(db, batch)
+    await db.commit()  # commit before enqueue so worker can see the batch
 
     try:
-        job_id = _enqueue(task.id, batch.id, f"{task.name} (backfill {history_start}→{end_time.date()})", timeout=7200)
-        batch.status = "running"
-        batch.started_at = datetime.now(timezone.utc)
-        await dao.batch_update(db, batch)
+        # 根据 access_method 选择同步引擎（与 execute_task 一致）
+        _cfg = (task.config or {})
+        access_method = _cfg.get("accessMethod") or _cfg.get("access_method") or ""
+        if access_method in ("api", "api_pull"):
+            config_path = _cfg.get("configPath") or _cfg.get("config_path") or ""
+            interfaces = _cfg.get("interfaces")
+            job_id = _enqueue_api_sync(
+                task.id, batch.id, config_path, interfaces,
+                data_source_id=task.data_source_id, timeout=7200,
+            )
+        else:
+            job_id = _enqueue(task.id, batch.id, f"{task.name} (backfill)", timeout=7200)
         return _ok({
             "batchId": str(batch.id), "jobId": job_id,
-            "startTime": history_start,
-            "endTime": end_time.isoformat(),
-        }, msg="全量回溯已提交")
+        }, msg="全量同步已提交")
     except Exception as e:
         batch.status = "failed"
         batch.error_summary = f"enqueue failed: {e}"
         await dao.batch_update(db, batch)
+        await db.commit()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -396,19 +483,28 @@ async def quick_fill_task(
 
     batch = IngestionBatch(
         task_id=task.id, trigger_type="quick_fill",
-        status="pending", triggered_by=str(current_user.id),
+        status="running", started_at=datetime.now(timezone.utc),
+        triggered_by=str(current_user.id),
     )
     await dao.batch_insert(db, batch)
+    await db.commit()  # commit before enqueue so worker can see the batch
 
     try:
-        job_id = _enqueue(
-            task.id, batch.id,
-            f"{task.name} (quick-fill {data.start_time.date()}→{data.end_time.date()})",
-            timeout=3600,
-        )
-        batch.status = "running"
-        batch.started_at = datetime.now(timezone.utc)
-        await dao.batch_update(db, batch)
+        _cfg = (task.config or {})
+        access_method = _cfg.get("accessMethod") or _cfg.get("access_method") or ""
+        if access_method in ("api", "api_pull"):
+            config_path = _cfg.get("configPath") or _cfg.get("config_path") or ""
+            interfaces = _cfg.get("interfaces")
+            job_id = _enqueue_api_sync(
+                task.id, batch.id, config_path, interfaces,
+                data_source_id=task.data_source_id, timeout=3600,
+            )
+        else:
+            job_id = _enqueue(
+                task.id, batch.id,
+                f"{task.name} (quick-fill {data.start_time.date()}→{data.end_time.date()})",
+                timeout=3600,
+            )
         return _ok({
             "batchId": str(batch.id), "jobId": job_id,
             "startTime": data.start_time.isoformat(),
@@ -418,6 +514,7 @@ async def quick_fill_task(
         batch.status = "failed"
         batch.error_summary = f"enqueue failed: {e}"
         await dao.batch_update(db, batch)
+        await db.commit()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -432,21 +529,13 @@ async def get_time_range(
     if not task:
         raise HTTPException(status_code=404, detail="not found")
 
-    config = task.config or {}
     now = datetime.now(timezone.utc)
-
-    # 增量模式：从上一次同步点开始
-    if task.sync_mode == "incremental" and task.last_sync_at:
-        suggested_start = task.last_sync_at - timedelta(minutes=5)
-    else:
-        suggested_start = _recent_start(config)
 
     return _ok(_dump(TimeRangeResponse(
         sync_mode=task.sync_mode,
         last_sync_at=task.last_sync_at,
-        suggested_start=suggested_start,
+        suggested_start=now,
         suggested_end=now,
-        history_start_date=config.get("history_start_date"),
         schedule_cron=task.cron_expression,
         schedule_description=_cron_desc(task.cron_expression) if task.cron_expression else "未配置定时",
     )))

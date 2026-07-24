@@ -47,19 +47,47 @@ CONVERSIONS = {
 
 def upgrade():
     for tbl, cols in CONVERSIONS.items():
+        schema, tname = tbl.split(".")
         for col in cols:
-            op.execute(
-                f"ALTER TABLE {tbl} ALTER COLUMN {col} TYPE BIGINT "
-                f"USING (CASE WHEN {col} IS NULL THEN NULL "
-                f"ELSE EXTRACT(EPOCH FROM {col}) * 1000::BIGINT END)"
-            )
+            # 仅当列类型仍是 timestamp 家族时才转换，已为 BIGINT 的跳过
+            op.execute(f"""
+                DO $$
+                DECLARE
+                    _type text;
+                BEGIN
+                    SELECT data_type INTO _type
+                    FROM information_schema.columns
+                    WHERE table_schema = '{schema}'
+                      AND table_name   = '{tname}'
+                      AND column_name  = '{col}';
+                    IF _type IS NOT NULL AND _type NOT IN ('bigint', 'integer') THEN
+                        ALTER TABLE {tbl} ALTER COLUMN {col} TYPE BIGINT
+                        USING (CASE WHEN {col} IS NULL THEN NULL
+                               ELSE EXTRACT(EPOCH FROM {col}) * 1000::BIGINT END);
+                    END IF;
+                END $$;
+            """)
 
 
 def downgrade():
     for tbl, cols in CONVERSIONS.items():
+        schema, tname = tbl.split(".")
         for col in cols:
-            op.execute(
-                f"ALTER TABLE {tbl} ALTER COLUMN {col} TYPE TIMESTAMPTZ "
-                f"USING (CASE WHEN {col} IS NULL THEN NULL "
-                f"ELSE TO_TIMESTAMP({col} / 1000.0) END)"
-            )
+            # 仅当列类型是 BIGINT 时才回退为 TIMESTAMPTZ
+            op.execute(f"""
+                DO $$
+                DECLARE
+                    _type text;
+                BEGIN
+                    SELECT data_type INTO _type
+                    FROM information_schema.columns
+                    WHERE table_schema = '{schema}'
+                      AND table_name   = '{tname}'
+                      AND column_name  = '{col}';
+                    IF _type IS NOT NULL AND _type IN ('bigint', 'integer') THEN
+                        ALTER TABLE {tbl} ALTER COLUMN {col} TYPE TIMESTAMPTZ
+                        USING (CASE WHEN {col} IS NULL THEN NULL
+                               ELSE TO_TIMESTAMP({col} / 1000.0) END);
+                    END IF;
+                END $$;
+            """)

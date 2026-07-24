@@ -4,6 +4,7 @@
 """
 
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -22,20 +23,20 @@ class DataSource(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # 数据源类型
+    # 数据源类型（业务分类）
     source_type: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True
-    )  # excel / csv / database / api / shared_folder
+    )  # erp / mes / purchase / attendance / database / api / excel / share_drive / other
 
     # 接入方式
     access_method: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # file_upload / directory_scan / db_sync / api_pull
 
-    # 负责人
-    owner_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    # 负责人（Python 属性名与前端对齐，底层 DB 列名保持兼容）
+    business_owner: Mapped[Optional[str]] = mapped_column("owner_name", String(100), nullable=True)
     owner_dept: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    contact_info: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    tech_owner: Mapped[Optional[str]] = mapped_column("contact_info", String(200), nullable=True)
 
     # 敏感等级
     sensitivity_level: Mapped[str] = mapped_column(
@@ -44,8 +45,15 @@ class DataSource(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     # 状态
     status: Mapped[str] = mapped_column(
-        String(20), default="draft", nullable=False, index=True
-    )  # draft / active / paused / archived
+        String(20), default="active", nullable=False, index=True
+    )  # active / paused / archived（前端也支持 unconnected / error / syncing 等展示态）
+
+    # 来源分类（API / 数据库）
+    source_category: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    # 连接状态（health check 结果）
+    connection_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    last_health_check_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # 权限
     is_agent_accessible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

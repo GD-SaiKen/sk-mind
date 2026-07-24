@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
 from app.core.schemas import CamelModel
 
@@ -44,7 +44,6 @@ class DatasetUpdate(CamelModel):
 
 
 class DatasetResponse(CamelModel):
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
@@ -75,7 +74,6 @@ class DatasetListResponse(CamelModel):
 
 
 class DatasetFieldResponse(CamelModel):
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     dataset_id: uuid.UUID
@@ -99,7 +97,6 @@ class DatasetFieldListResponse(CamelModel):
 
 
 class DataTableResponse(CamelModel):
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     dataset_id: Optional[uuid.UUID] = None

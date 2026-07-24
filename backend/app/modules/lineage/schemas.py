@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
 from app.core.schemas import CamelModel
 
@@ -32,7 +32,6 @@ class LineageEdgeUpdate(CamelModel):
 
 
 class LineageEdgeResponse(CamelModel):
-    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     source_type: str

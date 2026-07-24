@@ -106,6 +106,7 @@ class StageWriter:
         source_signature: str,
         sync_mode: str,
         pulled_at: Optional[datetime] = None,
+        pk_fields: Optional[list[str]] = None,
     ) -> dict:
         """Write rows to staging, then promote to raw if healthy.
 
@@ -135,7 +136,9 @@ class StageWriter:
                 return {"success": 0, "rejected": rejected}
 
             # 3. Atomic promotion
-            if sync_mode == "full":
+            if sync_mode == "upsert" and pk_fields:
+                self._promote_upsert(staging_full, raw_full, pk_fields)
+            elif sync_mode == "full":
                 self._promote_full(staging_full, raw_full)
             else:
                 self._promote_incremental(staging_full, raw_full)
@@ -244,6 +247,52 @@ class StageWriter:
         self._db.commit()
         logger.info("Incremental promoted: %s -> %s", staging_full, raw_full)
 
+    def _promote_upsert(
+        self, staging_full: str, raw_full: str, pk_fields: list[str]
+    ) -> None:
+        """Upsert promotion: INSERT staging into raw with ON CONFLICT DO UPDATE.
+
+        Conflicts on pk_fields -> update business + tracking columns.
+        Excludes _raw_id (preserves original PK) and _ingested_at
+        (preserves original ingestion timestamp).
+        """
+        cols = self._get_columns(raw_full)
+        conflict_cols = set(pk_fields)
+        set_cols = [
+            c for c in cols
+            if c not in conflict_cols and c not in ("_raw_id", "_ingested_at")
+        ]
+
+        col_list = ", ".join(f'"{c}"' for c in cols)
+        set_clause = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in set_cols)
+        conflict_target = ", ".join(f'"{c}"' for c in pk_fields)
+
+        sql = (
+            f"INSERT INTO {raw_full} ({col_list}) "
+            f"SELECT {col_list} FROM {staging_full} "
+            f"ON CONFLICT ({conflict_target}) DO UPDATE SET {set_clause}"
+        )
+        self._db.execute(text(sql))
+        self._db.execute(text(f"DROP TABLE IF EXISTS {staging_full}"))
+        self._db.commit()
+        logger.info(
+            "Upsert promoted: %s -> %s (conflict on %s)",
+            staging_full, raw_full, conflict_target,
+        )
+
+    def _get_columns(self, full_table: str) -> list[str]:
+        """Return ordered column names from information_schema."""
+        schema, table = full_table.split(".", 1)
+        result = self._db.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = :schema AND table_name = :table "
+                "ORDER BY ordinal_position"
+            ),
+            {"schema": schema, "table": table},
+        )
+        return [r.column_name for r in result]
+
     def _drop_staging(self, staging_full: str) -> None:
         """Drop a staging table unconditionally (no-op if doesn't exist)."""
         try:
@@ -278,15 +327,11 @@ class StageWriter:
                 text(f"CREATE TABLE {target_full} (LIKE {source_full} INCLUDING ALL)")
             )
         else:
-            # First sync: create staging table in raw schema to make promotion trivial
-            # The target_full IS a raw schema table; SchemaManager creates it
-            # Here we just create an empty staging copy
-            self._db.execute(
-                text(f"CREATE TABLE {target_full} ()")
-            )
-            self._db.execute(text(f"DROP TABLE IF EXISTS {target_full}"))
-            self._db.execute(
-                text(f"CREATE TABLE {target_full} (LIKE {source_full} INCLUDING ALL)")
+            # Raw table doesn't exist — caller must have created it via
+            # SchemaManager or ApiSyncEngine._ensure_raw_table before write().
+            raise RuntimeError(
+                f"Raw table {source_full} does not exist. "
+                f"Ensure SchemaManager or _ensure_raw_table creates it before write()."
             )
 
         self._db.commit()

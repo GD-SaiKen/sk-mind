@@ -31,10 +31,20 @@ def upgrade() -> None:
     ]:
         op.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS compensate_hours NUMERIC")
 
-    # 3. Rename product_specifications -> product_specification_qties
+    # 3. Rename product_specifications -> product_specification_qties（仅当旧列存在时执行）
     op.execute("""
-        ALTER TABLE raw.mes_select_workorder_task_action_statistics
-        RENAME COLUMN product_specifications TO product_specification_qties
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'raw'
+                AND table_name = 'mes_select_workorder_task_action_statistics'
+                AND column_name = 'product_specifications'
+            ) THEN
+                ALTER TABLE raw.mes_select_workorder_task_action_statistics
+                RENAME COLUMN product_specifications TO product_specification_qties;
+            END IF;
+        END $$;
     """)
 
     # 4. oee_users for OEE report
@@ -55,9 +65,20 @@ def downgrade() -> None:
     ]:
         op.execute(f"ALTER TABLE {tbl} DROP COLUMN IF EXISTS compensate_hours")
 
+    # 反向重命名（仅当新列存在时执行）
     op.execute("""
-        ALTER TABLE raw.mes_select_workorder_task_action_statistics
-        RENAME COLUMN product_specification_qties TO product_specifications
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'raw'
+                AND table_name = 'mes_select_workorder_task_action_statistics'
+                AND column_name = 'product_specification_qties'
+            ) THEN
+                ALTER TABLE raw.mes_select_workorder_task_action_statistics
+                RENAME COLUMN product_specification_qties TO product_specifications;
+            END IF;
+        END $$;
     """)
 
     op.execute("ALTER TABLE raw.mes_select_oee_report DROP COLUMN IF EXISTS oee_users")
