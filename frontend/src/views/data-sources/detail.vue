@@ -30,7 +30,7 @@
           v-if="showCreateTask"
           :icon="VideoPlay"
           plain
-          @click="router.push(`/ingestion?sourceId=${id}`)"
+          @click="router.push(`/ingestion/create?sourceId=${id}`)"
         >创建任务</el-button>
         <el-button
           v-if="showTestConn"
@@ -127,35 +127,45 @@
               <h3>关联的接入任务</h3>
               <el-button
                 type="primary"
-                @click="router.push(`/ingestion?sourceId=${id}`)"
+                @click="router.push(`/ingestion/create?sourceId=${id}`)"
               >创建新任务</el-button>
             </div>
+            <div v-if="loadingTasks" class="loading-wrap">
+              <el-skeleton :rows="2" />
+            </div>
             <el-empty
-              v-if="!source.taskCount"
+              v-else-if="relatedTasks.length === 0"
               description="暂无接入任务"
               :image-size="60"
             />
             <div v-else class="link-list">
               <router-link
-                v-for="(task, ti) in mockTasks"
-                :key="ti"
-                :to="`/ingestion/${ti}`"
+                v-for="task in relatedTasks"
+                :key="task.id"
+                :to="`/ingestion/${task.id}`"
                 class="link-item"
               >
                 <div class="link-item-left">
                   <el-icon
                     :size="18"
-                    :class="task.ok ? 'text-success' : 'text-warning'"
+                    :class="task.lastSyncStatus === 'success' ? 'text-success' : task.lastSyncStatus === 'partial_success' ? 'text-warning' : 'text-warning'"
                   >
-                    <CircleCheckFilled v-if="task.ok" />
+                    <CircleCheckFilled v-if="task.lastSyncStatus === 'success'" />
                     <WarningFilled v-else />
                   </el-icon>
                   <div>
                     <div>{{ task.name }}</div>
-                    <div class="link-item-sub">{{ task.summary }}</div>
+                    <div class="link-item-sub">
+                      <template v-if="task.lastSyncAt">最近执行: {{ task.lastSyncAt.slice(0, 16).replace('T', ' ') }}</template>
+                      <template v-else>尚未执行</template>
+                    </div>
                   </div>
                 </div>
-                <span>{{ task.stats }}</span>
+                <el-tag
+                  :type="task.status === 'active' ? 'success' : task.status === 'draft' ? 'info' : task.status === 'paused' ? 'warning' : 'danger'"
+                  size="small"
+                  effect="plain"
+                >{{ task.status }}</el-tag>
               </router-link>
             </div>
           </el-card>
@@ -216,11 +226,12 @@ import {
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { dataSourceService } from '@/api'
-import type { DataSource } from '@/api'
+import { dataSourceService, ingestionService } from '@/api'
+import type { DataSource, IngestionTask } from '@/api'
 import {
   SOURCE_TYPE_LABELS,
   ACCESS_METHOD_LABELS,
+  AUTH_TYPE_LABELS,
   STATUS_LABELS,
   STATUS_TAG_MAP,
 } from '@/constants/data-source'
@@ -235,6 +246,8 @@ const id = route.params.id as string
 const loading = ref(true)
 const source = ref<DataSource | null>(null)
 const activeTab = ref('info')
+const loadingTasks = ref(false)
+const relatedTasks = ref<IngestionTask[]>([])
 
 // 操作按钮的显示逻辑（按状态）
 const showCreateTask = computed(() => source.value?.status !== 'paused')
@@ -276,12 +289,61 @@ const infoSections: FormSection[] = [
   },
   {
     title: '二、接入配置',
+    cols: 2,
     fields: [
       {
         type: 'readonly',
         prop: 'accessMethod',
         label: '接入方式',
         formatter: (v: string) => ACCESS_METHOD_LABELS[v as keyof typeof ACCESS_METHOD_LABELS] ?? v,
+      },
+      {
+        type: 'readonly',
+        prop: 'baseUrl',
+        label: '基础路径',
+        hidden: (m: Record<string, any>) => m.accessMethod !== 'api_pull',
+      },
+      {
+        type: 'readonly',
+        prop: 'authType',
+        label: '鉴权方式',
+        formatter: (v: string) => AUTH_TYPE_LABELS[v as keyof typeof AUTH_TYPE_LABELS] ?? v ?? '-',
+        hidden: (m: Record<string, any>) => m.accessMethod !== 'api_pull',
+      },
+      {
+        type: 'readonly',
+        prop: 'authHeaderName',
+        label: '鉴权 Header 名',
+        formatter: (v: string) => v || '-',
+        hidden: (m: Record<string, any>) => m.accessMethod !== 'api_pull',
+      },
+      {
+        type: 'readonly',
+        prop: 'authCredentials',
+        label: '凭据 / 密钥',
+        formatter: (v: string) => (v ? '已配置' : '-'),
+        hidden: (m: Record<string, any>) => m.accessMethod !== 'api_pull',
+      },
+      {
+        type: 'readonly',
+        prop: 'qpsLimit',
+        label: 'QPS 限制',
+        formatter: (v: number) => String(v ?? '-'),
+        hidden: (m: Record<string, any>) => m.accessMethod !== 'api_pull',
+      },
+      {
+        type: 'readonly',
+        prop: 'timeout',
+        label: '超时（秒）',
+        formatter: (v: number) => String(v ?? '-'),
+        hidden: (m: Record<string, any>) => m.accessMethod !== 'api_pull',
+      },
+      {
+        type: 'readonly',
+        prop: 'sslVerify',
+        label: 'SSL 验证',
+        formatter: (v: boolean) => (v ? '是' : '否'),
+        hidden: (m: Record<string, any>) => m.accessMethod !== 'api_pull',
       },
     ],
   },
@@ -350,27 +412,24 @@ const statusSections: FormSection[] = [
   },
 ]
 
-// Mock 数据（接入任务 tab — 后续改为真实 API）
-const mockTasks = [
-  {
-    name: 'SAP 销售订单同步',
-    summary: '最近执行: 2026-06-29 09:30 · 导入 1,250 条',
-    stats: '成功 1,250 / 失败 0',
-    ok: true,
-  },
-  {
-    name: 'MES 生产记录同步',
-    summary: '最近执行: 2026-06-29 09:00 · 部分成功',
-    stats: '成功 800 / 失败 56',
-    ok: false,
-  },
-]
-
+// 操作记录（后续版本替换为真实审计日志）
 const mockLogs = [
   '2026-06-29 09:30 · 接入任务执行成功 · SAP 销售订单同步',
   '2026-06-28 18:00 · 编辑数据源配置 · 更新技术负责人',
   '2026-01-15 10:30 · 创建数据源 · 由管理员创建',
 ]
+
+async function loadRelatedTasks() {
+  loadingTasks.value = true
+  try {
+    const result = await ingestionService.getList({ dataSourceId: id, pageSize: 20 })
+    relatedTasks.value = (result.items ?? []) as IngestionTask[]
+  } catch {
+    relatedTasks.value = []
+  } finally {
+    loadingTasks.value = false
+  }
+}
 
 onMounted(async () => {
   try {
@@ -385,11 +444,25 @@ onMounted(async () => {
     formReadonly.techOwner = ds.techOwner ?? ''
     formReadonly.ownerDept = ds.ownerDept ?? ''
 
+    // 回填连接配置（详情只读展示）
+    const cc = ds.connectionConfig
+    if (cc) {
+      formReadonly.baseUrl = cc.baseUrl ?? ''
+      formReadonly.authType = cc.authType ?? ''
+      formReadonly.authHeaderName = cc.authHeaderName ?? ''
+      formReadonly.authCredentials = cc.authCredentials ?? ''
+      formReadonly.qpsLimit = cc.qpsLimit
+      formReadonly.timeout = cc.timeout
+      formReadonly.sslVerify = cc.sslVerify
+    }
+
     formStatus.status = ds.status
     formStatus.lastSyncAt = ds.lastSyncAt
     formStatus.taskCount = ds.taskCount
     formStatus.createdAt = ds.createdAt ?? ''
     formStatus.updatedAt = ds.updatedAt ?? ''
+    // 异步加载关联任务列表
+    loadRelatedTasks()
   } finally {
     loading.value = false
   }
@@ -415,13 +488,20 @@ async function handleResume() {
 }
 
 async function handleTestConnection() {
-  if (source.value?.accessMethod === 'FILE') {
+  const fileMethods = ['file_upload', 'excel_import', 'share_scan'] as const
+  if (fileMethods.includes(source.value?.accessMethod as never)) {
     ElMessage.info('文件导入方式无需检测连接')
     return
   }
   try {
-    await dataSourceService.testConnection(id)
-    ElMessage.success('连接正常')
+    const result = await dataSourceService.testConnection(id)
+    if (result?.connectionStatus === 'healthy') {
+      ElMessage.success(`连接正常${result?.detail ? `（${result.detail}）` : ''}`)
+    } else {
+      ElMessage.warning(`连接异常${result?.detail ? `：${result.detail}` : ''}`)
+    }
+    // 刷新数据源以更新连接状态展示
+    source.value = await dataSourceService.get(id)
   } catch {
     /* 错误已由拦截器处理 */
   }

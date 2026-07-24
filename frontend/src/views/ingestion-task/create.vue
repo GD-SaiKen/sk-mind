@@ -1,11 +1,11 @@
 <template>
   <div class="page-layout detail-page">
     <PageHeader
-      title="创建接入任务"
+      :title="isEdit ? '编辑接入任务' : '创建接入任务'"
       :breadcrumb="[
         { label: '首页', to: '/' },
         { label: '接入任务', to: '/ingestion' },
-        { label: '创建任务' },
+        { label: isEdit ? '编辑任务' : '创建任务' },
       ]"
     />
 
@@ -23,6 +23,7 @@
           <el-select
             v-model="form.dataSourceId"
             filterable
+            :disabled="isEdit"
             placeholder="选择数据源"
             style="width: 100%"
             @change="onDataSourceChange"
@@ -42,13 +43,6 @@
 
         <el-form-item label="任务编码" prop="code">
           <el-input v-model="form.code" placeholder="唯一标识，如 mes_andon_sync" maxlength="100" />
-        </el-form-item>
-
-        <el-form-item label="同步模式" prop="syncMode">
-          <el-radio-group v-model="form.syncMode">
-            <el-radio value="full">全量同步</el-radio>
-            <el-radio value="incremental">增量同步</el-radio>
-          </el-radio-group>
         </el-form-item>
 
         <el-form-item label="调度方式" prop="scheduleType">
@@ -135,7 +129,7 @@
           :disabled="selectedCount === 0"
           @click="handleSubmit"
         >
-          创建任务并执行
+          {{ isEdit ? '保存修改' : '创建任务并执行' }}
         </el-button>
       </div>
     </el-card>
@@ -149,15 +143,20 @@ import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import PageHeader from '@/components/page-header/index.vue'
 import { dataSourceService, ingestionService } from '@/api'
-import type { DataSource, ApiInterfaceItem } from '@/api'
+import type { DataSource, ApiInterfaceItem, IngestionTask } from '@/api'
 
 const router = useRouter()
 const route = useRoute()
 const formRef = ref()
 const submitting = ref(false)
 const loadingInterfaces = ref(false)
+const loadingTask = ref(false)
+
+const isEdit = computed(() => !!route.params.id)
+const editTaskId = computed(() => route.params.id as string)
 
 const dataSources = ref<DataSource[]>([])
+const selectedDataSourceCode = ref('')
 const interfaces = ref<ApiInterfaceItem[]>([])
 
 const form = ref({
@@ -188,11 +187,20 @@ function deselectAll() {
 }
 
 async function onDataSourceChange(dsId: string) {
-  form.value.selectedInterfaces = []
+  if (!isEdit.value) form.value.selectedInterfaces = []
   if (!dsId) return
+  // 记录选中数据源的 code，用于拼接 configPath
+  const ds = dataSources.value.find(d => d.id === dsId)
+  selectedDataSourceCode.value = ds?.code ?? ''
   loadingInterfaces.value = true
   try {
     interfaces.value = await dataSourceService.getInterfaces(dsId)
+    // In edit mode, re-apply pre-selected interfaces after loading
+    if (isEdit.value) {
+      form.value.selectedInterfaces = form.value.selectedInterfaces.filter(
+        name => interfaces.value.some(i => i.name === name)
+      )
+    }
   } catch {
     interfaces.value = []
     ElMessage.warning('接口列表加载失败')
@@ -207,35 +215,95 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    const task = await ingestionService.createApiTask(
-      form.value.name,
-      form.value.code,
-      form.value.dataSourceId,
-      form.value.selectedInterfaces,
-      form.value.syncMode,
-      form.value.scheduleType,
-      form.value.description,
-    )
-    ElMessage.success(`任务创建成功: ${task.name || task.code}`)
+    if (isEdit.value) {
+      // Edit mode: update existing task
+      const data: Record<string, unknown> = {
+        name: form.value.name,
+        syncMode: form.value.syncMode,
+        scheduleType: form.value.scheduleType,
+        cronExpression: form.value.scheduleType === 'cron' ? form.value.cronExpression || undefined : undefined,
+        description: form.value.description || undefined,
+        config: {
+          accessMethod: 'api',
+          configPath: `config/data_sources/${selectedDataSourceCode.value}.yaml`,
+          interfaces: form.value.selectedInterfaces,
+        },
+      }
+      await ingestionService.update(editTaskId.value, data)
+      ElMessage.success('任务已更新')
+      router.push(`/ingestion/${editTaskId.value}`)
+    } else {
+      // Create mode
+      const task = await ingestionService.createApiTask(
+        form.value.name,
+        form.value.code,
+        form.value.dataSourceId,
+        form.value.selectedInterfaces,
+        selectedDataSourceCode.value,
+        form.value.syncMode,
+        form.value.scheduleType,
+        form.value.cronExpression,
+        form.value.description,
+      )
+      ElMessage.success(`任务创建成功: ${task.name || task.code}`)
 
-    // Immediately execute
-    try {
-      const execResult = await ingestionService.execute(task.id)
-      ElMessage.success(`同步已启动 (batch: ${execResult.batchId?.slice(0, 8)}…)`)
-    } catch {
-      ElMessage.warning('任务已创建但执行启动失败，请手动执行')
+      // Immediately execute
+      try {
+        const execResult = await ingestionService.execute(task.id)
+        ElMessage.success(`同步已启动 (batch: ${execResult.batchId?.slice(0, 8)}…)`)
+      } catch {
+        ElMessage.warning('任务已创建但执行启动失败，请手动执行')
+      }
+
+      router.push(`/ingestion?sourceId=${form.value.dataSourceId}`)
     }
-
-    router.push(`/ingestion?sourceId=${form.value.dataSourceId}`)
   } catch (e: unknown) {
-    const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '创建失败'
+    const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || (isEdit.value ? '更新失败' : '创建失败')
     ElMessage.error(msg)
   } finally {
     submitting.value = false
   }
 }
 
+async function loadEditTask() {
+  if (!isEdit.value) return
+  loadingTask.value = true
+  try {
+    const task: IngestionTask = await ingestionService.get(editTaskId.value)
+
+    // Pre-fill form
+    form.value.dataSourceId = task.dataSourceId
+    form.value.name = task.name
+    form.value.code = task.code
+    form.value.syncMode = task.syncMode
+    form.value.scheduleType = task.scheduleType
+    form.value.cronExpression = task.cronExpression || ''
+    form.value.description = task.description || ''
+
+    // Pre-select interfaces from task config
+    const configInterfaces = (task.config as any)?.interfaces || []
+    form.value.selectedInterfaces = configInterfaces
+
+    // Load the data source code and interfaces
+    const ds = dataSources.value.find(d => d.id === task.dataSourceId)
+    if (ds) {
+      selectedDataSourceCode.value = ds.code
+      loadingInterfaces.value = true
+      try {
+        interfaces.value = await dataSourceService.getInterfaces(task.dataSourceId)
+      } catch { /* ignore */ }
+      loadingInterfaces.value = false
+    }
+  } catch {
+    ElMessage.error('加载任务信息失败')
+    router.push('/ingestion')
+  } finally {
+    loadingTask.value = false
+  }
+}
+
 onMounted(async () => {
+  // Load data sources
   try {
     const result = await dataSourceService.getList({ page: 1, pageSize: 100 })
     dataSources.value = result.items || []
@@ -243,8 +311,11 @@ onMounted(async () => {
     // ignore
   }
 
-  // If sourceId is pre-selected via query param, auto-load interfaces
-  if (form.value.dataSourceId) {
+  if (isEdit.value) {
+    // Edit mode: load task data, then populate form
+    await loadEditTask()
+  } else if (form.value.dataSourceId) {
+    // Create mode with pre-selected source
     onDataSourceChange(form.value.dataSourceId)
   }
 })

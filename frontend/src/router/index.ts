@@ -57,6 +57,12 @@ const router = createRouter({
           meta: { title: '创建任务', icon: 'Upload', hidden: true },
         },
         {
+          path: 'ingestion/:id/edit',
+          name: 'IngestionEdit',
+          component: () => import('@/views/ingestion-task/create.vue'),
+          meta: { title: '编辑任务', icon: 'Upload', hidden: true },
+        },
+        {
           path: 'ingestion/:id',
           name: 'IngestionDetail',
           component: () => import('@/views/ingestion-task/detail.vue'),

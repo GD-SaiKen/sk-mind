@@ -9,6 +9,7 @@ export { lineageService } from './services/lineage';
 export { dataBrowseService } from './services/data-browse';
 export type {
   LoginParams,
+  ApiInterfaceItem,
   IngestionTask,
   IngestionBatch,
   BatchProgress,
@@ -16,6 +17,8 @@ export type {
   DataSource,
   DataSourceType,
   AccessMethod,
+  AuthType,
+  ConnectionConfig,
   DataSourceStatus,
   DataSourceFormData,
   DatasetResponse,

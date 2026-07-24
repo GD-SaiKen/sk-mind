@@ -9,18 +9,14 @@
         <el-tag type="info" effect="plain">{{ task.code }}</el-tag>
       </template>
       <template #actions>
-        <el-button type="primary" :icon="VideoPlay" :loading="executing" @click="handleExecute">立即执行</el-button>        <el-dropdown trigger="click">
-          <el-button :icon="Clock">补拉数据</el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="handleQuickFill(1)">补拉昨天</el-dropdown-item>
-              <el-dropdown-item @click="handleQuickFill(7)">补拉最近 7 天</el-dropdown-item>
-              <el-dropdown-item @click="handleQuickFill(30)">补拉最近 30 天</el-dropdown-item>
-              <el-dropdown-item divided @click="handleBackfill">全量回溯（从上线日期至今）</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-button>编辑</el-button>
+        <el-button type="primary" :icon="VideoPlay" :loading="executing" @click="handleExecute">立即执行</el-button>
+        <template v-if="!isEditing">
+          <el-button :icon="Edit" @click="toggleEdit">编辑</el-button>
+        </template>
+        <template v-else>
+          <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+          <el-button @click="handleCancelEdit">取消</el-button>
+        </template>
       </template>
     </Index>
 
@@ -33,15 +29,38 @@
 
     <el-tabs v-model="activeTab">
       <el-tab-pane label="当前配置" name="config">
-        <el-descriptions :column="2" border style="max-width: 600px">
-          <el-descriptions-item label="名称">{{ task.name }}</el-descriptions-item>
-          <el-descriptions-item label="编码">{{ task.code }}</el-descriptions-item>
-          <el-descriptions-item label="同步模式">{{ task.syncMode === 'incremental' ? '增量同步' : '全量同步' }}</el-descriptions-item>
-          <el-descriptions-item label="调度">{{ task.scheduleType === 'cron' ? `定时 (${task.cronExpression})` : task.scheduleType }}</el-descriptions-item>
-          <el-descriptions-item label="最近同步">{{ task.lastSyncAt?.slice(0, 19) || '未同步过' }}</el-descriptions-item>
-          <el-descriptions-item label="上次结果">{{ task.lastSyncStatus || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="创建时间">{{ task.createdAt?.slice(0, 19) }}</el-descriptions-item>
-        </el-descriptions>
+        <template v-if="!isEditing">
+          <el-descriptions :column="2" border style="max-width: 600px">
+            <el-descriptions-item label="名称">{{ task.name }}</el-descriptions-item>
+            <el-descriptions-item label="编码">{{ task.code }}</el-descriptions-item>
+            <el-descriptions-item label="调度">{{ task.scheduleType === 'cron' ? `定时 (${task.cronExpression})` : task.scheduleType }}</el-descriptions-item>
+            <el-descriptions-item label="最近同步">{{ task.lastSyncAt?.slice(0, 19) || '未同步过' }}</el-descriptions-item>
+            <el-descriptions-item label="上次结果">{{ task.lastSyncStatus || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ task.createdAt?.slice(0, 19) }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
+        <template v-else>
+          <el-form :model="editForm" label-width="100px" style="max-width: 500px">
+            <el-form-item label="名称">
+              <el-input v-model="editForm.name" />
+            </el-form-item>
+            <el-form-item label="编码">
+              <el-input :model-value="task.code" disabled />
+            </el-form-item>
+            <el-form-item label="调度方式">
+              <el-select v-model="editForm.scheduleType" style="width: 100%">
+                <el-option label="手动触发" value="manual" />
+                <el-option label="定时" value="cron" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="editForm.scheduleType === 'cron'" label="Cron 表达式">
+              <el-input v-model="editForm.cronExpression" placeholder="0 0 */30 * * ?" />
+            </el-form-item>
+            <el-form-item label="描述">
+              <el-input v-model="editForm.description" type="textarea" :rows="3" />
+            </el-form-item>
+          </el-form>
+        </template>
       </el-tab-pane>
 
       <el-tab-pane :label="`执行记录 (${batches.length})`" name="batches">
@@ -57,7 +76,7 @@
                     <el-progress :percentage="row._pct >= 0 ? row._pct : 0" :indeterminate="row._pct < 0" :stroke-width="5" :show-text="false" style="width: 100%" />
                     <span v-if="row._step" class="step-text">{{ row._step }}</span>
                   </template>
-                  <span v-if="(row as any).errorSummary" class="err-text">{{ (row as any).errorSummary }}</span>
+                  <span v-if="row.errorSummary" class="err-text">{{ row.errorSummary }}</span>
                 </div>
               </template>
               <template #col-successCount="{ row }">
@@ -90,14 +109,60 @@
     </el-tabs>
 
     <!-- 日志弹窗 -->
-    <el-dialog v-model="logDialog" title="批次日志" width="700px" destroy-on-close>
-      <div class="log-detail">
-        <div class="log-meta">
-          <span>批次: {{ logBatch?.id?.slice(0, 12) }}...</span>
-          <span>触发: {{ triggerLabel[logBatch?.triggerType ?? ''] ?? logBatch?.triggerType }}</span>
-          <span v-if="logBatch?.startedAt && logBatch?.finishedAt">耗时: {{ duration(logBatch.startedAt, logBatch.finishedAt) }}</span>
-          <span v-if="(logBatch as any)?.errorSummary" class="log-err-summary">{{ (logBatch as any).errorSummary }}</span>
+    <el-dialog v-model="logDialog" title="同步详情" width="680px" destroy-on-close>
+      <div class="log-detail" v-if="logBatch">
+        <!-- 同步摘要 -->
+        <div class="log-summary-grid">
+          <div class="log-sum-item">
+            <span class="log-sum-label">状态</span>
+            <el-tag :type="batchType[logBatch.status]" effect="plain" size="small">{{ batchLabel[logBatch.status] ?? logBatch.status }}</el-tag>
+          </div>
+          <div class="log-sum-item">
+            <span class="log-sum-label">触发方式</span>
+            <span class="log-sum-val">{{ triggerLabel[logBatch.triggerType] ?? logBatch.triggerType }}</span>
+          </div>
+          <div class="log-sum-item">
+            <span class="log-sum-label">耗时</span>
+            <span class="log-sum-val" v-if="logBatch.startedAt && logBatch.finishedAt">{{ duration(logBatch.startedAt, logBatch.finishedAt) }}</span>
+            <span class="log-sum-val" v-else>-</span>
+          </div>
+          <div class="log-sum-item">
+            <span class="log-sum-label">拉取行数</span>
+            <span class="log-sum-val">{{ logBatch.recordCount?.toLocaleString() ?? 0 }}</span>
+          </div>
+          <div class="log-sum-item">
+            <span class="log-sum-label">写入行数</span>
+            <span class="log-sum-val log-ok-val">{{ logBatch.successCount?.toLocaleString() ?? 0 }}</span>
+          </div>
+          <div class="log-sum-item">
+            <span class="log-sum-label">拒绝行数</span>
+            <span class="log-sum-val" :class="{ 'log-err-val': (logBatch.failCount ?? 0) > 0 }">{{ logBatch.failCount?.toLocaleString() ?? 0 }}</span>
+          </div>
         </div>
+
+        <!-- 时间范围 -->
+        <div class="log-time-row" v-if="logBatch.startedAt">
+          <span class="log-sum-label">执行时间</span>
+          <span class="log-sum-val">{{ logBatch.startedAt?.slice(0, 19).replace('T', ' ') }} → {{ logBatch.finishedAt?.slice(0, 19).replace('T', ' ') || '进行中' }}</span>
+        </div>
+
+        <!-- 最后步骤 -->
+        <div class="log-step-row" v-if="logBatch.progressStep">
+          <span class="log-sum-label">最后步骤</span>
+          <code class="log-step-code">{{ logBatch.progressStep }}</code>
+        </div>
+
+        <!-- 错误摘要 -->
+        <el-alert
+          v-if="logBatch.errorSummary"
+          :title="logBatch.errorSummary"
+          type="error"
+          :closable="false"
+          show-icon
+          style="margin-top: 12px"
+        />
+
+        <!-- 错误清单 -->
         <el-table v-if="errorList.length > 0" :data="errorList" stripe style="margin-top: 12px">
           <el-table-column prop="errorType" label="类型" width="100" />
           <el-table-column prop="errorMessage" label="错误信息" min-width="250" />
@@ -108,9 +173,6 @@
             <template #default="{ row: e }">{{ e.createdAt?.slice(0, 19).replace('T', ' ') }}</template>
           </el-table-column>
         </el-table>
-        <div v-if="errorList.length === 0 && logBatch" class="log-ok">
-          {{ logBatch.status === 'success' ? '本次同步无错误' : logBatch.status === 'running' ? '同步进行中...' : '无错误记录' }}
-        </div>
       </div>
     </el-dialog>
   </div>
@@ -119,7 +181,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Clock, VideoPlay } from '@element-plus/icons-vue'
+import { Edit, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask } from '@/api'
 import Index from '@/components/page-header/index.vue'
@@ -132,11 +194,25 @@ const task = ref<IngestionTask | null>(null)
 const batches = ref<(IngestionBatch & { _pct?: number; _step?: string })[]>([])
 const activeTab = ref('batches')
 const executing = ref(false)
-const backfilling = ref(false)
 const logDialog = ref(false)
+const isEditing = ref(route.query.edit === '1')
+const editForm = reactive({ name: '', scheduleType: 'manual', cronExpression: '', description: '' })
+const saving = ref(false)
 const logBatch = ref<IngestionBatch | null>(null)
 const errorList = ref<ImportError[]>([])
 let _esList: EventSource[] = []
+let _tickTimer: ReturnType<typeof setInterval> | null = null
+
+function startTick() {
+  if (_tickTimer) return
+  _tickTimer = setInterval(() => {
+    // Force re-render so elapsed() timer updates every second
+    batches.value = [...batches.value]
+  }, 1000)
+}
+function stopTick() {
+  if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null }
+}
 
 const batchLabel: Record<string, string> = { pending: '等待中', running: '运行中', success: '成功', partial_success: '部分成功', failed: '失败', cancelled: '已取消' }
 const batchType: Record<string, '' | 'success' | 'warning' | 'danger' | 'info'> = { pending: 'info', running: '', success: 'success', partial_success: 'warning', failed: 'danger', cancelled: 'info' }
@@ -144,7 +220,6 @@ const triggerLabel: Record<string, string> = { manual: '手动', scheduled: '定
 
 const summary = computed(() => [
   { label: '调度', value: task.value?.scheduleType === 'cron' ? `定时 ${task.value?.cronExpression}` : task.value?.scheduleType ?? '-' },
-  { label: '同步模式', value: task.value?.syncMode === 'incremental' ? '增量' : '全量' },
   { label: '最近同步', value: task.value?.lastSyncAt?.slice(0, 16) ?? '未同步过' },
   { label: '上次结果', value: task.value?.lastSyncStatus || '-' },
 ])
@@ -174,6 +249,10 @@ async function load() {
   task.value = await ingestionService.get(taskId)
   const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
   batches.value = b.items
+  // Start/stop tick timer based on whether any batch is running
+  const hasRunning = b.items.some((x: any) => x.status === 'running' || x.status === 'pending')
+  if (hasRunning) startTick()
+  else stopTick()
 }
 
 async function handleExecute() {
@@ -181,11 +260,32 @@ async function handleExecute() {
   try {
     const { batchId } = await ingestionService.execute(taskId)
     ElMessage.success('已提交')
-    const placeholder: any = { id: batchId, triggerType: 'manual', status: 'pending', recordCount: 0, successCount: 0, failCount: 0, createdAt: new Date().toISOString(), _pct: -1, _step: '等待 Worker...' }
+    const placeholder: any = {
+      id: batchId, triggerType: 'manual', status: 'pending',
+      recordCount: 0, successCount: 0, failCount: 0,
+      createdAt: new Date().toISOString(),
+      _pct: -1, _step: '等待 Worker...',
+    }
     batches.value.unshift(placeholder)
+    startTick()
     const es = ingestionService.streamProgress(batchId,
-      (d) => { const b = batches.value.find(x => x.id === batchId); if (b) { b._pct = d.pct; b._step = d.step; if (d.status !== 'running') b.status = d.status === 'success' ? 'success' : d.status === 'cancelled' ? 'cancelled' : 'failed' } },
-      () => load(),
+      (d) => {
+        const b = batches.value.find(x => x.id === batchId)
+        if (b) {
+          b._pct = d.pct
+          b._step = d.step
+          if (d.status === 'running') {
+            b.status = 'running'
+            if (d.startedAt) (b as any).startedAt = d.startedAt
+          } else if (d.status !== 'pending') {
+            b.status = d.status === 'success' ? 'success' : d.status === 'cancelled' ? 'cancelled' : 'failed'
+          }
+          if (d.recordCount !== undefined) (b as any).recordCount = d.recordCount
+          if (d.successCount !== undefined) (b as any).successCount = d.successCount
+          if (d.failCount !== undefined) (b as any).failCount = d.failCount
+        }
+      },
+      () => { stopTick(); load() },
     )
     _esList.push(es)
   } catch { /* */ } finally { executing.value = false }
@@ -203,23 +303,56 @@ async function showLog(row: IngestionBatch) {
   errorList.value = e.items
   logDialog.value = true
 }
-async function handleBackfill() {
-  backfilling.value = true
-  try { await ingestionService.backfill(taskId); ElMessage.success('全量回溯已提交'); await load() } finally { backfilling.value = false }
+
+function toggleEdit() {
+  isEditing.value = true
+  activeTab.value = 'config'
+  if (task.value) {
+    editForm.name = task.value.name
+    editForm.scheduleType = task.value.scheduleType
+    editForm.cronExpression = task.value.cronExpression || ''
+    editForm.description = task.value.description || ''
+  }
 }
-async function handleQuickFill(days: number) {
-  const end = new Date(); end.setHours(0, 0, 0, 0)
-  const start = new Date(end); start.setDate(start.getDate() - days)
-  try { await ingestionService.quickFill(taskId, start.toISOString(), end.toISOString()); ElMessage.success(`快补 ${days} 天已提交`); await load() } catch { /* */ }
+
+function handleCancelEdit() {
+  isEditing.value = false
+}
+
+async function handleSave() {
+  if (!task.value) return
+  saving.value = true
+  try {
+    const data: Record<string, unknown> = {}
+    if (editForm.name !== task.value.name) data.name = editForm.name
+    if (editForm.scheduleType !== task.value.scheduleType) {
+      data.scheduleType = editForm.scheduleType
+      data.cronExpression = editForm.scheduleType === 'cron' ? editForm.cronExpression || undefined : undefined
+    } else if (editForm.scheduleType === 'cron' && editForm.cronExpression !== (task.value.cronExpression || '')) {
+      data.cronExpression = editForm.cronExpression || undefined
+    }
+    if (editForm.description !== (task.value.description || '')) data.description = editForm.description || undefined
+
+    if (Object.keys(data).length === 0) {
+      ElMessage.info('无变更')
+      isEditing.value = false
+      return
+    }
+
+    await ingestionService.update(taskId, data)
+    ElMessage.success('已更新')
+    isEditing.value = false
+    await load()
+  } catch { /* handled */ } finally { saving.value = false }
 }
 
 onMounted(load)
-onUnmounted(() => _esList.forEach(es => es.close()))
+onUnmounted(() => { _esList.forEach(es => es.close()); stopTick() })
 </script>
 
 <style lang="scss" scoped>
 .page { }
-.summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
 .sum-item { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid $color-border-light; border-radius: 6px; }
 .sum-label { font-size: $font-size-xs; color: $color-text-placeholder; }
 .sum-val { font-size: $font-size-lg; font-weight: $font-weight-semibold; }
@@ -233,7 +366,22 @@ onUnmounted(() => _esList.forEach(es => es.close()))
 .dur-text { color: $color-text-secondary; font-size: $font-size-sm; }
 .trigger-text { color: $color-text-secondary; font-size: $font-size-sm; }
 .action-btns { display: flex; align-items: center; gap: 4px; }
-.log-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: $font-size-sm; color: $color-text-secondary; }
-.log-err-summary { color: $color-danger; font-weight: $font-weight-semibold; }
-.log-ok { text-align: center; padding: 20px; color: $color-text-placeholder; }
+.log-summary-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid $color-border-light;
+}
+.log-sum-item { display: flex; flex-direction: column; gap: 4px; }
+.log-sum-label { font-size: 12px; color: $color-text-placeholder; }
+.log-sum-val { font-size: 14px; font-weight: $font-weight-semibold; color: $color-text-primary; }
+.log-ok-val { color: $color-success; }
+.log-err-val { color: $color-danger; }
+.log-time-row, .log-step-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 0; font-size: 13px;
+}
+.log-step-code {
+  font-size: 12px; color: $color-primary;
+  background: rgba(0,0,0,0.04); padding: 2px 8px; border-radius: 4px;
+  word-break: break-all; flex: 1;
+}
 </style>

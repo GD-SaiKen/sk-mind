@@ -43,7 +43,7 @@
           v-if="row.taskCount > 0"
           type="primary"
           :underline="false"
-          @click="router.push(`/ingestion?sourceId=${row.id}`)"
+          @click="router.push(`/ingestion/create?sourceId=${row.id}`)"
         >{{ row.taskCount }}</el-link>
         <span v-else>0</span>
       </template>
@@ -202,7 +202,7 @@ const columns: ColumnSchema[] = [
       {
         label: '创建任务',
         icon: VideoPlay,
-        onClick: (row) => router.push(`/ingestion?sourceId=${(row as DataSource).id}`),
+        onClick: (row) => router.push(`/ingestion/create?sourceId=${(row as DataSource).id}`),
         hidden: (row) => (row as DataSource).status === 'paused',
       },
       {

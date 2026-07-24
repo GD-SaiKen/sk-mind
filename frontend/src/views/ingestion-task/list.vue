@@ -52,15 +52,29 @@
                     :show-text="false"
                     style="width: 100px"
                   />
-                  <el-button type="danger" text @click="handleCancel(row.id, running[row.id].batchId)">停止</el-button>
+                  <el-tooltip content="停止" placement="top">
+                    <el-button type="danger" :icon="VideoPause" circle @click="handleCancel(row.id, running[row.id].batchId)" />
+                  </el-tooltip>
                 </div>
               </div>
             </template>
             <template v-else>
               <div class="action-btns">
-                <el-button @click="router.push(`/ingestion/${row.id}`)">详情</el-button>
-                <el-button type="success" :icon="VideoPlay" @click="handleExecute(row)">执行</el-button>
-                <el-button v-if="row.status !== 'disabled'" text type="danger" @click="handleDelete(row)">停用</el-button>
+                <el-tooltip content="详情" placement="top">
+                  <el-button :icon="View" circle @click="router.push(`/ingestion/${row.id}`)" />
+                </el-tooltip>
+                <el-tooltip content="编辑" placement="top">
+                  <el-button :icon="Edit" circle @click="router.push(`/ingestion/${row.id}/edit`)" />
+                </el-tooltip>
+                <el-tooltip content="执行同步" placement="top">
+                  <el-button type="success" :icon="VideoPlay" circle @click="handleExecute(row)" />
+                </el-tooltip>
+                <el-tooltip v-if="row.status === 'active'" content="停用" placement="top">
+                  <el-button type="danger" :icon="CircleCloseFilled" circle @click="handleDisable(row)" />
+                </el-tooltip>
+                <el-tooltip v-else content="启用" placement="top">
+                  <el-button type="primary" :icon="CircleCheck" circle @click="handleEnable(row)" />
+                </el-tooltip>
               </div>
             </template>
           </template>
@@ -74,10 +88,10 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  CircleCheck, CircleCloseFilled, Clock, Collection, DataAnalysis, Plus, Search, VideoPlay, WarningFilled,
+  CircleCheck, CircleCloseFilled, Clock, Collection, DataAnalysis, Edit, Plus, Search, VideoPause, VideoPlay, View, WarningFilled,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ingestionService, type IngestionTask } from '@/api'
+import { dataSourceService, ingestionService, type IngestionTask, type DataSource } from '@/api'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
@@ -86,10 +100,15 @@ const router = useRouter()
 const tableRef = ref()
 const tasks = ref<IngestionTask[]>([])
 const loading = ref(false)
+
+// 动态数据源筛选选项
+const dataSourceOptions = ref<{ label: string; value: string }[]>([{ label: '全部', value: '' }])
+const dataSources = ref<DataSource[]>([])
+
 const filterItems: FilterItem[] = [
   { key: 'keyword', placeholder: '搜索任务名称...', width: '240px' },
-  { key: 'sourceId', type: 'select', placeholder: '数据源', width: '130px',
-    options: [{ label: '全部', value: '' }, { label: 'SAP ERP', value: 'sap' }, { label: 'Plataine MES', value: 'mes' }, { label: 'Excel', value: 'excel' }] },
+  { key: 'sourceId', type: 'select', placeholder: '数据源', width: '140px',
+    options: dataSourceOptions.value },
   { key: 'status', type: 'select', placeholder: '状态', width: '110px',
     options: [
       { label: '全部', value: '' }, { label: '正常', value: 'active' },
@@ -122,7 +141,6 @@ const columns: ColumnSchema[] = [
   { type: 'text', prop: 'code', label: '编码', width: 150 },
   { type: 'text', prop: 'scheduleType', label: '调度频率', width: 110, formatter: (v: string) => v === 'cron' ? '定时' : v === 'manual' ? '手动触发' : v === 'interval' ? '每小时' : v || '手动触发' },
   { type: 'custom', prop: 'lastSyncAt', label: '最近同步', width: 170 },
-  { type: 'tag', prop: 'syncMode', label: '模式', width: 70, formatter: (v: string) => v === 'incremental' ? '增量' : '全量', tagMap: { incremental: '', '': 'info' } },
   { type: 'tag', prop: 'status', label: '状态', width: 90, formatter: (v: string) => statusMap[v]?.text ?? v, tagMap: { active: 'success', draft: 'info', paused: 'warning', disabled: 'danger' } },
   { type: 'text', prop: 'createdAt', label: '创建时间', width: 170 },
   { type: 'custom', prop: 'actions', label: '操作', width: 280, align: 'center' },
@@ -144,12 +162,25 @@ const statCards = computed(() => {
   ] as Card[]
 })
 
+async function loadDataSources() {
+  try {
+    const result = await dataSourceService.getList({ page: 1, pageSize: 100 })
+    const items = (result.items ?? []) as DataSource[]
+    dataSources.value = items
+    dataSourceOptions.value = [
+      { label: '全部', value: '' },
+      ...items.map(ds => ({ label: `${ds.name} (${ds.code})`, value: ds.id })),
+    ]
+  } catch { /* ignore */ }
+}
+
 async function loadTasks() {
   loading.value = true
   try {
     const res = await ingestionService.getList({
       keyword: filterValues.value.keyword || undefined,
       status: filterValues.value.status || undefined,
+      dataSourceId: filterValues.value.sourceId || undefined,
       page: page.value, pageSize: pageSize.value,
     })
     tasks.value = res.items
@@ -179,14 +210,24 @@ async function handleCancel(taskId: string, batchId: string) {
   try { await ingestionService.cancelBatch(batchId); ElMessage.success('取消信号已发送') } catch { /* handled */ }
 }
 
-async function handleDelete(task: IngestionTask) {
-  await ElMessageBox.confirm('确定停用该任务？', '确认')
-  await ingestionService.delete(task.id)
-  ElMessage.success('已停用')
-  await loadTasks()
+async function handleEnable(task: IngestionTask) {
+  try {
+    await ingestionService.enable(task.id)
+    ElMessage.success('已启用')
+    await loadTasks()
+  } catch { /* handled */ }
 }
 
-onMounted(loadTasks)
+async function handleDisable(task: IngestionTask) {
+  try {
+    await ElMessageBox.confirm('确定停用该任务？', '确认')
+    await ingestionService.disable(task.id)
+    ElMessage.success('已停用')
+    await loadTasks()
+  } catch { /* handled */ }
+}
+
+onMounted(() => { loadDataSources(); loadTasks() })
 onUnmounted(() => _pollEss.forEach(es => es.close()))
 
 function syncFreshColor(lastSyncAt: string | null): string {

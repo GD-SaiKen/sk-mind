@@ -26,11 +26,13 @@ export type AccessMethod =
   | 'share_scan'
 
 export type DataSourceStatus =
+  | 'draft'
   | 'unconnected'
   | 'syncing'
   | 'active'
   | 'error'
   | 'paused'
+  | 'archived'
 
 export interface DataSource {
   id: string
@@ -43,11 +45,36 @@ export interface DataSource {
   techOwner: string
   ownerDept: string
   status: DataSourceStatus
+  sourceCategory?: string | null
   lastSyncAt: string | null
   taskCount: number
+  connectionConfig?: ConnectionConfig | null
   createdAt: string
   updatedAt: string
 }
+
+/** 数据源连接配置（API 拉取 / 数据库同步等） */
+export interface ConnectionConfig {
+  baseUrl?: string
+  authType?: AuthType
+  authHeaderName?: string
+  authCredentials?: string
+  authHeaderName2?: string
+  authCredentials2?: string
+  qpsLimit?: number
+  timeout?: number
+  sslVerify?: boolean
+  recordsPath?: string
+  totalPath?: string
+}
+
+export type AuthType =
+  | 'none'
+  | 'bearer'
+  | 'basic'
+  | 'api_key'
+  | 'dual_key'
+  | 'session'
 
 export interface DataSourceFormData {
   name: string
@@ -58,6 +85,7 @@ export interface DataSourceFormData {
   businessOwner: string
   techOwner: string
   ownerDept: string
+  connectionConfig?: ConnectionConfig | null
 }
 
 // ── Ingestion ──
@@ -111,6 +139,9 @@ export interface IngestionBatch {
   successCount: number
   failCount: number
   skipCount: number
+  errorSummary: string | null
+  progressStep: string | null
+  rejectedRows: string | null
   createdAt: string
 }
 
@@ -137,7 +168,6 @@ export interface TimeRange {
   lastSyncAt: string | null
   suggestedStart: string | null
   suggestedEnd: string | null
-  historyStartDate: string | null
   scheduleCron: string | null
   scheduleDescription: string | null
 }

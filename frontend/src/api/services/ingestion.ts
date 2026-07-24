@@ -22,8 +22,10 @@ export class IngestionService {
     code: string,
     dataSourceId: string,
     interfaces: string[],
+    dataSourceCode: string = '',
     syncMode: string = 'full',
     scheduleType: string = 'manual',
+    cronExpression: string = '',
     description: string = '',
   ) {
     return this.api.post('/ingestion-tasks', {
@@ -33,13 +35,18 @@ export class IngestionService {
       targetLayer: 'raw',
       syncMode,
       scheduleType,
+      cronExpression: cronExpression || undefined,
       config: {
         accessMethod: 'api',
-        configPath: 'config/data_sources/mes_light.yaml',
+        configPath: `config/data_sources/${dataSourceCode}.yaml`,
         interfaces,
       },
       description,
     }).then(r => r.data.data)
+  }
+
+  update(id: string, data: Record<string, unknown>) {
+    return this.api.put(`/ingestion-tasks/${id}`, data).then(r => r.data.data)
   }
 
   delete(id: string) {
@@ -105,7 +112,15 @@ export class IngestionService {
   // ── SSE 进度流 ──
   streamProgress(
     batchId: string,
-    onProgress: (data: { pct: number; step: string; status: string }) => void,
+    onProgress: (data: {
+      pct: number
+      step: string
+      status: string
+      startedAt: string | null
+      recordCount: number
+      successCount: number
+      failCount: number
+    }) => void,
     onDone: () => void,
   ): EventSource {
     const base = this.api.defaults.baseURL || ''

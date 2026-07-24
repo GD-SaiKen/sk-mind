@@ -66,6 +66,7 @@
                         :clearable="field.clearable ?? true"
                         :maxlength="field.maxlength"
                         :show-word-limit="field.showWordLimit"
+                        :show-password="field.showPassword"
                         :style="{ width: field.width || '100%' }"
                         @update:model-value="onFieldChange(field, $event)"
                       >

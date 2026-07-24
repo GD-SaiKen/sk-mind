@@ -305,6 +305,8 @@ export interface FormField {
   maxlength?: number
   /** 是否显示字数统计（input / textarea） */
   showWordLimit?: boolean
+  /** 是否显示密码切换图标（input，凭据字段用） */
+  showPassword?: boolean
   /** 插槽名（type='custom' 时生效，默认 `form-{prop}`） */
   slotName?: string
   /** 字段占几列（1=继承分区col，2=占满一行），默认 1 */
