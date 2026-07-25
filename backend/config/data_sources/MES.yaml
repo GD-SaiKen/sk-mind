@@ -273,7 +273,9 @@ interfaces:
     endpoint: "/lightmesapi/open/trilightSummary/selectOeeReport"
     method: POST
     target_table: raw.mes_select_oee_report
-    pk_fields: []
+    # OEE 报表按 设备(mid) + 报表日期(sim_date) + 班次(shift_name) 唯一。
+    # 配置主键后引擎走 upsert，增量回放窗口重叠时幂等覆盖（数据补录/修订也只保留最新）。
+    pk_fields: [mid, sim_date, shift_name]
     time_config:
       param_start: startDate
       param_end: endDate
