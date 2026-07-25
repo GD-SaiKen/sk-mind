@@ -109,6 +109,50 @@ export class IngestionService {
     return this.api.get(`/ingestion-tasks/${id}/time-range`).then(r => r.data.data)
   }
 
+  // ── 对账（同步引擎优化）──
+  getReconciliations(taskId: string, params?: Record<string, unknown>) {
+    return this.api.get(`/ingestion-tasks/${taskId}/reconciliations`, { params }).then(r => r.data.data)
+  }
+
+  getReconciliation(reconId: string) {
+    return this.api.get(`/ingestion-tasks/reconciliations/${reconId}`).then(r => r.data.data)
+  }
+
+  triggerReconciliation(taskId: string, level: 'L1' | 'L2' | 'L3') {
+    return this.api.post(`/ingestion-tasks/${taskId}/reconcile`, { level }).then(r => r.data.data)
+  }
+
+  repairReconciliation(reconId: string, segment?: string) {
+    return this.api.post(`/ingestion-tasks/reconciliations/${reconId}/repair`, { segment }).then(r => r.data.data)
+  }
+
+  // ── Schema 变更审计 ──
+  getSchemaChanges(taskId: string) {
+    return this.api.get(`/ingestion-tasks/${taskId}/schema-changes`).then(r => r.data.data)
+  }
+
+  // ── 隔离区 ──
+  getQuarantine(taskId: string, params?: Record<string, unknown>) {
+    return this.api.get(`/ingestion-tasks/${taskId}/quarantine`, { params }).then(r => r.data.data)
+  }
+
+  getQuarantineStats(taskId: string) {
+    return this.api.get(`/ingestion-tasks/${taskId}/quarantine/stats`).then(r => r.data.data)
+  }
+
+  retryQuarantine(quarantineId: string) {
+    return this.api.post(`/ingestion-tasks/quarantine/${quarantineId}/retry`).then(r => r.data.data)
+  }
+
+  ignoreQuarantine(quarantineId: string) {
+    return this.api.post(`/ingestion-tasks/quarantine/${quarantineId}/ignore`).then(r => r.data.data)
+  }
+
+  // ── 定时调度 ──
+  previewCron(cronExpression: string) {
+    return this.api.post('/ingestion-tasks/preview-cron', { cronExpression }).then(r => r.data.data)
+  }
+
   // ── SSE 进度流 ──
   streamProgress(
     batchId: string,

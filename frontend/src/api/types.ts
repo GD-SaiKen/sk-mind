@@ -102,6 +102,8 @@ export interface IngestionTask {
   lastSyncStatus: string | null
   status: string
   config: Record<string, unknown> | null
+  nextRunAt?: string | null
+  replayWindowDays?: number
   createdAt: string
   updatedAt: string
 }
@@ -322,4 +324,73 @@ export interface LineageStats {
   aiGeneratedCount: number
   pendingCount: number
   confirmRate: number
+}
+
+// ── 同步引擎优化：对账机制 ──
+export interface Reconciliation {
+  id: string
+  dataSourceId: string
+  interfaceName: string
+  batchId: string | null
+  checkLevel: 'L1' | 'L2' | 'L3'
+  apiTotal: number | null
+  dbCount: number | null
+  diffCount: number | null
+  diffRatio: number | null
+  status: 'pass' | 'warning' | 'failed' | 'repaired'
+  detail: ReconciliationSegment[] | null
+  checkedAt: string
+}
+
+export interface ReconciliationSegment {
+  dateRange: string
+  apiCount: number
+  dbCount: number
+  diff: number
+  status: 'consistent' | 'inconsistent'
+}
+
+// ── 同步引擎优化：Schema 变更 ──
+export interface SchemaChange {
+  id: string
+  tableName: string
+  changeType: 'added' | 'removed' | 'type_changed'
+  columnName: string
+  detail: Record<string, unknown> | null
+  detectedAt: string
+}
+
+// ── 同步引擎优化：隔离区 ──
+export interface QuarantineRecord {
+  id: string
+  batchId: string
+  dataSourceId: string
+  interfaceName: string
+  pkValue: string | null
+  rejectionReason: 'null_pk' | 'dup_in_batch' | 'type_error' | 'write_error'
+  // rawJson: 后端 JSONB 字段，CamelModel 序列化后可能返回 object 或 string
+  // 类型用联合类型，formatRawJson() 统一处理两种情况
+  rawJson: string | Record<string, unknown>
+  status: 'pending' | 'retried' | 'resolved' | 'ignored'
+  createdAt: string
+  retriedAt: string | null
+  resolvedAt: string | null
+}
+
+export interface QuarantineStats {
+  totalCount: number
+  pendingCount: number
+  resolvedCount: number
+  ignoredCount: number
+  quarantineRate: number
+  threshold: number              // 熔断阈值（百分比，如 5 表示 5%），从后端 YAML 配置返回
+  circuitBreakerTriggered: boolean
+}
+
+// ── 同步引擎优化：定时调度 ──
+export interface CronPreview {
+  cronExpression: string
+  nextRun: string | null
+  isValid: boolean
+  description: string | null
 }

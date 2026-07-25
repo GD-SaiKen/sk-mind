@@ -33,4 +33,10 @@ export type {
   QualityStats,
   LineageEdge,
   LineageStats,
+  Reconciliation,
+  ReconciliationSegment,
+  SchemaChange,
+  QuarantineRecord,
+  QuarantineStats,
+  CronPreview,
 } from './types';
