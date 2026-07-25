@@ -1,7 +1,10 @@
 """ApiSyncEngine: config-driven REST API -> PostgreSQL sync engine.
 
 Sync strategy per interface:
-- **First sync** (no watermark): full pull — paginate all data, no date params.
+- **First sync** (no watermark, is_time_based=True): full pull with a wide date
+  range (2020-01-01 ~ now). Some MES APIs accept date filtering (optional params);
+  sending a broad range ensures we get all data in one paginated pull.
+  Single paginated request, NOT day-by-day slicing.
 - **Incremental sync** (watermark exists, is_time_based=True): pull only data
   from ``watermark - replay_days`` to ``now`` via the API's date params.
   Upsert ensures overlapping data is idempotent.
@@ -200,9 +203,11 @@ class ApiSyncEngine:
 
         Returns:
             (mode, start_dt, end_dt)
-            - mode="full": first sync or non-time-based → no date filtering
-            - mode="incremental": time-based + watermark exists → date-filtered
-            - start_dt/end_dt are set only for incremental mode
+            - mode="full", start=None, end=None: non-time-based → no date params
+            - mode="full", start=2020-01-01, end=now: first sync of time-based →
+              wide date range (API date params are optional, broad range ensures
+              complete data in one pull)
+            - mode="incremental", start=wm-replay, end=now: time-based + watermark
         """
         time_cfg = iface.get("time_config", {})
         is_time_based = time_cfg.get("is_time_based", False)
@@ -210,29 +215,55 @@ class ApiSyncEngine:
         if not is_time_based:
             return "full", None, None
 
+        now = datetime.now(timezone.utc)
+
         # Time-based: check watermark
         wm = self._watermark.get(data_source_id, iface["name"])
         if wm is None:
-            # First sync — full pull
-            return "full", None, None
+            # First sync — wide date range (single request, NOT day-by-day slicing).
+            # API date params are optional; sending a broad range ensures we get
+            # all data in one paginated pull even if the API supports date filtering.
+            start = datetime(2020, 1, 1, tzinfo=timezone.utc)
+            return "full", start, now
 
         # Incremental: replay window for safety (upsert handles overlaps)
-        now = datetime.now(timezone.utc)
         start = wm - timedelta(days=self._replay_days)
         return "incremental", start, now
 
     def _build_date_params(
         self, iface: dict, start_dt: datetime, end_dt: datetime
     ) -> dict:
-        """Build date parameter dict for incremental sync from time_config."""
+        """Build date parameter dict for sync from time_config.
+
+        Supports three format types in YAML ``time_config.format``:
+        - ``millis``: Java millisecond timestamps (int), e.g. 1784822400000
+        - ``"%Y-%m-%d"``: date-only string, e.g. "2026-07-22"
+        - ``"%Y-%m-%d %H:%M:%S"``: datetime string, e.g. "2026-07-22 00:00:00"
+
+        All datetimes are converted to Beijing time (UTC+8) before formatting,
+        because MES APIs expect local time strings/timestamps.
+        """
         time_cfg = iface.get("time_config", {})
         param_start = time_cfg.get("param_start", "startDate")
         param_end = time_cfg.get("param_end", "endDate")
         fmt = time_cfg.get("format", "%Y-%m-%d")
 
+        # Convert UTC → Beijing time (UTC+8) — MES APIs expect local time
+        bj_tz = timezone(timedelta(hours=8))
+        start_local = start_dt.astimezone(bj_tz)
+        end_local = end_dt.astimezone(bj_tz)
+
+        if fmt == "millis":
+            # Java millisecond timestamps (int) — .timestamp() returns Unix
+            # seconds in float; multiply by 1000 for millis.
+            return {
+                param_start: int(start_local.timestamp() * 1000),
+                param_end: int(end_local.timestamp() * 1000),
+            }
+
         return {
-            param_start: start_dt.strftime(fmt),
-            param_end: end_dt.strftime(fmt),
+            param_start: start_local.strftime(fmt),
+            param_end: end_local.strftime(fmt),
         }
 
     def _sync_interface(
@@ -256,15 +287,27 @@ class ApiSyncEngine:
         # ── Build request body ──
         body = {**iface.get("request_body_template", {}), "pageNum": 1, "pageSize": 100}
 
-        if mode == "incremental":
+        # Add date params for both incremental and first-full (time-based APIs
+        # may accept date filtering even though params are optional).
+        time_cfg = iface.get("time_config", {})
+
+        if start_dt is not None:
             date_params = self._build_date_params(iface, start_dt, end_dt)
             body.update(date_params)
-            time_cfg = iface.get("time_config", {})
-            fmt = time_cfg.get("format", "%Y-%m-%d")
-            progress_msg = (
-                f"正在拉取 {iface['name']} (增量: "
-                f"{start_dt.strftime(fmt)} ~ {end_dt.strftime(fmt)})..."
-            )
+
+        # Format date range for progress message (handle millis format)
+        bj_tz = timezone(timedelta(hours=8))
+        start_local = start_dt.astimezone(bj_tz) if start_dt else None
+        end_local = end_dt.astimezone(bj_tz) if end_dt else None
+        range_str = (
+            f"{start_local:%Y-%m-%d %H:%M} ~ {end_local:%Y-%m-%d %H:%M}"
+            if start_local and end_local else ""
+        )
+
+        if mode == "incremental":
+            progress_msg = f"正在拉取 {iface['name']} (增量: {range_str})..."
+        elif start_dt is not None:
+            progress_msg = f"正在拉取 {iface['name']} (全量: {range_str})..."
         else:
             progress_msg = f"正在拉取 {iface['name']} (全量)..."
 
@@ -290,8 +333,12 @@ class ApiSyncEngine:
 
         if not rows:
             self._update_progress(batch, f"{iface['name']}: 无数据")
-            # Still save watermark — empty result is a successful sync
-            self._watermark.save(data_source_id, iface["name"])
+            # Only save watermark for incremental syncs (empty result is valid —
+            # no new data since last sync). For first full sync, empty result
+            # might indicate an API error — don't save watermark so next sync
+            # retries as full.
+            if mode == "incremental":
+                self._watermark.save(data_source_id, iface["name"])
             return {"success": 0, "rejected": 0, "mode": mode}
 
         # ── Progress: writing rows ──

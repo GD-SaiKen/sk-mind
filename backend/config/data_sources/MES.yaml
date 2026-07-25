@@ -151,6 +151,7 @@ interfaces:
     records_path: data
 
   # 9. andonApiController
+  # 日期参数 startDate/endDate 为 Java 毫秒时间戳（整数），非字符串
   - name: andonApiController
     endpoint: "/lightmesapi/open/trilightSummary/andonApiController"
     method: POST
@@ -159,7 +160,7 @@ interfaces:
     time_config:
       param_start: startDate
       param_end: endDate
-      format: "%Y-%m-%d"
+      format: millis
       is_time_based: true
     request_body_template:
       pageNum: 1
@@ -266,6 +267,8 @@ interfaces:
 
   # ── 设备域 ──
   # 17. selectOeeReport
+  # 注意: OEE API 的日期参数名为 startDate/endDate（非浏览器前端的 startDateStr），
+  # 日期参数必填（不传返回 code=1001 "查询时间不能空"），格式 "yyyy-MM-dd HH:mm:ss" 或 "yyyy-MM-dd"。
   - name: selectOeeReport
     endpoint: "/lightmesapi/open/trilightSummary/selectOeeReport"
     method: POST
@@ -274,12 +277,17 @@ interfaces:
     time_config:
       param_start: startDate
       param_end: endDate
-      format: "%Y-%m-%d"
+      format: "%Y-%m-%d %H:%M:%S"
       is_time_based: true
     request_body_template:
       pageNum: 1
       pageSize: 100
+      shiftName: ""
+      did: ""
+      machineNo: ""
+      freeStatus: 0
     records_path: data
+    total_path: totalItems
 
   # 18. getMachineCount
   - name: getMachineCount

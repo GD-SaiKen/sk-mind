@@ -202,6 +202,7 @@ const logBatch = ref<IngestionBatch | null>(null)
 const errorList = ref<ImportError[]>([])
 let _esList: EventSource[] = []
 let _tickTimer: ReturnType<typeof setInterval> | null = null
+let _pollTimer: ReturnType<typeof setInterval> | null = null
 
 function startTick() {
   if (_tickTimer) return
@@ -212,6 +213,27 @@ function startTick() {
 }
 function stopTick() {
   if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null }
+}
+
+// Re-fetch batches periodically while any are still running.
+// The engine creates one batch per interface for a multi-interface task, but the
+// SSE progress stream is only opened for the first batch. Secondary batches (e.g.
+// OEE) have no SSE stream of their own, so without this poll their status would
+// stay "running" forever even after they finished on the backend.
+async function pollRunning() {
+  try {
+    const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
+    batches.value = b.items
+    const hasRunning = b.items.some((x: any) => x.status === 'running' || x.status === 'pending')
+    if (!hasRunning) stopPolling()
+  } catch { /* ignore transient poll errors */ }
+}
+function startPolling() {
+  if (_pollTimer) return
+  _pollTimer = setInterval(pollRunning, 3000)
+}
+function stopPolling() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }
 }
 
 const batchLabel: Record<string, string> = { pending: '等待中', running: '运行中', success: '成功', partial_success: '部分成功', failed: '失败', cancelled: '已取消' }
@@ -249,10 +271,10 @@ async function load() {
   task.value = await ingestionService.get(taskId)
   const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
   batches.value = b.items
-  // Start/stop tick timer based on whether any batch is running
+  // Start/stop tick + polling timers based on whether any batch is running
   const hasRunning = b.items.some((x: any) => x.status === 'running' || x.status === 'pending')
-  if (hasRunning) startTick()
-  else stopTick()
+  if (hasRunning) { startTick(); startPolling() }
+  else { stopTick(); stopPolling() }
 }
 
 async function handleExecute() {
@@ -347,7 +369,7 @@ async function handleSave() {
 }
 
 onMounted(load)
-onUnmounted(() => { _esList.forEach(es => es.close()); stopTick() })
+onUnmounted(() => { _esList.forEach(es => es.close()); stopTick(); stopPolling() })
 </script>
 
 <style lang="scss" scoped>
