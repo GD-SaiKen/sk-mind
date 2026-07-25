@@ -78,12 +78,18 @@ class StageWriter:
         error_items: Optional[list] = None,
         last_sync_marker: Optional[dict] = None,
         source_signature: Optional[str] = None,
+        skip: int = 0,
+        pulled: int = 0,
     ) -> None:
         batch.status = status
         batch.finished_at = _utcnow()
-        batch.record_count = total
+        # 拉取行数 = 真实从 API 拉取的行数（由引擎透传），无则回退到 success
+        batch.record_count = pulled or total
+        # 写入行数 = 实际变更（新增 + 更新），不是"交给 writer 的行数"
         batch.success_count = success
         batch.fail_count = rejected
+        # 跳过行数 = 已存在且内容未变、被 upsert 跳过写入的行
+        batch.skip_count = skip
         batch.rejected_rows = str(rejected)
         if error_summary:
             batch.error_summary = error_summary[:1000]
@@ -110,10 +116,22 @@ class StageWriter:
     ) -> dict:
         """Write rows to staging, then promote to raw if healthy.
 
-        Returns: {"success": int, "rejected": int}
+        Returns a truthful accounting of what actually happened to the raw
+        table (NOT just how many rows were handed to the writer):
+
+            {
+              "success":   int,  # 实际变更行数 = inserted + updated（写入行数）
+              "rejected":  int,  # staging 写入被拒（逐行异常）
+              "inserted": int,  # 新增行（raw 中原本无此 PK）
+              "updated":  int,   # 已存在且内容有变化的行（upsert 覆盖）
+              "unchanged":int,   # 已存在且内容完全相同，被跳过（未写入）
+            }
         """
         if not rows:
-            return {"success": 0, "rejected": 0}
+            return {
+                "success": 0, "rejected": 0,
+                "inserted": 0, "updated": 0, "unchanged": 0,
+            }
 
         pulled_at = pulled_at or _utcnow()
         schema, table = self._parse_schema_table(target_table)
@@ -126,24 +144,39 @@ class StageWriter:
             self._staging_tables.append(staging_full)
 
             # 2. Write all rows to staging
-            success, rejected = self._insert_into_staging(
+            staging_success, rejected = self._insert_into_staging(
                 staging_full, batch, rows, source_id, source_signature, pulled_at
             )
 
-            if rejected > 0 and sync_mode == "full" and success == 0:
+            if rejected > 0 and sync_mode == "full" and staging_success == 0:
                 # All rows rejected: don't promote, clean up staging
                 self._drop_staging(staging_full)
-                return {"success": 0, "rejected": rejected}
+                return {
+                    "success": 0, "rejected": rejected,
+                    "inserted": 0, "updated": 0, "unchanged": 0,
+                }
 
-            # 3. Atomic promotion
+            # 3. Atomic promotion — count what actually landed in raw
             if sync_mode == "upsert" and pk_fields:
-                self._promote_upsert(staging_full, raw_full, pk_fields)
+                inserted, updated = self._promote_upsert(staging_full, raw_full, pk_fields)
+                # 跳过的行 = staging 中既未新增也未更新的行（已存在且内容完全一致）
+                unchanged = staging_success - inserted - updated
+                if unchanged < 0:
+                    unchanged = 0
             elif sync_mode == "full":
                 self._promote_full(staging_full, raw_full)
+                inserted, updated, unchanged = staging_success, 0, 0
             else:
                 self._promote_incremental(staging_full, raw_full)
+                inserted, updated, unchanged = staging_success, 0, 0
 
-            return {"success": success, "rejected": rejected}
+            return {
+                "success": inserted + updated,
+                "rejected": rejected,
+                "inserted": inserted,
+                "updated": updated,
+                "unchanged": unchanged,
+            }
 
         except Exception:
             # On any error, clean up staging ? raw is untouched
@@ -249,12 +282,21 @@ class StageWriter:
 
     def _promote_upsert(
         self, staging_full: str, raw_full: str, pk_fields: list[str]
-    ) -> None:
+    ) -> tuple[int, int]:
         """Upsert promotion: INSERT staging into raw with ON CONFLICT DO UPDATE.
 
         Conflicts on pk_fields -> update business + tracking columns.
-        Excludes _raw_id (preserves original PK) and _ingested_at
+        Excludes ``_raw_id`` (preserves original PK) and ``_ingested_at``
         (preserves original ingestion timestamp).
+
+        Rows whose PK already exists in raw with the SAME ``_row_hash`` are
+        byte-identical to what was synced before, so they are EXCLUDED from
+        the INSERT entirely (never touched). This keeps the "written" metric
+        honest: only genuinely new or changed rows count as written.
+
+        Returns ``(inserted, updated)`` — split via PostgreSQL's
+        ``RETURNING (xmax = 0) AS is_insert`` idiom (a freshly inserted row
+        has xmax = 0; an ON CONFLICT-updated row has xmax = current xid).
         """
         cols = self._get_columns(raw_full)
         conflict_cols = set(pk_fields)
@@ -266,19 +308,46 @@ class StageWriter:
         col_list = ", ".join(f'"{c}"' for c in cols)
         set_clause = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in set_cols)
         conflict_target = ", ".join(f'"{c}"' for c in pk_fields)
+        pk_equal = " AND ".join(f'r."{c}" = s."{c}"' for c in pk_fields)
+
+        # Only skip unchanged rows when both tables carry _row_hash (new-style
+        # raw tables). Legacy tables without _row_hash fall back to a plain
+        # upsert where every staged row is treated as inserted/updated.
+        skip_unchanged = "_row_hash" in cols
+        if skip_unchanged:
+            where_unchanged = (
+                f"WHERE NOT EXISTS ("
+                f"  SELECT 1 FROM {raw_full} r"
+                f"  WHERE {pk_equal} AND r.\"_row_hash\" = s.\"_row_hash\""
+                f")"
+            )
+        else:
+            where_unchanged = ""
 
         sql = (
             f"INSERT INTO {raw_full} ({col_list}) "
-            f"SELECT {col_list} FROM {staging_full} "
-            f"ON CONFLICT ({conflict_target}) DO UPDATE SET {set_clause}"
+            f"SELECT {col_list} FROM {staging_full} s "
+            f"{where_unchanged} "
+            f"ON CONFLICT ({conflict_target}) DO UPDATE SET {set_clause} "
+            f"RETURNING (xmax = 0) AS is_insert"
         )
-        self._db.execute(text(sql))
+        result = self._db.execute(text(sql))
+
+        inserted = 0
+        updated = 0
+        for row in result:
+            if row[0]:
+                inserted += 1
+            else:
+                updated += 1
+
         self._db.execute(text(f"DROP TABLE IF EXISTS {staging_full}"))
         self._db.commit()
         logger.info(
-            "Upsert promoted: %s -> %s (conflict on %s)",
-            staging_full, raw_full, conflict_target,
+            "Upsert promoted: %s -> %s (conflict on %s): inserted=%d updated=%d",
+            staging_full, raw_full, conflict_target, inserted, updated,
         )
+        return inserted, updated
 
     def _get_columns(self, full_table: str) -> list[str]:
         """Return ordered column names from information_schema."""

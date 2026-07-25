@@ -79,6 +79,7 @@ class IngestionBatchResponse(CamelModel):
     affected_datasets: Optional[str] = None
     error_summary: Optional[str] = None
     progress_step: Optional[str] = None
+    source_signature: Optional[str] = None
     rejected_rows: Optional[str] = None
     created_at: datetime
 

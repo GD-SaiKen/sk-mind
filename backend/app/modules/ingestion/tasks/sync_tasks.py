@@ -366,6 +366,7 @@ def run_api_full_sync(
     db = get_sync_db()
     batch = None
     task = None
+    batch_lock_key = None
     try:
         task = db.get(IngestionTask, task_uuid)
         batch = db.get(IngestionBatch, batch_uuid)
@@ -375,6 +376,25 @@ def run_api_full_sync(
         if not batch:
             logger.error("Batch not found: %s", batch_id)
             return
+
+        # ── 幂等防护：同一 batch 不允许被并发/重复处理 ──
+        # 多 Worker 抢占或 RQ 至少一次投递会导致同一 batch 被处理两次，
+        # 且两次增量窗口不同（第一次宽、保存水位后第二次变窄），最终出现
+        # "最后步骤文本"(窄窗口) 与 "拉取/跳过列"(宽窗口) 不一致。用 Redis
+        # 锁串行化同一 batch，从根上消灭这种错位。Redis 不可用时降级为不锁。
+        try:
+            from app.core.queue import redis_conn as _rc
+
+            batch_lock_key = f"sync_batch_lock:{batch_id}"
+            _locked = _rc.set(batch_lock_key, "1", nx=True, ex=900)
+            if not _locked:
+                logger.warning(
+                    "Batch %s 已被其他 worker 占用，跳过重复处理", batch_id[:8]
+                )
+                return
+        except Exception:
+            batch_lock_key = None
+            logger.warning("Redis 锁不可用，降级为无锁处理 batch=%s", batch_id[:8])
 
         # ── Config resolution: YAML (interfaces) + DB (connection) ──
 
@@ -462,14 +482,29 @@ def run_api_full_sync(
             batch=batch,
         )
 
-        # Update the router's batch with final stats
-        total_success = sum(v["success"] for v in result.values())
-        total_rejected = sum(v["rejected"] for v in result.values())
-        batch.record_count = total_success + total_rejected
+        # Update the router's batch with final stats.
+        # 拉取行数 = 真实从 API 拉取的总量；写入行数 = 实际变更（新增+更新）；
+        # 跳过行数 = 已存在且未变的行；拒绝 = 校验/写入拒绝。
+        total_pulled = sum(v.get("pulled", 0) for v in result.values())
+        total_success = sum(v.get("success", 0) for v in result.values())
+        total_rejected = sum(v.get("rejected", 0) for v in result.values())
+        total_skip = sum(v.get("unchanged", 0) for v in result.values())
+        batch.record_count = total_pulled
         batch.success_count = total_success
         batch.fail_count = total_rejected
+        batch.skip_count = total_skip
         batch.status = "success" if total_rejected == 0 else "partial_success"
         batch.finished_at = datetime.now(timezone.utc)
+
+        # 让"最后步骤"与汇总四列一致：任务级 batch 可能聚合了多个接口的统计，
+        # 直接展示聚合结果，避免"最后步骤"只显示单个接口消息而与前四列错位。
+        try:
+            batch.progress_step = (
+                f"全部接口完成：拉取 {total_pulled} / 写入(变更) {total_success} / "
+                f"跳过(已存在未变) {total_skip} / 拒绝 {total_rejected}"
+            )
+        except Exception:
+            pass
 
         # Update task tracking
         task.last_sync_at = datetime.now(timezone.utc)
@@ -503,4 +538,11 @@ def run_api_full_sync(
             logger.warning("Failed to commit failure status", exc_info=True)
         raise
     finally:
+        if batch_lock_key:
+            try:
+                from app.core.queue import redis_conn as _rc
+
+                _rc.delete(batch_lock_key)
+            except Exception:
+                pass
         db.close()

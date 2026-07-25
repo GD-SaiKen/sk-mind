@@ -287,6 +287,8 @@ async def stream_batch_progress(
                 "recordCount": batch.record_count or 0,
                 "successCount": batch.success_count or 0,
                 "failCount": batch.fail_count or 0,
+                "skipCount": batch.skip_count or 0,
+                "sourceSignature": batch.source_signature or "",
             })
             yield f"data: {data}\n\n"
 

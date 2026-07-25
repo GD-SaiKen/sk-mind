@@ -120,6 +120,8 @@ export class IngestionService {
       recordCount: number
       successCount: number
       failCount: number
+      skipCount: number
+      sourceSignature: string | null
     }) => void,
     onDone: () => void,
   ): EventSource {

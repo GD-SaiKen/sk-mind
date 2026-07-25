@@ -52,12 +52,6 @@
             <div class="s-value">{{ duration }}</div>
           </div>
         </el-col>
-        <el-col :span="6">
-          <div class="summary-card">
-            <div class="s-label">产出表</div>
-            <div class="s-value">{{ batch.targetTable || '-' }}</div>
-          </div>
-        </el-col>
       </el-row>
 
       <el-row
@@ -215,26 +209,13 @@ const errorColumns: ColumnSchema[] = [
 
 onMounted(async () => {
   try {
-    const [task, batchErr] = await Promise.all([
+    const [task, batchData, batchErr] = await Promise.all([
       ingestionService.get(taskId).catch(() => null),
+      ingestionService.getBatch(batchId).catch(() => null),
       ingestionService.getBatchErrors(batchId, { pageSize: 100 }).catch(() => ({ items: [] })),
     ])
     if (task) taskName.value = task.name
-
-    batch.value = {
-      id: batchId,
-      taskId,
-      triggerType: 'manual',
-      status: 'success',
-      recordCount: 1250,
-      successCount: 1250,
-      failCount: 0,
-      skipCount: 0,
-      startedAt: '2026-07-21T08:00:00',
-      finishedAt: '2026-07-21T08:02:30',
-      targetTable: 'sap_sales_orders',
-      createdAt: '2026-07-21T08:00:00',
-    }
+    batch.value = batchData
     errorList.value = batchErr.items ?? []
   } finally {
     loading.value = false

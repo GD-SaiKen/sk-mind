@@ -141,6 +141,7 @@ export interface IngestionBatch {
   skipCount: number
   errorSummary: string | null
   progressStep: string | null
+  sourceSignature: string | null
   rejectedRows: string | null
   createdAt: string
 }

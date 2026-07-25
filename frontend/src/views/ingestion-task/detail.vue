@@ -68,6 +68,9 @@
           <template #table>
             <Table :columns="batchesColumns" :data="batches">
               <template #col-createdAt="{ row }">{{ row.createdAt?.slice(0, 19).replace('T', ' ') }}</template>
+              <template #col-sourceSignature="{ row }">
+                <span class="iface-tag">{{ ifaceLabel(row) }}</span>
+              </template>
               <template #col-triggerType="{ row }"><span class="trigger-text">{{ triggerLabel[row.triggerType] ?? row.triggerType }}</span></template>
               <template #col-status="{ row }">
                 <div class="status-cell">
@@ -81,8 +84,9 @@
               </template>
               <template #col-successCount="{ row }">
                 <template v-if="row.status === 'success' || row.status === 'partial_success'">
-                  <span class="count-ok">{{ row.successCount?.toLocaleString() }} 行</span>
-                  <span v-if="row.failCount > 0" class="count-err"> · {{ row.failCount }} 跳过</span>
+                  <span class="count-ok">{{ row.successCount?.toLocaleString() }} 行写入</span>
+                  <span v-if="row.skipCount > 0" class="count-warn"> · {{ row.skipCount }} 跳过</span>
+                  <span v-if="row.failCount > 0" class="count-err"> · {{ row.failCount }} 拒绝</span>
                 </template>
                 <span v-else-if="row.status === 'running'">—</span>
                 <span v-else class="count-dim">-</span>
@@ -117,6 +121,10 @@
             <span class="log-sum-label">状态</span>
             <el-tag :type="batchType[logBatch.status]" effect="plain" size="small">{{ batchLabel[logBatch.status] ?? logBatch.status }}</el-tag>
           </div>
+          <div class="log-sum-item" v-if="logBatch.sourceSignature">
+            <span class="log-sum-label">接口</span>
+            <span class="log-sum-val"><span class="iface-tag">{{ logBatch.sourceSignature }}</span></span>
+          </div>
           <div class="log-sum-item">
             <span class="log-sum-label">触发方式</span>
             <span class="log-sum-val">{{ triggerLabel[logBatch.triggerType] ?? logBatch.triggerType }}</span>
@@ -131,8 +139,12 @@
             <span class="log-sum-val">{{ logBatch.recordCount?.toLocaleString() ?? 0 }}</span>
           </div>
           <div class="log-sum-item">
-            <span class="log-sum-label">写入行数</span>
+            <span class="log-sum-label">写入行数<small class="log-sub">（实际变更）</small></span>
             <span class="log-sum-val log-ok-val">{{ logBatch.successCount?.toLocaleString() ?? 0 }}</span>
+          </div>
+          <div class="log-sum-item">
+            <span class="log-sum-label">跳过行数<small class="log-sub">（已存在未变）</small></span>
+            <span class="log-sum-val" :class="{ 'log-warn-val': (logBatch.skipCount ?? 0) > 0 }">{{ logBatch.skipCount?.toLocaleString() ?? 0 }}</span>
           </div>
           <div class="log-sum-item">
             <span class="log-sum-label">拒绝行数</span>
@@ -249,6 +261,7 @@ const batchesPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChan
 
 const batchesColumns: ColumnSchema[] = [
   { type: 'custom', prop: 'createdAt', label: '时间', width: 170 },
+  { type: 'custom', prop: 'sourceSignature', label: '接口', width: 130 },
   { type: 'custom', prop: 'triggerType', label: '触发', width: 90 },
   { type: 'custom', prop: 'status', label: '状态 / 进度', width: 200 },
   { type: 'custom', prop: 'successCount', label: '数据量', width: 160 },
@@ -265,6 +278,12 @@ function elapsed(start: string): string {
   const s = (Date.now() - new Date(start).getTime()) / 1000
   if (s < 60) return `${s.toFixed(0)}s`
   return `${Math.floor(s / 60)}m${(s % 60).toFixed(0)}s`
+}
+function ifaceLabel(row: any): string {
+  if (row.sourceSignature) return row.sourceSignature
+  const ps = row.progressStep || ''
+  const m = ps.match(/([A-Za-z][A-Za-z0-9_]*)/)
+  return m ? m[1] : '—'
 }
 
 async function load() {
@@ -285,6 +304,7 @@ async function handleExecute() {
     const placeholder: any = {
       id: batchId, triggerType: 'manual', status: 'pending',
       recordCount: 0, successCount: 0, failCount: 0,
+      sourceSignature: undefined,
       createdAt: new Date().toISOString(),
       _pct: -1, _step: '等待 Worker...',
     }
@@ -305,6 +325,8 @@ async function handleExecute() {
           if (d.recordCount !== undefined) (b as any).recordCount = d.recordCount
           if (d.successCount !== undefined) (b as any).successCount = d.successCount
           if (d.failCount !== undefined) (b as any).failCount = d.failCount
+          if (d.skipCount !== undefined) (b as any).skipCount = d.skipCount
+          if (d.sourceSignature !== undefined && d.sourceSignature) (b as any).sourceSignature = d.sourceSignature
         }
       },
       () => { stopTick(); load() },
@@ -384,9 +406,11 @@ onUnmounted(() => { _esList.forEach(es => es.close()); stopTick(); stopPolling()
 .err-text { font-size: 11px; color: $color-danger; }
 .count-ok { font-weight: $font-weight-semibold; color: $color-success; }
 .count-err { color: $color-danger; font-size: $font-size-xs; }
+.count-warn { color: #ca8a04; font-size: $font-size-xs; }
 .count-dim { color: $color-text-placeholder; }
 .dur-text { color: $color-text-secondary; font-size: $font-size-sm; }
 .trigger-text { color: $color-text-secondary; font-size: $font-size-sm; }
+.iface-tag { display: inline-block; padding: 1px 8px; border-radius: 4px; background: rgba(0,0,0,0.04); color: $color-text-secondary; font-size: 11px; font-family: monospace; }
 .action-btns { display: flex; align-items: center; gap: 4px; }
 .log-summary-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
@@ -397,6 +421,8 @@ onUnmounted(() => { _esList.forEach(es => es.close()); stopTick(); stopPolling()
 .log-sum-val { font-size: 14px; font-weight: $font-weight-semibold; color: $color-text-primary; }
 .log-ok-val { color: $color-success; }
 .log-err-val { color: $color-danger; }
+.log-warn-val { color: #ca8a04; }
+.log-sub { font-size: 11px; color: $color-text-placeholder; margin-left: 2px; font-weight: normal; }
 .log-time-row, .log-step-row {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 8px 0; font-size: 13px;

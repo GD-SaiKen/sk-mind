@@ -91,7 +91,7 @@ async def batch_list(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar_one()
 
-    query = query.order_by(IngestionBatch.created_at.desc())
+    query = query.order_by(IngestionBatch.created_at.desc(), IngestionBatch.id.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     return list(result.scalars().all()), total

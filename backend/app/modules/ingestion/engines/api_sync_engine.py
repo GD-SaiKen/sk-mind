@@ -88,12 +88,13 @@ class ApiSyncEngine:
                 continue
 
             if batch is not None:
-                self._writer.start_batch(batch)
                 b = batch
                 batch = None  # only reuse for the first interface
             else:
                 b = self._writer.create_batch(task_id, trigger_type="manual")
-                self._writer.start_batch(b)
+            # 记录该批次对应的接口名，便于前端在多接口任务中区分各批次
+            b.source_signature = iface["name"]
+            self._writer.start_batch(b)
 
             connector = self._get_connector()
             connector.connect()
@@ -101,9 +102,11 @@ class ApiSyncEngine:
                 result = self._sync_interface(iface, connector, b, data_source_id)
                 self._writer.finish_batch(
                     b, "success",
-                    total=result.get("success", 0),
+                    pulled=result.get("pulled", 0),
                     success=result.get("success", 0),
                     rejected=result.get("rejected", 0),
+                    skip=result.get("unchanged", 0),
+                    source_signature=iface["name"],
                 )
                 results[iface["name"]] = result
             except Exception:
@@ -339,10 +342,15 @@ class ApiSyncEngine:
             # retries as full.
             if mode == "incremental":
                 self._watermark.save(data_source_id, iface["name"])
-            return {"success": 0, "rejected": 0, "mode": mode}
+            return {
+                "success": 0, "rejected": 0,
+                "inserted": 0, "updated": 0, "unchanged": 0,
+                "pulled": 0, "mode": mode,
+            }
 
         # ── Progress: writing rows ──
-        self._update_progress(batch, f"正在写入 {len(rows)} 行 → {target_table}...")
+        pulled = len(rows)
+        self._update_progress(batch, f"正在写入 {pulled} 行 → {target_table}...")
 
         # Ensure the raw table exists before mapping (critical: first sync)
         self._ensure_raw_table(target_table, rows[0])
@@ -351,8 +359,9 @@ class ApiSyncEngine:
         flat_rows = self._flatten_rows(rows, mapper)
 
         pk = iface.get("pk_fields", [])
+        validation_rejected = 0
         if pk:
-            flat_rows, _rej = self._validate_rows(flat_rows, pk)
+            flat_rows, validation_rejected = self._validate_rows(flat_rows, pk)
 
         result = self._writer.write(
             target_table=target_table,
@@ -368,11 +377,16 @@ class ApiSyncEngine:
         self._watermark.save(data_source_id, iface["name"])
 
         # ── Progress: done ──
+        # 写入行数 = 实际变更（新增+更新），与"拉取行数/跳过行数"区分开
         self._update_progress(
             batch,
-            f"{iface['name']} 完成 ({mode}): {result.get('success', 0)} 行写入, "
-            f"{result.get('rejected', 0)} 行拒绝",
+            f"{iface['name']} 完成 ({mode}): 写入 {result.get('success', 0)} 行 "
+            f"(新增 {result.get('inserted', 0)}, 更新 {result.get('updated', 0)}, "
+            f"跳过 {result.get('unchanged', 0)}), 拒绝 {result.get('rejected', 0)}",
         )
+        # 透传真实拉取量；把"写入前校验拒绝"并回写入拒绝计数
+        result["pulled"] = pulled
+        result["rejected"] = result.get("rejected", 0) + validation_rejected
         result["mode"] = mode
         return result
 
