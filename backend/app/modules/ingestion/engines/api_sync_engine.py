@@ -86,16 +86,25 @@ class ApiSyncEngine:
             {"interface_name": {"success": N, "rejected": N, "mode": "full"|"incremental"}, ...}
         """
         results: dict[str, dict] = {}
-        for iface in self._cfg["interfaces"]:
-            if interfaces and iface["name"] not in interfaces:
-                continue
-
-            if batch is not None:
+        # 仅选中真正要同步的接口（与手动/部分同步一致）
+        selected = [
+            i for i in self._cfg["interfaces"]
+            if not interfaces or i["name"] in interfaces
+        ]
+        multi = len(selected) > 1
+        for iface in selected:
+            # ⚠️ 关键修复（多接口任务 batch 错标 bug）：
+            # 传入的 `batch` 是路由预创建的「任务级父 batch」。它只应作为聚合摘要
+            # 记录（由调用方 run_api_full_sync 在 sync_all 之后写入总和），绝不能
+            # 被复用为某个接口的批次——否则它会顶着第一个接口名（如 andonApiController）
+            # 显示聚合总量，与真正的 per-interface 子批次重名，UI 出现两个同名行、
+            # 数字对不上的错觉（之前表现为「闪一下 114 又变 691」）。
+            # 因此：单接口任务才复用父 batch（保持 1 行的历史行为），多接口任务每个
+            # 接口都建独立子 batch，父 batch 留给调用方写聚合摘要。
+            if not multi and batch is not None:
                 b = batch
-                batch = None  # only reuse for the first interface
             else:
                 b = self._writer.create_batch(task_id, trigger_type="manual")
-            # 记录该批次对应的接口名，便于前端在多接口任务中区分各批次
             b.source_signature = iface["name"]
             self._writer.start_batch(b)
 
@@ -348,7 +357,10 @@ class ApiSyncEngine:
             if mode == "incremental":
                 self._watermark.save(data_source_id, iface["name"])
             # 对账 L1（B1.3）：即使无数据也记录（若 API 有 total）
-            self._run_reconcile_l1(data_source_id, iface, target_table, api_total, batch)
+            self._run_reconcile_l1(
+                data_source_id, iface, target_table, api_total, batch,
+                sync_mode=mode, pulled=0,
+            )
             return {
                 "success": 0, "rejected": 0,
                 "inserted": 0, "updated": 0, "unchanged": 0,
@@ -402,8 +414,11 @@ class ApiSyncEngine:
         result["pulled"] = pulled
         result["rejected"] = result.get("rejected", 0) + validation_rejected
         result["mode"] = mode
-        # 对账 L1（B1.3）：API 总量 vs DB 行数
-        self._run_reconcile_l1(data_source_id, iface, target_table, api_total, batch)
+        # 对账 L1（B1.3）：按同步模式选对比基准（增量 vs 本批拉取数）
+        self._run_reconcile_l1(
+            data_source_id, iface, target_table, api_total, batch,
+            sync_mode=mode, pulled=pulled,
+        )
         return result
 
     def _update_progress(self, batch, step: str) -> None:
@@ -544,8 +559,15 @@ class ApiSyncEngine:
         target_table: str,
         api_total: Optional[int],
         batch,
+        sync_mode: str = "full",
+        pulled: int = 0,
     ) -> None:
-        """调用对账 L1，异常不中断同步主流程。"""
+        """调用对账 L1，异常不中断同步主流程。
+
+        Args:
+            sync_mode: 当前同步模式（full / incremental），决定对比基准。
+            pulled: 本批实际拉取行数，增量模式下作为对比基准（验证窗口内拉全）。
+        """
         try:
             recon_cfg = iface.get("reconciliation", {}) or {}
             self._reconciler.reconcile_l1(
@@ -554,8 +576,11 @@ class ApiSyncEngine:
                 target_table=target_table,
                 api_total=api_total,
                 batch_id=getattr(batch, "id", None),
+                sync_mode=sync_mode,
+                pulled=pulled,
                 threshold_pct=float(recon_cfg.get("threshold_pct", DEFAULT_THRESHOLD_PCT)),
                 enabled=bool(recon_cfg.get("enabled", True)),
+                auto_repair=bool(recon_cfg.get("auto_repair", False)),
             )
         except Exception as e:
             logger.warning("对账 L1 执行异常 %s: %s", iface["name"], e)

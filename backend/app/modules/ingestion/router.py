@@ -624,7 +624,9 @@ async def list_schema_changes(
     where = ""
     params: dict = {}
     if code:
-        where = "WHERE table_name LIKE :pat"
+        # raw 表前缀为 raw.{code小写}_，但 data_sources.code 可能大写，
+        # 用 ILIKE 消除大小写不匹配（如 code='MES' 但表为 raw.mes_*）
+        where = "WHERE table_name ILIKE :pat"
         params["pat"] = f"raw.{code}_%"
 
     total = (await db.execute(
@@ -669,7 +671,8 @@ async def list_reconciliations(
     result = await db.execute(
         text(
             "SELECT id, data_source_id, interface_name, batch_id, check_level, "
-            "api_total, db_count, diff_count, diff_ratio, status, detail, checked_at "
+            "api_total, db_count, pulled_count, diff_count, diff_ratio, status, "
+            "sync_mode, detail, checked_at "
             "FROM sync_reconciliations WHERE data_source_id = :ds "
             "ORDER BY checked_at DESC LIMIT :lim OFFSET :off"
         ),
@@ -689,7 +692,8 @@ async def get_reconciliation(
     row = await db.execute(
         text(
             "SELECT id, data_source_id, interface_name, batch_id, check_level, "
-            "api_total, db_count, diff_count, diff_ratio, status, detail, checked_at "
+            "api_total, db_count, pulled_count, diff_count, diff_ratio, status, "
+            "sync_mode, detail, checked_at "
             "FROM sync_reconciliations WHERE id = :id"
         ),
         {"id": str(recon_id)},

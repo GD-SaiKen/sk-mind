@@ -496,6 +496,13 @@ def run_api_full_sync(
         batch.status = "success" if total_rejected == 0 else "partial_success"
         batch.finished_at = datetime.now(timezone.utc)
 
+        # 多接口任务：父 batch 仅作聚合摘要，必须用「非接口名」标识（如"(汇总)"），
+        # 绝不能沿用某个接口名。否则它会顶着 andonApiController 显示总和 691，与
+        # 真正的 andon 子批次(114)重名，造成 UI 两个同名行、数字对不上的错觉。
+        # 单接口任务时父 batch 本身就是该接口批次（sync_all 已复用），保持接口名不变。
+        if len(result) > 1:
+            batch.source_signature = "(汇总)"
+
         # 让"最后步骤"与汇总四列一致：任务级 batch 可能聚合了多个接口的统计，
         # 直接展示聚合结果，避免"最后步骤"只显示单个接口消息而与前四列错位。
         try:

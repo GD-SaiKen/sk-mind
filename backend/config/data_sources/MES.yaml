@@ -169,6 +169,10 @@ interfaces:
     records_path: data
     total_path: totalItems
     list_in_data: true
+    reconciliation:
+      enabled: true
+      threshold_pct: 5
+      auto_repair: false
 
   # ── 三色灯域 ──
   # 10. getTimecountMessagesByTimeSim
@@ -290,6 +294,10 @@ interfaces:
       freeStatus: 0
     records_path: data
     total_path: totalItems
+    reconciliation:
+      enabled: true
+      threshold_pct: 5
+      auto_repair: false
 
   # 18. getMachineCount
   - name: getMachineCount
