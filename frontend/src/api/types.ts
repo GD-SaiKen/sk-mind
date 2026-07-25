@@ -102,6 +102,7 @@ export interface IngestionTask {
   lastSyncStatus: string | null
   status: string
   config: Record<string, unknown> | null
+  description?: string | null
   nextRunAt?: string | null
   replayWindowDays?: number
   createdAt: string
@@ -335,9 +336,11 @@ export interface Reconciliation {
   checkLevel: 'L1' | 'L2' | 'L3'
   apiTotal: number | null
   dbCount: number | null
+  pulledCount: number | null
   diffCount: number | null
   diffRatio: number | null
   status: 'pass' | 'warning' | 'failed' | 'repaired'
+  syncMode: 'full' | 'incremental' | null
   detail: ReconciliationSegment[] | null
   checkedAt: string
 }

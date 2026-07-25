@@ -38,3 +38,9 @@ export const CHECK_LEVEL_LABELS: Record<string, string> = {
   L2: '深度',
   L3: '行级',
 }
+
+/** 同步模式：full 全量（对比整表）/ incremental 增量（对比本批拉取） */
+export const SYNC_MODE_LABELS: Record<string, string> = {
+  full: '全量',
+  incremental: '增量',
+}

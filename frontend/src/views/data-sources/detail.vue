@@ -156,7 +156,7 @@
                   <div>
                     <div>{{ task.name }}</div>
                     <div class="link-item-sub">
-                      <template v-if="task.lastSyncAt">最近执行: {{ task.lastSyncAt.slice(0, 16).replace('T', ' ') }}</template>
+                      <template v-if="task.lastSyncAt">最近执行: {{ fmtDateTime(task.lastSyncAt, false) }}</template>
                       <template v-else>尚未执行</template>
                     </div>
                   </div>
@@ -238,6 +238,7 @@ import {
 import PageHeader from '@/components/page-header/index.vue'
 import { Form } from '@/components/crud'
 import type { FormSection } from '@/components/crud'
+import { fmtDateTime } from '@/utils/datetime'
 
 const route = useRoute()
 const router = useRouter()

@@ -36,7 +36,7 @@
           </template>
           <template #col-lastSyncAt="{ row }">
             <span v-if="row.lastSyncAt" :style="{ color: syncFreshColor(row.lastSyncAt) }">
-              {{ row.lastSyncAt.slice(0, 16).replace('T', ' ') }}
+              {{ fmtDateTime(row.lastSyncAt, false) }}
             </span>
             <span v-else class="never-sync">未同步过</span>
           </template>
@@ -95,6 +95,7 @@ import { dataSourceService, ingestionService, type IngestionTask, type DataSourc
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema, FilterItem } from '@/components/crud'
+import { fmtDateTime } from '@/utils/datetime'
 
 const router = useRouter()
 const tableRef = ref()
@@ -155,7 +156,7 @@ const statCards = computed(() => {
   const lastSync = activeTasks.map(t => t.lastSyncAt).filter(Boolean).sort().pop()
   type Card = { label: string; value: number; icon: any; iconBg: string; footer: string; color?: string; badge?: string; badgeType?: string }
   return [
-    { label: '活跃任务', value: activeTasks.length, icon: Collection, iconBg: 'sc-icon-blue', footer: lastSync ? `最近同步: ${lastSync.slice(0, 16).replace('T', ' ')}` : '暂无同步记录' },
+    { label: '活跃任务', value: activeTasks.length, icon: Collection, iconBg: 'sc-icon-blue', footer: lastSync ? `最近同步: ${fmtDateTime(lastSync, false)}` : '暂无同步记录' },
     { label: '数据新鲜', value: activeTasks.length - staleTasks.length, icon: CircleCheck, iconBg: 'sc-icon-green', color: 'green', footer: '24h 内有同步' },
     { label: '数据过期', value: staleTasks.length, icon: WarningFilled, iconBg: 'sc-icon-yellow', color: 'yellow', footer: '超过 24h 未更新' },
     { label: '停用', value: tasks.value.filter(t => t.status === 'paused' || t.status === 'disabled').length, icon: CircleCloseFilled, iconBg: 'sc-icon-red', color: 'red', footer: '已停用的任务' },

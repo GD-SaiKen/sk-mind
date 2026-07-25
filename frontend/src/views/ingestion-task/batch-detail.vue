@@ -37,7 +37,7 @@
         <el-col :span="6">
           <div class="summary-card">
             <div class="s-label">执行时间</div>
-            <div class="s-value">{{ batch.startedAt?.slice(0, 19).replace('T', ' ') || '-' }}</div>
+            <div class="s-value">{{ fmtDateTime(batch.startedAt) || '-' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
@@ -126,6 +126,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ingestionService } from '@/api'
 import PageHeader from '@/components/page-header/index.vue'
 import { Table } from '@/components/crud'
+import { fmtDateTime } from '@/utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
@@ -203,7 +204,7 @@ const errorColumns: ColumnSchema[] = [
     prop: 'createdAt',
     label: '时间',
     width: 170,
-    formatter: (v: string) => v?.slice(0, 19).replace('T', ' ') || '-',
+    formatter: (v: string) => fmtDateTime(v) || '-',
   },
 ]
 

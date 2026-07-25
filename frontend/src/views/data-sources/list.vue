@@ -219,7 +219,7 @@ const columns: ColumnSchema[] = [
         onClick: (row) => handlePause(row as DataSource),
         hidden: (row) => {
           const s = (row as DataSource).status
-          return s === 'paused' || s === 'syncing' || s === 'syncing'
+          return s === 'paused' || s === 'syncing'
         },
       },
       {

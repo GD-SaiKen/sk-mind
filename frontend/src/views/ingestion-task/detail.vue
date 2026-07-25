@@ -39,9 +39,9 @@
             <el-descriptions-item label="名称">{{ task.name }}</el-descriptions-item>
             <el-descriptions-item label="编码">{{ task.code }}</el-descriptions-item>
             <el-descriptions-item label="调度">{{ task.scheduleType === 'cron' ? `定时 (${task.cronExpression})` : task.scheduleType }}</el-descriptions-item>
-            <el-descriptions-item label="最近同步">{{ task.lastSyncAt?.slice(0, 19) || '未同步过' }}</el-descriptions-item>
+            <el-descriptions-item label="最近同步">{{ fmtDateTime(task.lastSyncAt) || '未同步过' }}</el-descriptions-item>
             <el-descriptions-item label="上次结果">{{ task.lastSyncStatus || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ task.createdAt?.slice(0, 19) }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ fmtDateTime(task.createdAt) }}</el-descriptions-item>
           </el-descriptions>
         </template>
         <template v-else>
@@ -89,7 +89,7 @@
                 </el-table-column>
                 <el-table-column prop="columnName" label="列名" min-width="160" />
                 <el-table-column label="检测时间" width="180">
-                  <template #default="{ row }">{{ row.detectedAt?.slice(0, 19).replace('T', ' ') }}</template>
+                  <template #default="{ row }">{{ fmtDateTime(row.detectedAt) }}</template>
                 </el-table-column>
               </el-table>
             </div>
@@ -101,9 +101,13 @@
         <Crud :pagination="batchesPagination">
           <template #table>
             <Table :columns="batchesColumns" :data="batches">
-              <template #col-createdAt="{ row }">{{ row.createdAt?.slice(0, 19).replace('T', ' ') }}</template>
+              <template #col-createdAt="{ row }">{{ fmtDateTime(row.createdAt) }}</template>
               <template #col-sourceSignature="{ row }">
-                <span class="iface-tag">{{ ifaceLabel(row) }}</span>
+                <span
+                  v-if="(row.sourceSignature || '').startsWith('(')"
+                  class="iface-tag iface-tag-agg"
+                >{{ row.sourceSignature }}</span>
+                <span v-else class="iface-tag">{{ ifaceLabel(row) }}</span>
               </template>
               <template #col-triggerType="{ row }"><span class="trigger-text">{{ triggerLabel[row.triggerType] ?? row.triggerType }}</span></template>
               <template #col-status="{ row }">
@@ -143,6 +147,150 @@
           </template>
         </Crud>
         <div v-if="batches.length === 0" class="empty">暂无执行记录，点击「立即执行」开始</div>
+      </el-tab-pane>
+
+      <!-- F1.3 — 数据对账 -->
+      <el-tab-pane name="recon">
+        <template #label>
+          <span>数据对账</span>
+          <el-badge v-if="reconSummary.toRepair > 0" :value="reconSummary.toRepair" type="danger" :max="99" style="margin-left: 4px" />
+        </template>
+        <div v-loading="reconLoading">
+          <!-- 概览卡片 -->
+          <div class="recon-cards">
+            <div class="recon-card">
+              <span class="recon-card-label">最近对账</span>
+              <span class="recon-card-val">{{ reconSummary.lastCheck ? fmtDateTime(reconSummary.lastCheck) : '—' }}</span>
+            </div>
+            <div class="recon-card">
+              <span class="recon-card-label">数据一致</span>
+              <span class="recon-card-val" style="color: var(--el-color-success)">{{ reconSummary.consistent }}</span>
+            </div>
+            <div class="recon-card">
+              <span class="recon-card-label">存在差异</span>
+              <span class="recon-card-val" style="color: #ca8a04">{{ reconSummary.diff }}</span>
+            </div>
+            <div class="recon-card">
+              <span class="recon-card-label">待修复</span>
+              <span class="recon-card-val" :class="{ 'recon-card-err': reconSummary.toRepair > 0 }">{{ reconSummary.toRepair }}</span>
+            </div>
+          </div>
+
+          <!-- 对账记录表格 -->
+          <el-table :data="reconciliations" empty-text="暂无对账记录" style="width: 100%; margin-top: 16px">
+            <el-table-column prop="interfaceName" label="接口" min-width="170" />
+            <el-table-column label="级别" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.checkLevel === 'L1' ? 'info' : row.checkLevel === 'L2' ? 'warning' : 'danger'" size="small" effect="plain">{{ CHECK_LEVEL_LABELS[row.checkLevel] ?? row.checkLevel }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="模式" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.syncMode === 'incremental' ? 'warning' : 'success'" size="small" effect="plain">
+                  {{ SYNC_MODE_LABELS[row.syncMode] ?? row.syncMode ?? '全量' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="apiTotal" label="API 总量" width="100" align="right" />
+            <el-table-column label="对比基准" width="110" align="right">
+              <template #default="{ row }">
+                <el-tooltip
+                  :content="row.syncMode === 'incremental'
+                    ? '增量模式：与「本批拉取行数」对比（窗口内是否拉全）'
+                    : '全量模式：与「整表行数」对比'"
+                  placement="top"
+                >
+                  <span>{{ row.syncMode === 'incremental' ? (row.pulledCount ?? 0).toLocaleString() : (row.dbCount ?? 0).toLocaleString() }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column label="差异" width="90" align="right">
+              <template #default="{ row }">
+                <span :class="{ 'diff-ok': row.status === 'pass', 'diff-warn': row.status === 'warning', 'diff-err': row.status === 'failed' }">
+                  {{ (row.diffCount ?? 0) > 0 ? `+${row.diffCount}` : '0' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="差异率" width="100" align="right">
+              <template #default="{ row }">
+                <span :class="{ 'diff-ok': row.status === 'pass', 'diff-warn': row.status === 'warning', 'diff-err': row.status === 'failed' }">
+                  {{ ((row.diffRatio ?? 0) * 100).toFixed(2) }}%
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'pass' ? 'success' : row.status === 'warning' ? 'warning' : row.status === 'failed' ? 'danger' : 'info'" size="small">{{ RECON_STATUS_LABELS[row.status] ?? row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="checkedAt" label="检查时间" width="180">
+              <template #default="{ row }">{{ fmtDateTime(row.checkedAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" align="center">
+              <template #default="{ row }">
+                <div class="action-btns">
+                  <el-button text @click="showReconDetail(row)">查看详情</el-button>
+                  <el-button v-if="row.status === 'warning' || row.status === 'failed'" text type="warning" @click="handleTriggerRecon('L2')">触发深度对账</el-button>
+                  <el-button v-if="row.status === 'failed'" text type="danger" @click="handleRepair(row.id)">修复</el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- 对账详情弹窗 -->
+        <el-dialog v-model="reconDialog" title="对账详情" width="800px" destroy-on-close>
+          <div v-loading="reconDetailLoading">
+            <template v-if="reconDetail">
+              <div class="recon-summary-grid">
+                <div class="recon-sum-item">
+                  <span class="recon-label">API 总量</span>
+                  <span class="recon-val">{{ reconDetail.apiTotal?.toLocaleString() }}</span>
+                </div>
+                <div class="recon-sum-item">
+                  <span class="recon-label">
+                    对比基准
+                    <el-tag
+                      :type="reconDetail.syncMode === 'incremental' ? 'warning' : 'success'"
+                      size="small" effect="plain" style="margin-left: 4px"
+                    >{{ SYNC_MODE_LABELS[reconDetail.syncMode ?? 'full'] ?? '全量' }}</el-tag>
+                  </span>
+                  <span class="recon-val">
+                    {{ (reconDetail.syncMode === 'incremental' ? reconDetail.pulledCount : reconDetail.dbCount)?.toLocaleString() }}
+                    <span class="recon-sub">{{ reconDetail.syncMode === 'incremental' ? '（本批拉取）' : '（整表行数）' }}</span>
+                  </span>
+                </div>
+                <div class="recon-sum-item">
+                  <span class="recon-label">差异行数</span>
+                  <span class="recon-val" :class="{ 'diff-err': (reconDetail.diffCount ?? 0) > 0 }">{{ reconDetail.diffCount?.toLocaleString() }}</span>
+                </div>
+                <div class="recon-sum-item">
+                  <span class="recon-label">差异率</span>
+                  <span class="recon-val" :class="{ 'diff-err': reconDetail.status === 'failed', 'diff-warn': reconDetail.status === 'warning' }">
+                    {{ ((reconDetail.diffRatio ?? 0) * 100).toFixed(2) }}%
+                  </span>
+                </div>
+              </div>
+              <el-divider>分段明细（L2 深度对账）</el-divider>
+              <el-table v-if="reconDetail.detail && reconDetail.detail.length" :data="reconDetail.detail" stripe style="margin-top: 8px">
+                <el-table-column prop="dateRange" label="日期段" min-width="200" />
+                <el-table-column prop="apiCount" label="API 行数" width="100" align="right" />
+                <el-table-column prop="dbCount" label="DB 行数" width="100" align="right" />
+                <el-table-column label="差异" width="80" align="right">
+                  <template #default="{ row }">
+                    <span :class="{ 'diff-err': row.diff !== 0 }">{{ row.diff > 0 ? `+${row.diff}` : row.diff }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="100">
+                  <template #default="{ row }">
+                    <el-tag :type="row.diff === 0 ? 'success' : 'danger'" size="small">{{ row.diff === 0 ? '一致' : '需修复' }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-empty v-else description="暂无分段明细（L2 深度对账尚未实现）" :image-size="80" />
+            </template>
+          </div>
+        </el-dialog>
       </el-tab-pane>
     </el-tabs>
 
@@ -189,7 +337,7 @@
         <!-- 时间范围 -->
         <div class="log-time-row" v-if="logBatch.startedAt">
           <span class="log-sum-label">执行时间</span>
-          <span class="log-sum-val">{{ logBatch.startedAt?.slice(0, 19).replace('T', ' ') }} → {{ logBatch.finishedAt?.slice(0, 19).replace('T', ' ') || '进行中' }}</span>
+          <span class="log-sum-val">{{ fmtDateTime(logBatch.startedAt) }} → {{ fmtDateTime(logBatch.finishedAt) || '进行中' }}</span>
         </div>
 
         <!-- 最后步骤 -->
@@ -216,7 +364,7 @@
             <template #default="{ row: e }">{{ e.fieldName || (e.rowNumber ? '行 ' + e.rowNumber : '-') }}</template>
           </el-table-column>
           <el-table-column prop="createdAt" label="时间" width="160">
-            <template #default="{ row: e }">{{ e.createdAt?.slice(0, 19).replace('T', ' ') }}</template>
+            <template #default="{ row: e }">{{ fmtDateTime(e.createdAt) }}</template>
           </el-table-column>
         </el-table>
       </div>
@@ -229,8 +377,9 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Edit, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask, type SchemaChange } from '@/api'
-import { SCHEMA_CHANGE_LABELS } from '@/constants/ingestion'
+import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask, type SchemaChange, type Reconciliation } from '@/api'
+import { SCHEMA_CHANGE_LABELS, RECON_STATUS_LABELS, CHECK_LEVEL_LABELS, SYNC_MODE_LABELS } from '@/constants/ingestion'
+import { fmtDateTime } from '@/utils/datetime'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema } from '@/components/crud'
@@ -251,6 +400,25 @@ const errorList = ref<ImportError[]>([])
 const schemaChanges = ref<SchemaChange[]>([])
 const schemaChangeLoading = ref(false)
 const schemaChangeCount = computed(() => schemaChanges.value.length)
+
+// F1.3 — 数据对账
+const reconciliations = ref<Reconciliation[]>([])
+const reconLoading = ref(false)
+const reconDialog = ref(false)
+const reconDetail = ref<Reconciliation | null>(null)
+const reconDetailLoading = ref(false)
+
+// 概览卡片：最近对账时间 / 数据一致 / 存在差异 / 待修复
+const reconSummary = computed(() => {
+  const list = reconciliations.value
+  const lastCheck = list.length
+    ? list.reduce((m, r) => (r.checkedAt > m ? r.checkedAt : m), list[0].checkedAt)
+    : null
+  const consistent = list.filter(r => r.status === 'pass' || r.status === 'repaired').length
+  const diff = list.filter(r => r.status === 'warning').length
+  const toRepair = list.filter(r => r.status === 'failed').length
+  return { lastCheck, consistent, diff, toRepair }
+})
 let _esList: EventSource[] = []
 let _tickTimer: ReturnType<typeof setInterval> | null = null
 let _pollTimer: ReturnType<typeof setInterval> | null = null
@@ -293,7 +461,7 @@ const triggerLabel: Record<string, string> = { manual: '手动', scheduled: '定
 
 const summary = computed(() => [
   { label: '调度', value: task.value?.scheduleType === 'cron' ? `定时 ${task.value?.cronExpression}` : task.value?.scheduleType ?? '-' },
-  { label: '最近同步', value: task.value?.lastSyncAt?.slice(0, 16) ?? '未同步过' },
+  { label: '最近同步', value: fmtDateTime(task.value?.lastSyncAt, false) || '未同步过' },
   { label: '上次结果', value: task.value?.lastSyncStatus || '-' },
 ])
 const batchesPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
@@ -349,6 +517,52 @@ async function loadSchemaChanges() {
   }
 }
 
+// F1.3 — 数据对账：后端接口（B1.4）未实现时静默失败，不阻塞页面
+async function loadReconciliations() {
+  reconLoading.value = true
+  try {
+    const res = await ingestionService.getReconciliations(taskId, { pageSize: 50 })
+    const list = res && Array.isArray((res as any).items)
+      ? (res as any).items
+      : Array.isArray(res) ? res : []
+    reconciliations.value = list as Reconciliation[]
+  } catch (e) {
+    console.error('加载对账记录失败:', e)
+    reconciliations.value = []
+  } finally {
+    reconLoading.value = false
+  }
+}
+
+async function showReconDetail(row: Reconciliation) {
+  reconDetailLoading.value = true
+  reconDialog.value = true
+  try {
+    reconDetail.value = await ingestionService.getReconciliation(row.id)
+  } catch (e) {
+    console.error('加载对账详情失败:', e)
+    reconDetail.value = null
+  } finally {
+    reconDetailLoading.value = false
+  }
+}
+
+async function handleTriggerRecon(level: 'L1' | 'L2' | 'L3') {
+  try {
+    await ingestionService.triggerReconciliation(taskId, level)
+    ElMessage.success(`${level} 对账已触发`)
+    await loadReconciliations()
+  } catch { /* handled */ }
+}
+
+async function handleRepair(reconId: string) {
+  try {
+    await ingestionService.repairReconciliation(reconId)
+    ElMessage.success('修复已提交')
+    await loadReconciliations()
+  } catch { /* handled */ }
+}
+
 async function load() {
   task.value = await ingestionService.get(taskId)
   const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
@@ -359,6 +573,8 @@ async function load() {
   else { stopTick(); stopPolling() }
   // F1.2 — Schema 变更审计列表
   await loadSchemaChanges()
+  // F1.3 — 数据对账记录
+  await loadReconciliations()
 }
 
 async function handleExecute() {
@@ -476,6 +692,7 @@ onUnmounted(() => { _esList.forEach(es => es.close()); stopTick(); stopPolling()
 .dur-text { color: $color-text-secondary; font-size: $font-size-sm; }
 .trigger-text { color: $color-text-secondary; font-size: $font-size-sm; }
 .iface-tag { display: inline-block; padding: 1px 8px; border-radius: 4px; background: rgba(0,0,0,0.04); color: $color-text-secondary; font-size: 11px; font-family: monospace; }
+.iface-tag-agg { background: rgba(64,158,255,0.12); color: #2563eb; font-weight: 600; }
 .action-btns { display: flex; align-items: center; gap: 4px; }
 .log-summary-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
@@ -497,4 +714,23 @@ onUnmounted(() => { _esList.forEach(es => es.close()); stopTick(); stopPolling()
   background: rgba(0,0,0,0.04); padding: 2px 8px; border-radius: 4px;
   word-break: break-all; flex: 1;
 }
+/* F1.3 — 数据对账 */
+.recon-cards {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 4px;
+}
+.recon-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid $color-border-light; border-radius: 6px; }
+.recon-card-label { font-size: $font-size-xs; color: $color-text-placeholder; }
+.recon-card-val { font-size: $font-size-lg; font-weight: $font-weight-semibold; color: $color-text-primary; }
+.recon-card-err { color: $color-danger; }
+.recon-summary-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid $color-border-light;
+}
+.recon-sum-item { display: flex; flex-direction: column; gap: 4px; }
+.recon-label { font-size: 12px; color: $color-text-placeholder; }
+.recon-val { font-size: 14px; font-weight: $font-weight-semibold; color: $color-text-primary; }
+.recon-sub { font-size: 12px; font-weight: $font-weight-normal; color: $color-text-placeholder; }
+.diff-ok { color: $color-success; font-weight: $font-weight-semibold; }
+.diff-warn { color: #ca8a04; font-weight: $font-weight-semibold; }
+.diff-err { color: $color-danger; font-weight: $font-weight-semibold; }
 </style>
