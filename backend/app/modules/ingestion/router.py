@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from decimal import Decimal
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -554,6 +556,216 @@ def _cron_desc(expr: str) -> str:
             return f"每天 {hour}:{minute.zfill(2)} 执行"
         return f"每周{dow} {hour}:{minute.zfill(2)} 执行"
     return expr
+
+
+# ═══════════════════════════════════════════
+# 同步引擎优化 Phase 1：对账 / Schema 漂移审计 API (B1.4)
+# 约定：API 一律 camelCase（项目 CamelModel 规范），但本组端点直接走裸 SQL，
+# 故在返回前手动将 snake_case 列名转 camelCase，并序列化 UUID/Decimal/DateTime。
+# ═══════════════════════════════════════════
+
+def _snake_to_camel(key: str) -> str:
+    head, *tail = key.split("_")
+    return head + "".join(w.title() for w in tail)
+
+
+def _row_to_camel(row) -> dict:
+    """将裸 SQL 行（RowMapping / dict）转为 camelCase、JSON 安全的 dict。"""
+    out: dict = {}
+    for k, v in dict(row).items():
+        if isinstance(v, uuid.UUID):
+            v = str(v)
+        elif isinstance(v, Decimal):
+            v = float(v)
+        elif isinstance(v, datetime):
+            v = v.isoformat()
+        out[_snake_to_camel(k)] = v
+    return out
+
+
+class ReconcileRequest(BaseModel):
+    level: str = "L1"  # L1 / L2 / L3
+
+
+class RepairRequest(BaseModel):
+    segment: str | None = None
+
+
+async def _resolve_ds_code(db: AsyncSession, data_source_id) -> str | None:
+    """根据 data_source_id 取数据源 code，用于 Schema 变更按 raw.{code}_ 前缀做作用域过滤。"""
+    if not data_source_id:
+        return None
+    try:
+        row = await db.execute(
+            text("SELECT code FROM data_sources WHERE id = :ds"),
+            {"ds": str(data_source_id)},
+        )
+        return row.scalar_one_or_none()
+    except Exception:
+        return None
+
+
+@task_router.get("/{task_id}/schema-changes")
+async def list_schema_changes(
+    task_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Schema 变更审计列表（best-effort 按数据源 raw 表前缀过滤）。"""
+    task = await dao.task_get_by_id(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="not found")
+
+    # sync_schema_changes 表无 task/data_source 字段，仅以 table_name 记录；
+    # 用数据源 code 前缀 best-effort 收敛到本任务所属数据源的 raw 表。
+    code = await _resolve_ds_code(db, task.data_source_id)
+    where = ""
+    params: dict = {}
+    if code:
+        where = "WHERE table_name LIKE :pat"
+        params["pat"] = f"raw.{code}_%"
+
+    total = (await db.execute(
+        text(f"SELECT count(*) FROM sync_schema_changes {where}"), params
+    )).scalar_one()
+
+    offset = (page - 1) * page_size
+    result = await db.execute(
+        text(
+            f"SELECT id, table_name, change_type, column_name, detail, detected_at "
+            f"FROM sync_schema_changes {where} "
+            f"ORDER BY detected_at DESC LIMIT :lim OFFSET :off"
+        ),
+        {**params, "lim": page_size, "off": offset},
+    )
+    items = [_row_to_camel(r) for r in result.mappings().all()]
+    return _paginated(items, total, page, page_size)
+
+
+@task_router.get("/{task_id}/reconciliations")
+async def list_reconciliations(
+    task_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """对账记录列表（按数据源过滤，含 L1/L2/L3）。"""
+    task = await dao.task_get_by_id(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="not found")
+    if not task.data_source_id:
+        return _paginated([], 0, page, page_size)
+
+    ds = str(task.data_source_id)
+    total = (await db.execute(
+        text("SELECT count(*) FROM sync_reconciliations WHERE data_source_id = :ds"),
+        {"ds": ds},
+    )).scalar_one()
+
+    offset = (page - 1) * page_size
+    result = await db.execute(
+        text(
+            "SELECT id, data_source_id, interface_name, batch_id, check_level, "
+            "api_total, db_count, diff_count, diff_ratio, status, detail, checked_at "
+            "FROM sync_reconciliations WHERE data_source_id = :ds "
+            "ORDER BY checked_at DESC LIMIT :lim OFFSET :off"
+        ),
+        {"ds": ds, "lim": page_size, "off": offset},
+    )
+    items = [_row_to_camel(r) for r in result.mappings().all()]
+    return _paginated(items, total, page, page_size)
+
+
+@task_router.get("/reconciliations/{recon_id}")
+async def get_reconciliation(
+    recon_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """对账详情（含 detail 分段，L1 暂无分段）。"""
+    row = await db.execute(
+        text(
+            "SELECT id, data_source_id, interface_name, batch_id, check_level, "
+            "api_total, db_count, diff_count, diff_ratio, status, detail, checked_at "
+            "FROM sync_reconciliations WHERE id = :id"
+        ),
+        {"id": str(recon_id)},
+    )
+    rec = row.mappings().first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="not found")
+    return _ok(_row_to_camel(rec))
+
+
+@task_router.post("/{task_id}/reconcile")
+async def trigger_reconcile(
+    task_id: uuid.UUID,
+    body: ReconcileRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """触发对账。L1 = 重新跑一次同步（同步引擎内部已含 L1 轻量对账）；L2/L3 深度对账后续实现。"""
+    task = await dao.task_get_by_id(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="not found")
+    level = (body.level or "L1").upper()
+
+    if level == "L1":
+        batch = IngestionBatch(
+            task_id=task.id, trigger_type="manual",
+            status="running", started_at=datetime.now(timezone.utc),
+            triggered_by=str(current_user.id),
+        )
+        await dao.batch_insert(db, batch)
+        await db.commit()  # commit before enqueue so worker can see the batch
+
+        _cfg = (task.config or {})
+        access_method = _cfg.get("accessMethod") or _cfg.get("access_method") or ""
+        try:
+            if access_method in ("api", "api_pull"):
+                config_path = _cfg.get("configPath") or _cfg.get("config_path") or ""
+                interfaces = _cfg.get("interfaces")
+                if not config_path and not task.data_source_id:
+                    raise HTTPException(status_code=400, detail="API sync requires config_path or data_source_id")
+                job_id = _enqueue_api_sync(
+                    task.id, batch.id, config_path, interfaces,
+                    data_source_id=task.data_source_id,
+                )
+            else:
+                job_id = _enqueue(task.id, batch.id, task.name)
+        except Exception as e:
+            batch.status = "failed"
+            batch.error_summary = f"enqueue failed: {e}"
+            await dao.batch_update(db, batch)
+            await db.commit()
+            raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
+        return _ok(
+            {"id": str(batch.id), "batchId": str(batch.id), "jobId": job_id, "level": level},
+            msg="L1 对账已触发（重新同步）",
+        )
+
+    # L2 / L3 尚未实现
+    return _ok(
+        {"supported": False, "level": level, "message": "L2/L3 深度对账尚未实现"},
+        msg="not supported yet",
+    )
+
+
+@task_router.post("/reconciliations/{recon_id}/repair")
+async def repair_reconciliation(
+    recon_id: uuid.UUID,
+    body: RepairRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """修复不一致段（L2/L3 分段修复，尚未实现）。"""
+    return _ok(
+        {"supported": False, "reconId": str(recon_id), "message": "L2/L3 修复尚未实现"},
+        msg="not supported yet",
+    )
 
 
 # ═══════════════════════════════════════════

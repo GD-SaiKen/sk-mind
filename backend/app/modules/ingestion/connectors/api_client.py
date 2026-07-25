@@ -87,6 +87,8 @@ class HttpxApiConnector(ApiConnector):
         self._retry_backoff = retry_backoff
         self._records_path = records_path
         self._total_path = total_path
+        # 最近一次 fetch_page 的 total（来自 total_path），供对账 L1 读取
+        self.last_total: int | None = None
         self._default_headers = default_headers or {}
 
         self._client: httpx.Client | None = None
@@ -192,6 +194,12 @@ class HttpxApiConnector(ApiConnector):
         data = response.json()
         records = self._extract_nested(data, self._records_path) or []
         total = self._extract_nested(data, self._total_path)
+        # 记录本页 total，供对账 L1 读取（total_path 总量在各页一致）。
+        # 兼容 total 以字符串返回的场景（如 "8368"），统一规整为 int。
+        try:
+            self.last_total = int(total) if total is not None else None
+        except (ValueError, TypeError):
+            self.last_total = None
 
         return ApiPageResult(
             records=records if isinstance(records, list) else [],

@@ -28,7 +28,12 @@
     </div>
 
     <el-tabs v-model="activeTab">
-      <el-tab-pane label="当前配置" name="config">
+      <el-tab-pane name="config">
+        <template #label>
+          <el-badge :value="schemaChangeCount" :hidden="schemaChangeCount === 0" :max="99">
+            <span>当前配置</span>
+          </el-badge>
+        </template>
         <template v-if="!isEditing">
           <el-descriptions :column="2" border style="max-width: 600px">
             <el-descriptions-item label="名称">{{ task.name }}</el-descriptions-item>
@@ -61,6 +66,35 @@
             </el-form-item>
           </el-form>
         </template>
+
+        <!-- F1.2 — Schema 变更审计 -->
+        <el-divider />
+        <el-collapse>
+          <el-collapse-item name="schema">
+            <template #title>
+              <span>Schema 变更审计</span>
+              <el-tag v-if="schemaChangeCount > 0" type="warning" size="small" style="margin-left: 8px">
+                {{ schemaChangeCount }}
+              </el-tag>
+            </template>
+            <div v-loading="schemaChangeLoading">
+              <el-table :data="schemaChanges" empty-text="暂无 Schema 变更" style="width: 100%">
+                <el-table-column prop="tableName" label="数据表" min-width="180" />
+                <el-table-column label="变更类型" width="120">
+                  <template #default="{ row }">
+                    <el-tag :type="schemaChangeTagType(row.changeType)" size="small">
+                      {{ SCHEMA_CHANGE_LABELS[row.changeType] ?? row.changeType }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="columnName" label="列名" min-width="160" />
+                <el-table-column label="检测时间" width="180">
+                  <template #default="{ row }">{{ row.detectedAt?.slice(0, 19).replace('T', ' ') }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
       </el-tab-pane>
 
       <el-tab-pane :label="`执行记录 (${batches.length})`" name="batches">
@@ -195,7 +229,8 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Edit, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask } from '@/api'
+import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask, type SchemaChange } from '@/api'
+import { SCHEMA_CHANGE_LABELS } from '@/constants/ingestion'
 import Index from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import type { ColumnSchema } from '@/components/crud'
@@ -212,6 +247,10 @@ const editForm = reactive({ name: '', scheduleType: 'manual', cronExpression: ''
 const saving = ref(false)
 const logBatch = ref<IngestionBatch | null>(null)
 const errorList = ref<ImportError[]>([])
+// F1.2 — Schema 变更审计
+const schemaChanges = ref<SchemaChange[]>([])
+const schemaChangeLoading = ref(false)
+const schemaChangeCount = computed(() => schemaChanges.value.length)
 let _esList: EventSource[] = []
 let _tickTimer: ReturnType<typeof setInterval> | null = null
 let _pollTimer: ReturnType<typeof setInterval> | null = null
@@ -286,6 +325,30 @@ function ifaceLabel(row: any): string {
   return m ? m[1] : '—'
 }
 
+// F1.2 — Schema 变更审计：后端接口（B1.4）未实现时静默失败，不阻塞页面
+function schemaChangeTagType(t: string): '' | 'success' | 'warning' | 'danger' | 'info' {
+  if (t === 'added') return 'warning'
+  if (t === 'removed') return 'danger'
+  if (t === 'type_changed') return 'info'
+  return 'info'
+}
+
+async function loadSchemaChanges() {
+  schemaChangeLoading.value = true
+  try {
+    const res = await ingestionService.getSchemaChanges(taskId)
+    const list = res && Array.isArray((res as any).items)
+      ? (res as any).items
+      : Array.isArray(res) ? res : []
+    schemaChanges.value = list as SchemaChange[]
+  } catch (e) {
+    console.error('加载 Schema 变更失败:', e)
+    schemaChanges.value = []
+  } finally {
+    schemaChangeLoading.value = false
+  }
+}
+
 async function load() {
   task.value = await ingestionService.get(taskId)
   const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
@@ -294,6 +357,8 @@ async function load() {
   const hasRunning = b.items.some((x: any) => x.status === 'running' || x.status === 'pending')
   if (hasRunning) { startTick(); startPolling() }
   else { stopTick(); stopPolling() }
+  // F1.2 — Schema 变更审计列表
+  await loadSchemaChanges()
 }
 
 async function handleExecute() {

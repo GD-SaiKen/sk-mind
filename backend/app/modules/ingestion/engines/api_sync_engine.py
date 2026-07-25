@@ -15,6 +15,7 @@ Reuses HttpxApiConnector (fetch), ColumnMapper (map), StageWriter (write),
 WatermarkStore (watermark tracking).
 """
 
+import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -26,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.ingestion.connectors.api_client import HttpxApiConnector
 from app.modules.ingestion.connectors.api_mapper import ColumnMapper
+from app.modules.ingestion.reconciler import DEFAULT_THRESHOLD_PCT, Reconciler
 from app.modules.ingestion.schema_manager import TRACKING_COLUMNS, _INDEX_COLUMNS
 from app.modules.ingestion.stage_writer import StageWriter
 from app.modules.ingestion.watermark import WatermarkStore
@@ -57,6 +59,7 @@ class ApiSyncEngine:
         self._db = db
         self._writer = StageWriter(db)
         self._watermark = WatermarkStore(db)
+        self._reconciler = Reconciler(db)
         self._fetcher = fetcher  # None -> create per-interface
         self._ensured_tables: set[str] = set()
         self._replay_days = replay_window_days
@@ -330,6 +333,8 @@ class ApiSyncEngine:
             method=iface.get("method", "POST"),
             body=body,
         ))
+        # 捕获 API 第一页 total（来自 total_path），供对账 L1 使用
+        api_total = connector.last_total
 
         # Restore original paths
         connector._records_path, connector._total_path = saved_paths
@@ -342,6 +347,8 @@ class ApiSyncEngine:
             # retries as full.
             if mode == "incremental":
                 self._watermark.save(data_source_id, iface["name"])
+            # 对账 L1（B1.3）：即使无数据也记录（若 API 有 total）
+            self._run_reconcile_l1(data_source_id, iface, target_table, api_total, batch)
             return {
                 "success": 0, "rejected": 0,
                 "inserted": 0, "updated": 0, "unchanged": 0,
@@ -354,6 +361,13 @@ class ApiSyncEngine:
 
         # Ensure the raw table exists before mapping (critical: first sync)
         self._ensure_raw_table(target_table, rows[0])
+
+        # Schema 漂移检测（B1.2）：检测 API 新字段并自动加列，必须在
+        # ColumnMapper 初始化之前执行。异常不中断同步主流程。
+        try:
+            self._check_schema_drift(target_table, rows[0])
+        except Exception as e:
+            logger.warning("Schema drift 检测失败 %s: %s", target_table, e)
 
         mapper = ColumnMapper(self._get_table_business_columns(target_table))
         flat_rows = self._flatten_rows(rows, mapper)
@@ -388,6 +402,8 @@ class ApiSyncEngine:
         result["pulled"] = pulled
         result["rejected"] = result.get("rejected", 0) + validation_rejected
         result["mode"] = mode
+        # 对账 L1（B1.3）：API 总量 vs DB 行数
+        self._run_reconcile_l1(data_source_id, iface, target_table, api_total, batch)
         return result
 
     def _update_progress(self, batch, step: str) -> None:
@@ -472,3 +488,74 @@ class ApiSyncEngine:
             {"schema": schema, "table": table},
         )
         return {row.column_name for row in result}
+
+    def _check_schema_drift(
+        self, target_table: str, sample_row: dict
+    ) -> list[str]:
+        """检测并处理 schema 漂移：API 返回了新字段但 DB 表没有对应列。
+
+        对比 ``sample_row`` 的 snake_case keys 与 DB 业务列，新列自动
+        ``ALTER TABLE ... ADD COLUMN IF NOT EXISTS TEXT``，并写入
+        ``sync_schema_changes`` 审计。无漂移返回空列表。
+
+        ⚠️ 必须在 ``_sync_interface`` 中 ``_ensure_raw_table`` 之后、``ColumnMapper``
+        初始化之前调用，且每次同步都执行（不能放在 ``_ensure_raw_table`` 内部，
+        因为该方法在表已存在时直接 return）。异常不中断同步主流程。
+
+        Returns:
+            新增的列名列表（空列表 = 无漂移）。
+        """
+        existing = self._get_table_business_columns(target_table)
+        sample_cols = {ColumnMapper._to_snake(k) for k in sample_row.keys()}
+        new_cols = sample_cols - existing
+
+        if not new_cols:
+            return []
+
+        for col in sorted(new_cols):
+            self._db.execute(text(
+                f'ALTER TABLE {target_table} ADD COLUMN IF NOT EXISTS "{col}" TEXT'
+            ))
+            logger.warning("Schema drift: %s 新增列 %s", target_table, col)
+
+        self._db.commit()
+
+        # 记录审计（多列合并为一行，column_name 用逗号连接）
+        self._db.execute(
+            text(
+                "INSERT INTO sync_schema_changes "
+                "(table_name, change_type, column_name, detail) "
+                "VALUES (:t, 'added', :c, :d)"
+            ),
+            {
+                "t": target_table,
+                "c": ",".join(sorted(new_cols)),
+                "d": json.dumps({"sample_keys": list(sample_row.keys())}),
+            },
+        )
+        self._db.commit()
+
+        return sorted(new_cols)
+
+    def _run_reconcile_l1(
+        self,
+        data_source_id,
+        iface: dict,
+        target_table: str,
+        api_total: Optional[int],
+        batch,
+    ) -> None:
+        """调用对账 L1，异常不中断同步主流程。"""
+        try:
+            recon_cfg = iface.get("reconciliation", {}) or {}
+            self._reconciler.reconcile_l1(
+                data_source_id=data_source_id,
+                interface_name=iface["name"],
+                target_table=target_table,
+                api_total=api_total,
+                batch_id=getattr(batch, "id", None),
+                threshold_pct=float(recon_cfg.get("threshold_pct", DEFAULT_THRESHOLD_PCT)),
+                enabled=bool(recon_cfg.get("enabled", True)),
+            )
+        except Exception as e:
+            logger.warning("对账 L1 执行异常 %s: %s", iface["name"], e)
