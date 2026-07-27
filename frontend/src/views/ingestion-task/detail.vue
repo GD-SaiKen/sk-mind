@@ -78,6 +78,54 @@
           </el-form>
         </template>
 
+        <!-- F3.2 — 软删除检测状态标记 -->
+        <el-divider content-position="left">
+          接口与软删除检测
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :loading="softDeleteChecking"
+            style="margin-left: 12px"
+            @click="triggerSoftDelete"
+          >立即检测</el-button>
+        </el-divider>
+        <el-table
+          :data="softDeleteInterfaces"
+          empty-text="暂无接口"
+          style="width: 100%"
+          size="small"
+        >
+          <el-table-column prop="name" label="接口" min-width="170" />
+          <el-table-column label="软删除检测" width="130">
+            <template #default="{ row }">
+              <el-tag v-if="row.enabled" type="warning" effect="light" size="small">
+                已启用
+              </el-tag>
+              <el-tag v-else type="info" effect="plain" size="small">未启用</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="最近检测" min-width="220">
+            <template #default="{ row }">
+              <span v-if="row.lastCheckedAt">
+                {{ fmtDateTime(row.lastCheckedAt, true) }}
+                <span class="sd-count">删除 {{ row.lastDeleted }} 行</span>
+              </span>
+              <span v-else class="sd-dim">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="上一次结果" min-width="160">
+            <template #default="{ row }">
+              <el-tag
+                v-if="row.lastSkipped"
+                type="info"
+                size="small"
+              >跳过（{{ row.lastReason }}）</el-tag>
+              <el-tag v-else type="success" size="small">已检测</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+
         <!-- F1.2 — Schema 变更审计 -->
         <el-divider />
         <el-collapse>
@@ -576,6 +624,48 @@ function statusTag(s: string): '' | 'success' | 'warning' | 'danger' | 'info' {
   return 'info'
 }
 
+// F3.2 — 软删除检测接口列表（从 task.config 读取启用状态与最近检测结果）
+const softDeleteChecking = ref(false)
+const softDeleteInterfaces = computed(() => {
+  const cfg = (task.value?.config || {}) as any
+  const softDeleteMap: Record<string, boolean> = cfg.softDelete || {}
+  const last: any = cfg.softDeleteLast || {}
+  const byIface: Record<string, any> = last.byInterface || {}
+  const names: string[] = cfg.interfaces || []
+  return names.map((name: string) => {
+    const r = byIface[name] || {}
+    return {
+      name,
+      enabled: !!softDeleteMap[name],
+      lastCheckedAt: last.checkedAt || null,
+      lastDeleted: r.deleted ?? null,
+      lastSkipped: !!r.skipped,
+      lastReason: r.reason || '',
+    }
+  })
+})
+
+async function triggerSoftDelete() {
+  if (!task.value?.id) return
+  softDeleteChecking.value = true
+  try {
+    await ingestionService.softDeleteCheck(task.value.id)
+    ElMessage.success('软删除检测已启动（异步执行）')
+    // 稍后刷新，读取 task.config.softDeleteLast 结果
+    setTimeout(async () => {
+      try {
+        await load()
+      } catch {
+        /* ignore */
+      }
+    }, 1500)
+  } catch {
+    ElMessage.error('软删除检测启动失败')
+  } finally {
+    softDeleteChecking.value = false
+  }
+}
+
 async function loadQuarantine() {
   quarantineLoading.value = true
   try {
@@ -995,4 +1085,8 @@ watch(activeTab, (t) => {
 .qb-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .qb-pager { display: flex; justify-content: flex-end; margin-top: 12px; }
 .raw-json { background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 6px; font-size: 12px; line-height: 1.6; max-height: 500px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-family: monospace; }
+
+/* F3.2 — 软删除检测 */
+.sd-count { font-size: 12px; color: $color-danger; margin-left: 8px; }
+.sd-dim { color: $color-text-placeholder; }
 </style>

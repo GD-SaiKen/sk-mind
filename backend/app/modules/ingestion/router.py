@@ -496,6 +496,43 @@ async def execute_task(
     return _ok({"batchId": str(batch.id), "jobId": job_id}, msg="task submitted")
 
 
+@task_router.post("/{task_id}/soft-delete-check")
+async def soft_delete_check(
+    task_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """触发软删除检测（B3.2）：作为 RQ 任务异步执行，结果写回 task.config.softDeleteLast。"""
+    task = await dao.task_get_by_id(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="not found")
+    if task.status == "disabled":
+        raise HTTPException(status_code=400, detail="task disabled")
+
+    _cfg = (task.config or {})
+    config_path = _cfg.get("configPath") or _cfg.get("config_path") or ""
+    if not config_path and not task.data_source_id:
+        raise HTTPException(
+            status_code=400,
+            detail="soft-delete check requires config_path or data_source_id",
+        )
+    try:
+        from app.core.queue import redis_conn
+        from rq import Queue
+
+        queue = Queue("ingestion", connection=redis_conn)
+        job = queue.enqueue(
+            "app.modules.ingestion.tasks.sync_tasks.run_soft_delete_check",
+            str(task.id),
+            config_path,
+            str(task.data_source_id) if task.data_source_id else None,
+            job_timeout=7200,
+        )
+        return _ok({"jobId": job.id, "taskId": str(task.id)}, msg="soft-delete check submitted")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"RQ enqueue failed: {e}")
+
+
 @task_router.post("/batches/{batch_id}/retry")
 async def retry_batch(
     batch_id: uuid.UUID,

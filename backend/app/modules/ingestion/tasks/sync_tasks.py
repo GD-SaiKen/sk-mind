@@ -562,3 +562,136 @@ def run_api_full_sync(
             except Exception:
                 pass
         db.close()
+
+
+# ─── 软删除检测（B3.2）───
+
+
+def run_soft_delete_check(task_id: str, config_path: str = "", data_source_id: str = None):
+    """软删除检测 RQ 任务：遍历启用 detect_deletes 的接口，标记 DB 有/API 无的 PK。
+
+    Config 解析与 ``run_api_full_sync`` 一致（YAML 接口 + DB 连接覆盖）。
+    结果汇总后写回 ``task.config.softDeleteLast`` 供前端回显。
+
+    Args:
+        task_id: IngestionTask UUID。
+        config_path: 可选 YAML 配置路径（提供接口定义）。
+        data_source_id: 可选 DataSource UUID（加载 DB 连接配置）。
+    """
+    import os as _os
+    import uuid as _uuid
+    from datetime import datetime, timezone
+    from pathlib import Path as _Path
+
+    from app.modules.ingestion.engines.api_sync_engine import load_config
+    from app.modules.ingestion.models import IngestionTask
+    from app.modules.ingestion.soft_delete_detector import SoftDeleteDetector
+    from app.modules.ingestion.services.sync_database import get_sync_db
+    from app.modules.ingestion.services.connector_service import build_engine_config
+
+    task_uuid = _uuid.UUID(task_id)
+    db = get_sync_db()
+    try:
+        task = db.get(IngestionTask, task_uuid)
+        if not task:
+            logger.error("软删除检测: 任务不存在 %s", task_id)
+            return {"deleted": 0, "skipped": True, "reason": "task_not_found"}
+
+        # ── Config 解析（镜像 run_api_full_sync）──
+        _backend_root = _Path(__file__).resolve().parents[4]
+        yaml_config = None
+        if config_path:
+            _actual = config_path
+            if not _os.path.exists(_actual):
+                _from_backend = _backend_root / config_path
+                if _os.path.exists(_from_backend):
+                    _actual = str(_from_backend)
+            if _os.path.exists(_actual):
+                yaml_config = load_config(_actual)
+                logger.info("软删除检测: 载入 YAML %s", _actual)
+
+        db_config = None
+        _ds_str = data_source_id or (str(task.data_source_id) if task.data_source_id else None)
+        if _ds_str:
+            try:
+                db_config = build_engine_config(db, _uuid.UUID(_ds_str))
+            except Exception:
+                logger.warning("软删除检测: 加载 DB 配置失败 %s", _ds_str, exc_info=True)
+
+        if yaml_config and db_config:
+            yaml_config["connection"] = {
+                **yaml_config.get("connection", {}),
+                **db_config["connection"],
+            }
+            config = yaml_config
+        elif yaml_config:
+            config = yaml_config
+        elif db_config:
+            config = db_config
+        else:
+            logger.error("软删除检测: 无可用配置 task=%s", task_id)
+            return {"deleted": 0, "skipped": True, "reason": "no_config"}
+
+        # ── 解析每个接口的启用判定 ──
+        task_cfg = task.config or {}
+        selected = task_cfg.get("interfaces") or []
+        soft_delete_map = task_cfg.get("softDelete") or {}
+
+        def _effective_enable(name: str) -> bool:
+            if name in soft_delete_map:
+                return bool(soft_delete_map[name])
+            iface = next(
+                (i for i in config.get("interfaces", []) if i.get("name") == name), None
+            )
+            return bool(iface.get("detect_deletes", False)) if iface else False
+
+        total_deleted = 0
+        by_interface: dict = {}
+        for name in selected:
+            iface = next(
+                (i for i in config.get("interfaces", []) if i.get("name") == name), None
+            )
+            if not iface:
+                continue
+            if not _effective_enable(name):
+                by_interface[name] = {"deleted": 0, "skipped": True, "reason": "disabled"}
+                continue
+            target_table = iface.get("target_table")
+            pk_fields = iface.get("pk_fields") or []
+            if not target_table or not pk_fields:
+                by_interface[name] = {
+                    "deleted": 0, "skipped": True, "reason": "no_target_or_pk",
+                }
+                continue
+            detector = SoftDeleteDetector(config, db)
+            res = detector.detect(
+                name, target_table, pk_fields,
+                ds_id=task.data_source_id, enable=True,
+            )
+            total_deleted += res.get("deleted", 0)
+            by_interface[name] = res
+
+        # ── 写回最近检测结果（异常安全，不阻塞主流程）──
+        try:
+            cfg = dict(task.config or {})
+            cfg["softDeleteLast"] = {
+                "checkedAt": datetime.now(timezone.utc).isoformat(),
+                "totalDeleted": total_deleted,
+                "byInterface": by_interface,
+            }
+            task.config = cfg
+            db.commit()
+        except Exception:
+            logger.warning("软删除检测: 写回 task.config.softDeleteLast 失败", exc_info=True)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+        logger.info(
+            "软删除检测完成 task=%s 共标记删除 %d 行 / %d 接口",
+            task_id[:8], total_deleted, len(by_interface),
+        )
+        return {"deleted": total_deleted, "byInterface": by_interface}
+    finally:
+        db.close()

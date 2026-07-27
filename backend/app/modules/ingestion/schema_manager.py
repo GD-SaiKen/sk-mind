@@ -55,6 +55,9 @@ TRACKING_COLUMNS: list[tuple[str, str]] = [
     ("_row_hash", "TEXT"),
     ("_quality_flags", "JSONB DEFAULT '[]'"),
     ("_ingested_at", "TIMESTAMP DEFAULT now()"),
+    # 软删除检测（B3.1）：DB 有但 API 无的 PK 标记为删除时间；
+    # 以 "_" 前缀自动被 schema drift 检测排除（NOT LIKE '_\_%'）。
+    ("_deleted_at", "TIMESTAMP"),
 ]
 
 _INDEX_COLUMNS = ["_batch_id", "_pulled_at", "_row_hash"]

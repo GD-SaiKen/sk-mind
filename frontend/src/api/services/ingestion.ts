@@ -28,7 +28,17 @@ export class IngestionService {
     cronExpression: string = '',
     description: string = '',
     replayWindowDays: number = 3,
+    softDelete?: Record<string, boolean>,
   ) {
+    const config: Record<string, unknown> = {
+      accessMethod: 'api',
+      configPath: `config/data_sources/${dataSourceCode}.yaml`,
+      interfaces,
+      replayWindowDays,
+    }
+    if (softDelete && Object.keys(softDelete).length) {
+      config.softDelete = softDelete
+    }
     return this.api.post('/ingestion-tasks', {
       name,
       code,
@@ -37,12 +47,7 @@ export class IngestionService {
       syncMode,
       scheduleType,
       cronExpression: cronExpression || undefined,
-      config: {
-        accessMethod: 'api',
-        configPath: `config/data_sources/${dataSourceCode}.yaml`,
-        interfaces,
-        replayWindowDays,
-      },
+      config,
       description,
     }).then(r => r.data.data)
   }
@@ -153,6 +158,11 @@ export class IngestionService {
   // ── 定时调度 ──
   previewCron(cronExpression: string) {
     return this.api.post('/ingestion-tasks/preview-cron', { cronExpression }).then(r => r.data.data)
+  }
+
+  // ── 软删除检测（B3.2）──
+  softDeleteCheck(taskId: string) {
+    return this.api.post(`/ingestion-tasks/${taskId}/soft-delete-check`).then(r => r.data.data)
   }
 
   // ── SSE 进度流 ──

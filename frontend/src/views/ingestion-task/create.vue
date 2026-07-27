@@ -148,6 +148,25 @@
                     → {{ item.targetTable }}
                   </div>
                 </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; margin-left: 12px">
+                  <el-tooltip
+                    :content="item.pkFields && item.pkFields.length ? '定期检测 API 中已删除的记录' : '需配置 PK 字段后方可开启'"
+                    placement="top"
+                  >
+                    <el-switch
+                      :model-value="!!detectOptions[item.name]"
+                      :disabled="!(item.pkFields && item.pkFields.length)"
+                      @change="onDetectToggle(item.name, $event as boolean)"
+                      inline-prompt
+                      active-text="软删"
+                      inactive-text="软删"
+                    />
+                  </el-tooltip>
+                  <span
+                    v-if="!(item.pkFields && item.pkFields.length)"
+                    style="font-size: 11px; color: #c0c4cc; margin-top: 2px"
+                  >需 PK 字段</span>
+                </div>
               </div>
             </el-checkbox-group>
           </div>
@@ -216,6 +235,9 @@ const dataSources = ref<DataSource[]>([])
 const selectedDataSourceCode = ref('')
 const interfaces = ref<ApiInterfaceItem[]>([])
 
+/** 每个接口的软删除检测开关（仅在 PK 接口上可用），提交时随 config 传后端 */
+const detectOptions = ref<Record<string, boolean>>({})
+
 const form = ref({
   dataSourceId: (route.query.sourceId as string) || '',
   name: '',
@@ -259,6 +281,24 @@ function selectAll() {
 
 function deselectAll() {
   form.value.selectedInterfaces = []
+}
+
+/** 切换某接口的软删除检测开关（F3.1） */
+function onDetectToggle(name: string, val: boolean) {
+  if (val) {
+    detectOptions.value[name] = true
+  } else {
+    delete detectOptions.value[name]
+  }
+}
+
+/** 仅收集已选中接口中开启软删除检测的条目，提交给后端 */
+function buildSoftDeleteMap(): Record<string, boolean> {
+  const map: Record<string, boolean> = {}
+  for (const name of form.value.selectedInterfaces) {
+    if (detectOptions.value[name]) map[name] = true
+  }
+  return map
 }
 
 function onScheduleTypeChange(val: string) {
@@ -361,6 +401,7 @@ async function handleSubmit() {
           configPath: `config/data_sources/${selectedDataSourceCode.value}.yaml`,
           interfaces: form.value.selectedInterfaces,
           replayWindowDays: form.value.replayWindowDays,
+          softDelete: buildSoftDeleteMap(),
         },
       }
       await ingestionService.update(editTaskId.value, data)
@@ -379,6 +420,7 @@ async function handleSubmit() {
         form.value.scheduleType === 'cron' ? form.value.cronExpression : '',
         form.value.description,
         form.value.replayWindowDays,
+        buildSoftDeleteMap(),
       )
       ElMessage.success(`任务创建成功: ${task.name || task.code}`)
 
@@ -424,6 +466,9 @@ async function loadEditTask() {
     // Pre-select interfaces from task config
     const configInterfaces = (task.config as any)?.interfaces || []
     form.value.selectedInterfaces = configInterfaces
+
+    // 回显软删除检测开关（F3.1）
+    detectOptions.value = (task.config as any)?.softDelete || {}
 
     // Load the data source code and interfaces
     const ds = dataSources.value.find(d => d.id === task.dataSourceId)
