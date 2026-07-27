@@ -147,6 +147,10 @@ async def create_task(
     current_user: User = Depends(get_current_user),
 ):
     task = IngestionTask(**data.model_dump())
+    # B2.2：新建任务默认 active，调度器 60s 轮询才会注册 cron 任务。
+    # （model 默认 status="draft"，若留 draft 调度器永不注册 → 定时任务不生效）
+    # 删除 disable→disabled、disable_task→paused、enable_task→active 均保持联动。
+    task.status = "active"
     task = await dao.task_insert(db, task)
     return _ok(_dump(IngestionTaskResponse.model_validate(task)), msg="task created")
 
@@ -220,6 +224,91 @@ async def disable_task(
     task.status = "paused"
     await dao.task_update(db, task)
     return _ok(msg="task disabled")
+
+
+# ═══════════════════════════════════════════
+# 隔离区（B2.6）
+# ═══════════════════════════════════════════
+
+@task_router.get("/{task_id}/quarantine")
+async def list_quarantine_endpoint(
+    task_id: uuid.UUID,
+    status: str | None = Query(None),
+    interfaceName: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+):
+    """隔离区记录列表（分页 + 状态/接口筛选）。"""
+    from app.modules.ingestion.quarantine_service import list_quarantine
+    from app.modules.ingestion.services.sync_database import SyncSessionLocal
+
+    def _run():
+        s = SyncSessionLocal()
+        try:
+            return list_quarantine(s, task_id, status, interfaceName, page, pageSize)
+        finally:
+            s.close()
+
+    items, total = await asyncio.to_thread(_run)
+    return _paginated(items, total, page, pageSize)
+
+
+@task_router.get("/{task_id}/quarantine/stats")
+async def quarantine_stats_endpoint(
+    task_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+):
+    """隔离区统计：总数/待处理/已修复/已忽略/隔离率/阈值/熔断触发。"""
+    from app.modules.ingestion.quarantine_service import get_stats
+    from app.modules.ingestion.services.sync_database import SyncSessionLocal
+
+    def _run():
+        s = SyncSessionLocal()
+        try:
+            return get_stats(s, task_id)
+        finally:
+            s.close()
+
+    return _ok(await asyncio.to_thread(_run))
+
+
+@task_router.post("/quarantine/{qid}/retry")
+async def retry_quarantine_endpoint(
+    qid: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+):
+    """重试单条隔离记录：raw_json 经 StageWriter 单行写回 raw 表。"""
+    from app.modules.ingestion.quarantine_service import retry_quarantine
+    from app.modules.ingestion.services.sync_database import SyncSessionLocal
+
+    def _run():
+        s = SyncSessionLocal()
+        try:
+            return retry_quarantine(s, qid)
+        finally:
+            s.close()
+
+    return _ok(await asyncio.to_thread(_run))
+
+
+@task_router.post("/quarantine/{qid}/ignore")
+async def ignore_quarantine_endpoint(
+    qid: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+):
+    """忽略单条隔离记录：status='ignored'。"""
+    from app.modules.ingestion.quarantine_service import ignore_quarantine
+    from app.modules.ingestion.services.sync_database import SyncSessionLocal
+
+    def _run():
+        s = SyncSessionLocal()
+        try:
+            return ignore_quarantine(s, qid)
+        finally:
+            s.close()
+
+    return _ok(await asyncio.to_thread(_run))
 
 
 # ═══════════════════════════════════════════

@@ -128,3 +128,33 @@ class TimeRangeResponse(CamelModel):
     next_scheduled_run: Optional[datetime] = None
     schedule_cron: Optional[str] = None
     schedule_description: Optional[str] = None
+
+
+# ── 隔离区（B2.6）─────────────────────────────
+
+class QuarantineResponse(CamelModel):
+    """隔离区单条记录响应。"""
+
+    id: uuid.UUID
+    batchId: uuid.UUID
+    dataSourceId: uuid.UUID
+    interfaceName: str
+    pkValue: Optional[str] = None
+    rejectionReason: str
+    rawJson: dict
+    status: str
+    retriedAt: Optional[datetime] = None
+    resolvedAt: Optional[datetime] = None
+    createdAt: datetime
+
+
+class QuarantineStatsResponse(CamelModel):
+    """隔离区统计响应。"""
+
+    total: int
+    pending: int
+    resolved: int
+    ignored: int
+    quarantineRate: float
+    threshold: float
+    circuitBreakerTriggered: bool

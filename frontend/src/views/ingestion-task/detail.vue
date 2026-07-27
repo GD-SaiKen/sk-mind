@@ -38,7 +38,18 @@
           <el-descriptions :column="2" border style="max-width: 600px">
             <el-descriptions-item label="名称">{{ task.name }}</el-descriptions-item>
             <el-descriptions-item label="编码">{{ task.code }}</el-descriptions-item>
-            <el-descriptions-item label="调度">{{ task.scheduleType === 'cron' ? `定时 (${task.cronExpression})` : task.scheduleType }}</el-descriptions-item>
+            <el-descriptions-item label="调度">
+              <template v-if="task.scheduleType === 'cron'">
+                <div class="sched-block">
+                  <el-tag type="primary" effect="light" size="small">定时</el-tag>
+                  <code class="cron-code">{{ task.cronExpression }}</code>
+                  <span v-if="nextRunLoading" class="sched-next">计算中…</span>
+                  <span v-else-if="nextRun" class="sched-next">下次执行：{{ fmtDateTime(nextRun, true) }}</span>
+                  <span v-else class="sched-next sched-dim">下次执行：—</span>
+                </div>
+              </template>
+              <el-tag v-else type="info" effect="plain" size="small">手动触发</el-tag>
+            </el-descriptions-item>
             <el-descriptions-item label="最近同步">{{ fmtDateTime(task.lastSyncAt) || '未同步过' }}</el-descriptions-item>
             <el-descriptions-item label="上次结果">{{ task.lastSyncStatus || '-' }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ fmtDateTime(task.createdAt) }}</el-descriptions-item>
@@ -292,7 +303,99 @@
           </div>
         </el-dialog>
       </el-tab-pane>
+
+      <!-- F2.3 — 隔离区 -->
+      <el-tab-pane name="quarantine">
+        <template #label>
+          <span>隔离区</span>
+          <el-badge v-if="quarantineStats.pending > 0" :value="quarantineStats.pending" type="warning" :max="99" style="margin-left: 4px" />
+        </template>
+        <div v-loading="quarantineLoading">
+          <!-- 熔断状态卡片 -->
+          <div class="qb-circuit">
+            <div class="qb-circuit-head">
+              <span class="qb-circuit-title">熔断状态</span>
+              <el-tag :type="circuitState.type" effect="light" size="small">{{ circuitState.label }}</el-tag>
+            </div>
+            <div class="qb-circuit-rate">
+              <span class="qb-rate-label">隔离率</span>
+              <el-progress
+                :percentage="Math.min(quarantineStats.quarantineRate, 100)"
+                :color="circuitState.color"
+                :stroke-width="14"
+                :format="() => `${quarantineStats.quarantineRate}%`"
+              />
+              <span class="qb-threshold">阈值 {{ quarantineStats.threshold }}%</span>
+            </div>
+            <div class="qb-circuit-counts">
+              <span>待处理 <b>{{ quarantineStats.pending }}</b></span>
+              <span>已修复 <b>{{ quarantineStats.resolved }}</b></span>
+              <span>已忽略 <b>{{ quarantineStats.ignored }}</b></span>
+            </div>
+          </div>
+
+          <!-- 筛选 -->
+          <div class="qb-filter">
+            <el-select v-model="qFilter.status" placeholder="状态" clearable style="width: 140px" @change="loadQuarantine">
+              <el-option label="待处理" value="pending" />
+              <el-option label="已修复" value="resolved" />
+              <el-option label="已忽略" value="ignored" />
+            </el-select>
+            <el-select v-model="qFilter.interfaceName" placeholder="接口" clearable filterable style="width: 200px" @change="loadQuarantine">
+              <el-option v-for="iface in quarantineInterfaces" :key="iface" :label="iface" :value="iface" />
+            </el-select>
+            <el-button :icon="Refresh" @click="loadQuarantine">刷新</el-button>
+          </div>
+
+          <!-- 表格 -->
+          <el-table :data="quarantineList" empty-text="暂无隔离记录" style="width: 100%; margin-top: 12px">
+            <el-table-column prop="interfaceName" label="接口" min-width="170" />
+            <el-table-column prop="pkValue" label="PK 值" min-width="140" show-overflow-tooltip />
+            <el-table-column label="拒绝原因" width="130">
+              <template #default="{ row }">
+                <el-tag :type="reasonTag(row.rejectionReason)" size="small">{{ reasonLabel(row.rejectionReason) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="原始数据" min-width="100">
+              <template #default="{ row }">
+                <el-button text type="primary" @click="showRaw(row)">查看</el-button>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="statusTag(row.status)" size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="时间" width="170">
+              <template #default="{ row }">{{ fmtDateTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="150">
+              <template #default="{ row }">
+                <div class="action-btns">
+                  <el-button v-if="row.status === 'pending'" text type="success" @click="onRetry(row.id)">重试</el-button>
+                  <el-button v-if="row.status === 'pending'" text type="danger" @click="onIgnore(row.id)">忽略</el-button>
+                  <span v-if="row.status !== 'pending'" class="count-dim">—</span>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="qb-pager" v-if="qTotal > 0">
+            <el-pagination
+              layout="total, prev, pager, next"
+              :total="qTotal"
+              :page-size="qPageSize"
+              :current-page="qPage"
+              @current-change="(p: number) => { qPage = p; loadQuarantine() }"
+            />
+          </div>
+        </div>
+      </el-tab-pane>
     </el-tabs>
+
+    <!-- F2.3 — 原始数据弹窗 -->
+    <el-dialog v-model="rawDialog" title="原始数据" width="720px" destroy-on-close>
+      <pre class="raw-json">{{ rawJsonText }}</pre>
+    </el-dialog>
 
     <!-- 日志弹窗 -->
     <el-dialog v-model="logDialog" title="同步详情" width="680px" destroy-on-close>
@@ -373,10 +476,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Edit, VideoPlay } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Edit, VideoPlay, Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ingestionService, type IngestionBatch, type ImportError, type IngestionTask, type SchemaChange, type Reconciliation } from '@/api'
 import { SCHEMA_CHANGE_LABELS, RECON_STATUS_LABELS, CHECK_LEVEL_LABELS, SYNC_MODE_LABELS } from '@/constants/ingestion'
 import { fmtDateTime } from '@/utils/datetime'
@@ -407,6 +510,132 @@ const reconLoading = ref(false)
 const reconDialog = ref(false)
 const reconDetail = ref<Reconciliation | null>(null)
 const reconDetailLoading = ref(false)
+
+// F2.4 — 详情页调度状态展示（定时任务显示下次执行）
+const nextRun = ref<string | null>(null)
+const nextRunLoading = ref(false)
+async function loadNextRun() {
+  if (task.value?.scheduleType !== 'cron' || !task.value?.cronExpression) {
+    nextRun.value = null
+    return
+  }
+  nextRunLoading.value = true
+  try {
+    const r = await ingestionService.previewCron(task.value.cronExpression)
+    nextRun.value = r && r.isValid ? r.nextRun : null
+  } catch {
+    nextRun.value = null
+  } finally {
+    nextRunLoading.value = false
+  }
+}
+
+// F2.3 — 隔离区（依赖 B2.6 端点）
+const quarantineList = ref<any[]>([])
+const quarantineStats = ref({
+  total: 0, pending: 0, resolved: 0, ignored: 0,
+  quarantineRate: 0, threshold: 5, circuitBreakerTriggered: false,
+})
+const quarantineLoading = ref(false)
+const qFilter = reactive({ status: '', interfaceName: '' })
+const quarantineInterfaces = ref<string[]>([])
+const qPage = ref(1)
+const qPageSize = ref(20)
+const qTotal = ref(0)
+const rawDialog = ref(false)
+const rawJsonText = ref('')
+
+const circuitState = computed(() => {
+  const rate = quarantineStats.value.quarantineRate
+  const thr = quarantineStats.value.threshold || 5
+  if (quarantineStats.value.circuitBreakerTriggered || rate >= thr) {
+    return { type: 'danger' as const, label: '熔断', color: '#f56c6c' }
+  }
+  if (rate >= thr * 0.6) {
+    return { type: 'warning' as const, label: '告警', color: '#e6a23c' }
+  }
+  return { type: 'success' as const, label: '正常', color: '#67c23a' }
+})
+
+function reasonLabel(r: string): string {
+  return { null_pk: '主键为空', dup_in_batch: '批内重复', write_error: '写入失败' }[r] ?? r
+}
+function reasonTag(r: string): '' | 'success' | 'warning' | 'danger' | 'info' {
+  if (r === 'null_pk') return 'danger'
+  if (r === 'dup_in_batch') return 'warning'
+  if (r === 'write_error') return 'danger'
+  return 'info'
+}
+function statusLabel(s: string): string {
+  return { pending: '待处理', resolved: '已修复', ignored: '已忽略' }[s] ?? s
+}
+function statusTag(s: string): '' | 'success' | 'warning' | 'danger' | 'info' {
+  if (s === 'pending') return 'warning'
+  if (s === 'resolved') return 'success'
+  if (s === 'ignored') return 'info'
+  return 'info'
+}
+
+async function loadQuarantine() {
+  quarantineLoading.value = true
+  try {
+    const res: any = await ingestionService.getQuarantine(taskId, {
+      status: qFilter.status || undefined,
+      interfaceName: qFilter.interfaceName || undefined,
+      page: qPage.value,
+      pageSize: qPageSize.value,
+    })
+    const items = res?.items ?? []
+    quarantineList.value = items
+    qTotal.value = res?.total ?? items.length
+    // 收集接口名用于筛选下拉
+    const ifaces = new Set(quarantineInterfaces.value)
+    items.forEach((i: any) => i.interfaceName && ifaces.add(i.interfaceName))
+    quarantineInterfaces.value = Array.from(ifaces)
+  } catch (e) {
+    console.error('加载隔离区失败:', e)
+  } finally {
+    quarantineLoading.value = false
+  }
+}
+
+async function loadQuarantineStats() {
+  try {
+    const stats: any = await ingestionService.getQuarantineStats(taskId)
+    if (stats) quarantineStats.value = stats
+  } catch (e) {
+    console.error('加载隔离区统计失败:', e)
+  }
+}
+
+function showRaw(row: any) {
+  try {
+    rawJsonText.value = JSON.stringify(row.rawJson, null, 2)
+  } catch {
+    rawJsonText.value = String(row.rawJson)
+  }
+  rawDialog.value = true
+}
+
+async function onRetry(id: string) {
+  try {
+    await ingestionService.retryQuarantine(id)
+    ElMessage.success('重试已提交')
+    await Promise.all([loadQuarantine(), loadQuarantineStats()])
+  } catch { /* handled */ }
+}
+
+async function onIgnore(id: string) {
+  try {
+    await ElMessageBox.confirm('确认忽略该隔离记录？忽略后不可重试。', '忽略确认', { type: 'warning' })
+    await ingestionService.ignoreQuarantine(id)
+    ElMessage.success('已忽略')
+    await Promise.all([loadQuarantine(), loadQuarantineStats()])
+  } catch (e) {
+    // 用户取消不提示
+    if (e === 'cancel') return
+  }
+}
 
 // 概览卡片：最近对账时间 / 数据一致 / 存在差异 / 待修复
 const reconSummary = computed(() => {
@@ -565,6 +794,8 @@ async function handleRepair(reconId: string) {
 
 async function load() {
   task.value = await ingestionService.get(taskId)
+  // F2.4 — 定时任务下次执行时间
+  await loadNextRun()
   const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
   batches.value = b.items
   // Start/stop tick + polling timers based on whether any batch is running
@@ -575,6 +806,9 @@ async function load() {
   await loadSchemaChanges()
   // F1.3 — 数据对账记录
   await loadReconciliations()
+  // F2.3 — 隔离区（页面加载即拉取，Tab 切换时也会刷新）
+  await loadQuarantine()
+  await loadQuarantineStats()
 }
 
 async function handleExecute() {
@@ -673,6 +907,14 @@ async function handleSave() {
 
 onMounted(load)
 onUnmounted(() => { _esList.forEach(es => es.close()); stopTick(); stopPolling() })
+
+// F2.3 — 切换到隔离区 Tab 时刷新数据
+watch(activeTab, (t) => {
+  if (t === 'quarantine') {
+    loadQuarantine()
+    loadQuarantineStats()
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -733,4 +975,24 @@ onUnmounted(() => { _esList.forEach(es => es.close()); stopTick(); stopPolling()
 .diff-ok { color: $color-success; font-weight: $font-weight-semibold; }
 .diff-warn { color: #ca8a04; font-weight: $font-weight-semibold; }
 .diff-err { color: $color-danger; font-weight: $font-weight-semibold; }
+
+/* F2.4 — 调度状态展示 */
+.sched-block { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cron-code { font-family: monospace; background: rgba(0,0,0,0.04); padding: 1px 8px; border-radius: 4px; font-size: 13px; color: $color-text-primary; }
+.sched-next { font-size: 12px; color: $color-text-secondary; }
+.sched-dim { color: $color-text-placeholder; }
+
+/* F2.3 — 隔离区 */
+.qb-circuit { padding: 16px; border: 1px solid $color-border-light; border-radius: 8px; margin-bottom: 16px; background: rgba(0,0,0,0.015); }
+.qb-circuit-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.qb-circuit-title { font-size: 14px; font-weight: $font-weight-semibold; }
+.qb-circuit-rate { display: flex; align-items: center; gap: 12px; }
+.qb-rate-label { font-size: 13px; color: $color-text-secondary; white-space: nowrap; }
+.qb-circuit-rate :deep(.el-progress) { flex: 1; }
+.qb-threshold { font-size: 12px; color: $color-text-placeholder; white-space: nowrap; }
+.qb-circuit-counts { display: flex; gap: 24px; margin-top: 12px; font-size: 13px; color: $color-text-secondary; }
+.qb-circuit-counts b { color: $color-text-primary; font-size: 15px; }
+.qb-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.qb-pager { display: flex; justify-content: flex-end; margin-top: 12px; }
+.raw-json { background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 6px; font-size: 12px; line-height: 1.6; max-height: 500px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-family: monospace; }
 </style>
