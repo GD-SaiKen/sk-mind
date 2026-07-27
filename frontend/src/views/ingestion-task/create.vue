@@ -46,19 +46,62 @@
         </el-form-item>
 
         <el-form-item label="调度方式" prop="scheduleType">
-          <el-radio-group v-model="form.scheduleType">
+          <el-radio-group v-model="form.scheduleType" @change="onScheduleTypeChange">
             <el-radio value="manual">手动触发</el-radio>
             <el-radio value="cron">定时调度</el-radio>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item
-          v-if="form.scheduleType === 'cron'"
-          label="Cron 表达式"
-          prop="cronExpression"
-        >
-          <el-input v-model="form.cronExpression" placeholder="0 3 * * * (每天凌晨3点)" />
-        </el-form-item>
+        <template v-if="form.scheduleType === 'cron'">
+          <el-form-item label="预设频率" prop="cronPreset">
+            <el-select
+              v-model="cronPreset"
+              placeholder="选择常用频率"
+              style="width: 240px"
+              @change="onPresetChange"
+            >
+              <el-option
+                v-for="p in cronPresets"
+                :key="p.value"
+                :label="p.label"
+                :value="p.value"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item
+            v-if="cronPreset === '__custom__'"
+            label="Cron 表达式"
+            prop="cronExpression"
+          >
+            <el-input
+              v-model="form.cronExpression"
+              placeholder="0 3 * * * (每天凌晨3点)"
+              style="max-width: 320px"
+              @input="refreshCronPreview"
+            />
+          </el-form-item>
+
+          <el-form-item label="下次执行">
+            <div v-if="cronPreview.loading" class="cron-preview-line">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              <span class="cron-preview-text">计算中…</span>
+            </div>
+            <el-tag v-else-if="cronPreview.nextRun" type="primary" effect="plain">
+              <el-icon style="margin-right: 4px; vertical-align: middle"><Clock /></el-icon>
+              {{ fmtDateTime(cronPreview.nextRun, true) }}
+            </el-tag>
+            <el-text v-else-if="cronPreview.error" type="danger" size="small">
+              {{ cronPreview.error }}
+            </el-text>
+            <el-text v-else type="info" size="small">填写 Cron 后自动计算</el-text>
+          </el-form-item>
+
+          <el-form-item label="回放窗口" prop="replayWindowDays">
+            <el-input-number v-model="form.replayWindowDays" :min="1" :max="30" :step="1" />
+            <span class="form-tip">天 · 增量同步从水位往前回放 N 天，默认 3</span>
+          </el-form-item>
+        </template>
 
         <el-divider content-position="left">
           接口勾选
@@ -137,13 +180,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Clock, Loading } from '@element-plus/icons-vue'
 import PageHeader from '@/components/page-header/index.vue'
 import { dataSourceService, ingestionService } from '@/api'
 import type { DataSource, ApiInterfaceItem, IngestionTask } from '@/api'
+import { fmtDateTime } from '@/utils/datetime'
+
+/** 常用 Cron 预设（6/7 字段 Quartz 会在后端 _normalize_cron 归一为 5 字段标准 cron） */
+const cronPresets = [
+  { label: '每天凌晨 3 点', value: '0 3 * * *' },
+  { label: '每小时整点', value: '0 * * * *' },
+  { label: '每 6 小时', value: '0 */6 * * *' },
+  { label: '每 12 小时', value: '0 */12 * * *' },
+  { label: '每 30 分钟', value: '*/30 * * * *' },
+  { label: '每 15 分钟', value: '*/15 * * * *' },
+  { label: '每周一凌晨 4 点', value: '0 4 * * 1' },
+  { label: '自定义…', value: '__custom__' },
+]
+const CUSTOM_PRESET = '__custom__'
 
 const router = useRouter()
 const route = useRoute()
@@ -166,8 +223,26 @@ const form = ref({
   syncMode: 'full',
   scheduleType: 'manual',
   cronExpression: '',
+  cronPreset: '0 3 * * *',
+  replayWindowDays: 3,
   description: '',
   selectedInterfaces: [] as string[],
+})
+
+/** 当前选中的 Cron 预设（与 form.cronExpression 联动） */
+const cronPreset = ref('0 3 * * *')
+
+/** Cron 预览状态（下次执行时间） */
+const cronPreview = reactive<{
+  loading: boolean
+  nextRun: string | null
+  description: string
+  error: string
+}>({
+  loading: false,
+  nextRun: null,
+  description: '',
+  error: '',
 })
 
 const rules = {
@@ -184,6 +259,58 @@ function selectAll() {
 
 function deselectAll() {
   form.value.selectedInterfaces = []
+}
+
+function onScheduleTypeChange(val: string) {
+  if (val === 'cron') {
+    // 初次切到定时：若 cronExpression 为空则套用当前预设
+    if (!form.value.cronExpression && cronPreset.value !== CUSTOM_PRESET) {
+      form.value.cronExpression = cronPreset.value
+    }
+    refreshCronPreview()
+  } else {
+    cronPreview.nextRun = null
+    cronPreview.error = ''
+    cronPreview.description = ''
+  }
+}
+
+function onPresetChange(val: string) {
+  if (val !== CUSTOM_PRESET) {
+    form.value.cronExpression = val
+  }
+  refreshCronPreview()
+}
+
+let _previewTimer: ReturnType<typeof setTimeout> | undefined
+function refreshCronPreview() {
+  if (form.value.scheduleType !== 'cron' || !form.value.cronExpression) {
+    cronPreview.nextRun = null
+    cronPreview.error = ''
+    cronPreview.description = ''
+    return
+  }
+  cronPreview.loading = true
+  cronPreview.error = ''
+  if (_previewTimer) clearTimeout(_previewTimer)
+  _previewTimer = setTimeout(async () => {
+    try {
+      const res = await ingestionService.previewCron(form.value.cronExpression)
+      if (res?.isValid) {
+        cronPreview.nextRun = res.nextRun || null
+        cronPreview.description = res.description || ''
+        cronPreview.error = ''
+      } else {
+        cronPreview.nextRun = null
+        cronPreview.error = 'Cron 表达式无效'
+      }
+    } catch {
+      cronPreview.nextRun = null
+      cronPreview.error = '预览请求失败'
+    } finally {
+      cronPreview.loading = false
+    }
+  }, 400)
 }
 
 async function onDataSourceChange(dsId: string) {
@@ -213,6 +340,12 @@ async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  // 定时调度必须带有效 Cron 表达式
+  if (form.value.scheduleType === 'cron' && !form.value.cronExpression) {
+    ElMessage.error('请选择或输入 Cron 表达式')
+    return
+  }
+
   submitting.value = true
   try {
     if (isEdit.value) {
@@ -227,6 +360,7 @@ async function handleSubmit() {
           accessMethod: 'api',
           configPath: `config/data_sources/${selectedDataSourceCode.value}.yaml`,
           interfaces: form.value.selectedInterfaces,
+          replayWindowDays: form.value.replayWindowDays,
         },
       }
       await ingestionService.update(editTaskId.value, data)
@@ -242,8 +376,9 @@ async function handleSubmit() {
         selectedDataSourceCode.value,
         form.value.syncMode,
         form.value.scheduleType,
-        form.value.cronExpression,
+        form.value.scheduleType === 'cron' ? form.value.cronExpression : '',
         form.value.description,
+        form.value.replayWindowDays,
       )
       ElMessage.success(`任务创建成功: ${task.name || task.code}`)
 
@@ -280,6 +415,12 @@ async function loadEditTask() {
     form.value.cronExpression = task.cronExpression || ''
     form.value.description = task.description || ''
 
+    // 选中预设（若现有 cronExpression 命中某个预设则高亮它，否则归为自定义）
+    const matched = cronPresets.find(p => p.value === task.cronExpression)
+    cronPreset.value = matched ? matched.value : CUSTOM_PRESET
+    form.value.cronPreset = cronPreset.value
+    form.value.replayWindowDays = (task.config as any)?.replayWindowDays ?? 3
+
     // Pre-select interfaces from task config
     const configInterfaces = (task.config as any)?.interfaces || []
     form.value.selectedInterfaces = configInterfaces
@@ -293,6 +434,11 @@ async function loadEditTask() {
         interfaces.value = await dataSourceService.getInterfaces(task.dataSourceId)
       } catch { /* ignore */ }
       loadingInterfaces.value = false
+    }
+
+    // 计算定时调度的下次执行预览
+    if (form.value.scheduleType === 'cron' && form.value.cronExpression) {
+      refreshCronPreview()
     }
   } catch {
     ElMessage.error('加载任务信息失败')
@@ -329,5 +475,23 @@ onMounted(async () => {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid #ebeef5;
+}
+
+.cron-preview-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #909399;
+  font-size: 13px;
+}
+
+.cron-preview-text {
+  font-size: 13px;
+}
+
+.form-tip {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #909399;
 }
 </style>

@@ -27,6 +27,7 @@ export class IngestionService {
     scheduleType: string = 'manual',
     cronExpression: string = '',
     description: string = '',
+    replayWindowDays: number = 3,
   ) {
     return this.api.post('/ingestion-tasks', {
       name,
@@ -40,6 +41,7 @@ export class IngestionService {
         accessMethod: 'api',
         configPath: `config/data_sources/${dataSourceCode}.yaml`,
         interfaces,
+        replayWindowDays,
       },
       description,
     }).then(r => r.data.data)

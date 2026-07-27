@@ -40,6 +40,19 @@
             </span>
             <span v-else class="never-sync">未同步过</span>
           </template>
+          <template #col-scheduleType="{ row }">
+            <el-tag v-if="row.scheduleType === 'manual'" type="info" effect="plain">手动</el-tag>
+            <el-tooltip
+              v-else-if="row.scheduleType === 'cron'"
+              :content="cronTooltip(row)"
+              placement="top"
+            >
+              <el-tag type="primary" effect="plain">
+                <el-icon style="margin-right: 4px; vertical-align: middle"><Clock /></el-icon>定时
+              </el-tag>
+            </el-tooltip>
+            <el-tag v-else type="warning" effect="plain">{{ row.scheduleType }}</el-tag>
+          </template>
           <template #col-actions="{ row }">
             <template v-if="running[row.id]">
               <div class="inline-progress">
@@ -118,6 +131,8 @@ const filterItems: FilterItem[] = [
 ]
 const filterValues = ref<Record<string, any>>({})
 const running = reactive<Record<string, { pct: number; step: string; batchId: string }>>({})
+// 定时任务的下次执行时间（key = task id）
+const cronNextRun = reactive<Record<string, string | null>>({})
 let _pollEss: EventSource[] = []
 
 const page = ref(1)
@@ -140,7 +155,7 @@ const statusMap: Record<string, { text: string; type: '' | 'success' | 'warning'
 const columns: ColumnSchema[] = [
   { type: 'custom', prop: 'name', label: '任务名称', minWidth: 180 },
   { type: 'text', prop: 'code', label: '编码', width: 150 },
-  { type: 'text', prop: 'scheduleType', label: '调度频率', width: 110, formatter: (v: string) => v === 'cron' ? '定时' : v === 'manual' ? '手动触发' : v === 'interval' ? '每小时' : v || '手动触发' },
+  { type: 'custom', prop: 'scheduleType', label: '调度频率', width: 130 },
   { type: 'custom', prop: 'lastSyncAt', label: '最近同步', width: 170 },
   { type: 'tag', prop: 'status', label: '状态', width: 90, formatter: (v: string) => statusMap[v]?.text ?? v, tagMap: { active: 'success', draft: 'info', paused: 'warning', disabled: 'danger' } },
   { type: 'text', prop: 'createdAt', label: '创建时间', width: 170 },
@@ -187,6 +202,29 @@ async function loadTasks() {
     tasks.value = res.items
     total.value = res.total
   } finally { loading.value = false }
+  // 计算所有定时任务的「下次执行」时间（不阻塞列表渲染）
+  void loadCronPreviews()
+}
+
+/** 为列表中的定时任务批量拉取下次执行时间 */
+async function loadCronPreviews() {
+  const cronTasks = tasks.value.filter(t => t.scheduleType === 'cron' && t.cronExpression)
+  await Promise.all(cronTasks.map(async (t) => {
+    try {
+      const res = await ingestionService.previewCron(t.cronExpression as string)
+      cronNextRun[t.id] = res?.isValid ? (res.nextRun ?? null) : null
+    } catch {
+      cronNextRun[t.id] = null
+    }
+  }))
+}
+
+/** 定时任务 tooltip：展示 Cron 表达式与下次执行时间 */
+function cronTooltip(row: IngestionTask): string {
+  const next = cronNextRun[row.id]
+  const expr = row.cronExpression || '未设置'
+  if (!next) return `Cron: ${expr}`
+  return `Cron: ${expr} · 下次执行: ${fmtDateTime(next, true)}`
 }
 
 async function handleExecute(task: IngestionTask) {
