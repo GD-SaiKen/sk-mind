@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
         logging.getLogger(name).propagate = False
     from app.core.database import engine
-    from app.core.scheduler import start_scheduler, shutdown_scheduler
+    from app.modules.ingestion.scheduler import start_scheduler, shutdown_scheduler
 
     try:
         start_scheduler()

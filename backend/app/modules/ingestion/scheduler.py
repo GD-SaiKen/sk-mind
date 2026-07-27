@@ -106,6 +106,9 @@ async def _load_and_schedule():
                         args=[str(task.id), task.name],
                         id=job_id,
                         replace_existing=True,
+                        # 同一任务不重叠触发：防 cron 表达式周期 < 单次同步耗时的重复入队
+                        max_instances=1,
+                        coalesce=True,
                     )
                     registered.add(job_id)
                     logger.info("已注册定时任务: %s cron=%s", task.name, task.cron_expression)
@@ -138,6 +141,9 @@ def start_scheduler():
         seconds=60,
         id="sync_reload",
         replace_existing=True,
+        # 防止上一次 reload 未结束又触发新的（DB 慢时）
+        max_instances=1,
+        coalesce=True,
     )
     scheduler.start()
     logger.info("同步调度器已启动")

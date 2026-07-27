@@ -46,6 +46,32 @@ def _paginated(items, total, page, page_size):
     return _ok({"items": items, "total": total, "page": page, "pageSize": page_size}, msg="OK")
 
 
+class PreviewCronRequest(BaseModel):
+    cronExpression: str = ""
+
+
+@task_router.post("/preview-cron")
+async def preview_cron(body: PreviewCronRequest):
+    """Cron 表达式预览：返回合法性、下次执行时间、描述（B2.3 / F2.1 用）。"""
+    from app.modules.ingestion.scheduler import _normalize_cron
+    from apscheduler.triggers.cron import CronTrigger
+    from datetime import datetime as _dt
+
+    expr = (body.cronExpression or "").strip()
+    if not expr:
+        return _ok({"isValid": False, "nextRun": None, "description": None})
+    try:
+        trigger = CronTrigger.from_crontab(_normalize_cron(expr))
+        nxt = trigger.get_next_fire_time(None, _dt.now(timezone.utc))
+        return _ok({
+            "isValid": True,
+            "nextRun": nxt.isoformat() if nxt else None,
+            "description": str(trigger),
+        })
+    except Exception:
+        return _ok({"isValid": False, "nextRun": None, "description": None})
+
+
 def _enqueue(task_id, batch_id, task_name, timeout=60):
     """将同步任务入队 RQ，返回 job_id。"""
     from app.core.queue import redis_conn

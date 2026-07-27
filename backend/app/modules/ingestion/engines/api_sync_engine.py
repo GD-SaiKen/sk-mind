@@ -104,7 +104,14 @@ class ApiSyncEngine:
             if not multi and batch is not None:
                 b = batch
             else:
-                b = self._writer.create_batch(task_id, trigger_type="manual")
+                # 多接口任务：每个接口建独立子批次。
+                # 关键修复：子批次必须继承「父批次」的真实触发方式
+                # （scheduled/manual/retry/backfill…），绝不能硬编码 "manual"。
+                # 否则 cron 调度的多接口任务（如「(汇总)」）其子接口批次会错显为
+                # 「手动」，与父批次「定时」不一致（用户报的显示 bug）。
+                _tt = batch.trigger_type if batch is not None else "manual"
+                _tb = getattr(batch, "triggered_by", None) if batch is not None else None
+                b = self._writer.create_batch(task_id, trigger_type=_tt, triggered_by=_tb)
             b.source_signature = iface["name"]
             self._writer.start_batch(b)
 
@@ -387,7 +394,11 @@ class ApiSyncEngine:
         pk = iface.get("pk_fields", [])
         validation_rejected = 0
         if pk:
-            flat_rows, validation_rejected = self._validate_rows(flat_rows, pk)
+            flat_rows, validation_rejected = self._validate_rows(
+                flat_rows, pk,
+                batch=batch, data_source_id=data_source_id,
+                interface_name=iface["name"],
+            )
 
         result = self._writer.write(
             target_table=target_table,
@@ -414,6 +425,29 @@ class ApiSyncEngine:
         result["pulled"] = pulled
         result["rejected"] = result.get("rejected", 0) + validation_rejected
         result["mode"] = mode
+
+        # ── 熔断器（B2.5）：隔离率超阈值 → 标记批次 partial_success ──
+        try:
+            _rej = result.get("rejected", 0)
+            _pulled = result.get("pulled", 0)
+            _rate = (_rej / _pulled) if _pulled > 0 else 0.0
+            _qcfg = iface.get("quarantine") or {}
+            _threshold = _qcfg.get("threshold_pct")
+            if _threshold is None:
+                _threshold = (iface.get("reconciliation") or {}).get("threshold_pct", 5)
+            if _rate >= (_threshold / 100.0):
+                logger.warning(
+                    "隔离率 %.1f%% 超阈值 %.0f%%（接口=%s，拒绝 %d / 拉取 %d），标记批次 partial_success",
+                    _rate * 100, _threshold, iface["name"], _rej, _pulled,
+                )
+                batch.status = "partial_success"
+                try:
+                    self._db.commit()
+                except Exception:
+                    self._db.rollback()
+        except Exception as e:
+            logger.warning("熔断器计算失败（不影响同步）: %s", e)
+
         # 对账 L1（B1.3）：按同步模式选对比基准（增量 vs 本批拉取数）
         self._run_reconcile_l1(
             data_source_id, iface, target_table, api_total, batch,
@@ -430,13 +464,19 @@ class ApiSyncEngine:
             self._db.rollback()
 
     def _validate_rows(
-        self, rows: list[dict], pk_fields: list[str]
+        self,
+        rows: list[dict],
+        pk_fields: list[str],
+        *,
+        batch=None,
+        data_source_id=None,
+        interface_name: str = "",
     ) -> tuple[list[dict], int]:
-        """Basic pre-write validation.
+        """写入前校验，被拒绝的行写入隔离区（B2.4）而非丢弃。
 
-        - PK non-null: rows with null/empty pk are rejected (dropped).
-        - Dedup within batch: duplicate pk keeps the last occurrence.
-        - Quality flags: non-numeric create_date flagged (not blocking).
+        - PK 非空：PK 为 null/空的行拒绝（reason=null_pk）。
+        - 批内去重：重复 PK 保留首条，后出现的行进隔离区（reason=dup_in_batch）。
+        - 质量标记：create_date 非数字的打 invalid_create_date 标记（不阻塞）。
 
         Returns: (valid_rows, rejected_count)
         """
@@ -451,10 +491,22 @@ class ApiSyncEngine:
             pk_vals = [row.get(pk) for pk in pk_fields]
             if any(v is None or v == "" for v in pk_vals):
                 rejected += 1
+                pk_value = "|".join(str(v) for v in pk_vals) if pk_fields else None
+                self._quarantine(
+                    batch=batch, data_source_id=data_source_id,
+                    interface_name=interface_name, pk_value=pk_value,
+                    reason="null_pk", raw=row,
+                )
                 continue
             pk_key = "|".join(str(v) for v in pk_vals)
             if pk_key in seen:
-                valid[seen[pk_key]] = row
+                # 批内重复：后出现的行进隔离区，保留首条
+                rejected += 1
+                self._quarantine(
+                    batch=batch, data_source_id=data_source_id,
+                    interface_name=interface_name, pk_value=pk_key,
+                    reason="dup_in_batch", raw=row,
+                )
                 continue
             seen[pk_key] = len(valid)
 
@@ -472,6 +524,39 @@ class ApiSyncEngine:
             valid.append(row)
 
         return valid, rejected
+
+    def _quarantine(
+        self, *, batch, data_source_id, interface_name: str,
+        pk_value, reason: str, raw: dict,
+    ) -> None:
+        """将被拒绝的坏数据行写入 sync_quarantine（B2.4 隔离区）。
+
+        异常不中断同步主流程：写入失败仅告警。
+        """
+        if batch is None:
+            return
+        try:
+            self._db.execute(text(
+                """
+                INSERT INTO sync_quarantine
+                  (id, batch_id, data_source_id, interface_name, pk_value,
+                   rejection_reason, raw_json, status, created_at)
+                VALUES
+                  (gen_random_uuid(), :batch_id, :ds, :iface, :pk,
+                   :reason, :raw, 'pending', now())
+                """
+            ), {
+                "batch_id": str(batch.id),
+                "ds": str(data_source_id) if data_source_id is not None else None,
+                "iface": interface_name,
+                "pk": pk_value,
+                "reason": reason,
+                "raw": json.dumps(raw, ensure_ascii=False, default=str),
+            })
+            self._db.commit()
+        except Exception as e:
+            self._db.rollback()
+            logger.warning("隔离区写入失败 (reason=%s): %s", reason, e)
 
     @staticmethod
     def _flatten_rows(rows: list[dict], mapper: ColumnMapper) -> list[dict]:

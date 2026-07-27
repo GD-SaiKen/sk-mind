@@ -51,11 +51,12 @@ class StageWriter:
     # --- Batch lifecycle ---
 
     def create_batch(
-        self, task_id: uuid.UUID, trigger_type: str = "manual"
+        self, task_id: uuid.UUID, trigger_type: str = "manual", triggered_by: str | None = None
     ) -> IngestionBatch:
         batch = IngestionBatch(
             task_id=task_id,
             trigger_type=trigger_type,
+            triggered_by=triggered_by,
             status="pending",
         )
         self._db.add(batch)
@@ -145,7 +146,8 @@ class StageWriter:
 
             # 2. Write all rows to staging
             staging_success, rejected = self._insert_into_staging(
-                staging_full, batch, rows, source_id, source_signature, pulled_at
+                staging_full, batch, rows, source_id, source_signature, pulled_at,
+                pk_fields=pk_fields,
             )
 
             if rejected > 0 and sync_mode == "full" and staging_success == 0:
@@ -191,6 +193,7 @@ class StageWriter:
         source_id: str,
         source_signature: str,
         pulled_at: datetime,
+        pk_fields: Optional[list[str]] = None,
     ) -> tuple[int, int]:
         """Batch-insert rows into the staging table."""
         data_cols = list(rows[0].keys())
@@ -223,20 +226,20 @@ class StageWriter:
             chunk.append(params)
 
             if len(chunk) >= self.BATCH_INSERT_SIZE:
-                s, r = self._flush_chunk(ins, chunk)
+                s, r = self._flush_chunk(ins, chunk, pk_fields)
                 success += s
                 rejected += r
                 chunk = []
 
         if chunk:
-            s, r = self._flush_chunk(ins, chunk)
+            s, r = self._flush_chunk(ins, chunk, pk_fields)
             success += s
             rejected += r
 
         return success, rejected
 
-    def _flush_chunk(self, stmt, chunk: list[dict]) -> tuple[int, int]:
-        """Flush one chunk to staging table."""
+    def _flush_chunk(self, stmt, chunk: list[dict], pk_fields=None) -> tuple[int, int]:
+        """Flush one chunk to staging table. 逐行写入失败的行写入隔离区（write_error）。"""
         success = 0
         rejected = 0
         for params in chunk:
@@ -246,8 +249,48 @@ class StageWriter:
             except Exception:
                 self._db.rollback()
                 rejected += 1
+                self._quarantine_row(params, pk_fields)
         self._db.commit()
         return success, rejected
+
+    def _quarantine_row(self, params: dict, pk_fields=None) -> None:
+        """把 staging 写入失败的行写入 sync_quarantine（reason=write_error）。
+
+        params 含数据列 + 跟踪列（_source_id/_batch_id/_source_signature 等）。
+        异常不中断主流程。
+        """
+        try:
+            _tracking = {
+                "_source_id", "_batch_id", "_source_signature",
+                "_pulled_at", "_row_hash", "_quality_flags",
+            }
+            raw = {k: v for k, v in params.items() if k not in _tracking}
+            pk_value = (
+                "|".join(
+                    str(params.get(p)) for p in (pk_fields or [])
+                    if params.get(p) is not None
+                ) or None
+            )
+            self._db.execute(text(
+                """
+                INSERT INTO sync_quarantine
+                  (id, batch_id, data_source_id, interface_name, pk_value,
+                   rejection_reason, raw_json, status, created_at)
+                VALUES
+                  (gen_random_uuid(), :batch_id, :ds, :iface, :pk,
+                   'write_error', :raw, 'pending', now())
+                """
+            ), {
+                "batch_id": params.get("_batch_id"),
+                "ds": params.get("_source_id"),
+                "iface": params.get("_source_signature"),
+                "pk": pk_value,
+                "raw": json.dumps(raw, ensure_ascii=False, default=str),
+            })
+            self._db.commit()
+        except Exception as e:
+            self._db.rollback()
+            logger.warning("隔离区(write_error)写入失败: %s", e)
 
     # --- Promotion ---
 

@@ -131,6 +131,45 @@ class IngestionBatch(Base, UUIDPrimaryKeyMixin):
         return f"<IngestionBatch {self.id} task={self.task_id}>"
 
 
+class Quarantine(Base):
+    """隔离区 — 被校验/写入拒绝的坏数据行，可追溯、可重试。
+
+    对应方案 08 第五节 + 任务拆分 B2.4。状态流转：
+    pending → retried（已重试，待结果）/ resolved（重试成功）/ ignored（人工忽略）。
+    """
+
+    __tablename__ = "sync_quarantine"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    interface_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    pk_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rejection_reason: Mapped[str] = mapped_column(String(100), nullable=False)
+    raw_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False, index=True
+    )
+    retried_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False, index=True
+    )
+
+    def __repr__(self) -> str:
+        return f"<Quarantine {self.id} {self.rejection_reason} {self.status}>"
+
+
 class FileAsset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """文件资产 — 目录扫描或上传的文件元数据。"""
 

@@ -473,7 +473,16 @@ def run_api_full_sync(
 
         ds_sync_id = task.data_source_id or task_uuid
 
-        engine = ApiSyncEngine(config, db)
+        # 回放窗口天数：优先取任务 config.replayWindowDays，否则默认 3（B2.1 表单可配）
+        _replay_days = 3
+        try:
+            _cfg = task.config or {}
+            if isinstance(_cfg, dict) and _cfg.get("replayWindowDays") is not None:
+                _replay_days = int(_cfg["replayWindowDays"])
+        except Exception:
+            _replay_days = 3
+
+        engine = ApiSyncEngine(config, db, replay_window_days=_replay_days)
         logger.info("Syncing all data for task %s", task_id[:8])
         result = engine.sync_all(
             task_id=task_uuid,
