@@ -121,6 +121,11 @@
               </template>
             </Table>
           </template>
+          <template #extra>
+            <el-button plain size="small" @click="computeNullRates">
+              计算空值率
+            </el-button>
+          </template>
         </Crud>
       </el-tab-pane>
 
@@ -215,6 +220,35 @@
             <el-descriptions-item label="可访问角色">管理员, 销售部门</el-descriptions-item>
             <el-descriptions-item label="字段限制">2 个字段受限</el-descriptions-item>
           </el-descriptions>
+
+          <!-- T6: Agent 可用性检查 -->
+          <div style="margin-top: 20px">
+            <el-button
+              type="primary"
+              :loading="agentCheckLoading"
+              @click="checkAgent"
+            >
+              检查 Agent 可用性
+            </el-button>
+            <div v-if="agentCheckResult" style="margin-top: 12px">
+              <el-alert
+                :title="agentCheckResult.passed ? '检查通过 — 可以开放给 Agent' : '检查未通过'"
+                :type="agentCheckResult.passed ? 'success' : 'error'"
+                :closable="false"
+              >
+                <template v-if="!agentCheckResult.passed">
+                  <ul style="margin: 4px 0; padding-left: 20px">
+                    <li v-for="reason in agentCheckResult.reasons" :key="reason">{{ reason }}</li>
+                  </ul>
+                </template>
+              </el-alert>
+              <div style="margin-top: 8px; font-size: 13px; color: #6b7280">
+                字段说明覆盖率：{{ (agentCheckResult.fieldDescriptionCoverage * 100).toFixed(0) }}%
+                &nbsp;·&nbsp;
+                未标记敏感字段：{{ agentCheckResult.unmarkedSensitiveCount }} 个
+              </div>
+            </div>
+          </div>
         </el-card>
       </el-tab-pane>
 
@@ -306,7 +340,7 @@ import PageHeader from '@/components/page-header/index.vue'
 import { Crud, Table } from '@/components/crud'
 import { datasetService } from '@/api/services/dataset'
 import { qualityService } from '@/api/services/quality'
-import type { DatasetResponse, DatasetFieldResponse, QualityRun } from '@/api/types'
+import type { DatasetResponse, DatasetFieldResponse, QualityRun, AgentCheckResponse } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -353,14 +387,14 @@ function mapFieldToRow(f: DatasetFieldResponse): FieldRow {
     name: f.fieldName,
     displayName: f.fieldAlias || f.fieldName,
     type: f.dataType + (f.fieldLength ? `(${f.fieldLength})` : ''),
-    nullRate: f.isNullable ? 0 : 0,
+    nullRate: f.nullRate ?? 0,              // T5: real null rate from API
     sampleValue: f.sampleValues || '-',
     description: f.description || '',
     sensitive,
     sensitiveType,
-    isPk: f.ordinalPosition === 1,
+    isPk: f.isPrimaryKey,                  // T1: real pk from API
     agentEnabled: true,
-    mappedField: '',
+    mappedField: f.sourceColumn || '',
   }
 }
 
@@ -455,6 +489,32 @@ const fieldColumns: ColumnSchema[] = [
 
 const qualityRecords = ref<QualityRecord[]>([])
 
+// T6: Agent check state
+const agentCheckResult = ref<AgentCheckResponse | null>(null)
+const agentCheckLoading = ref(false)
+
+async function checkAgent() {
+  if (!id) return
+  agentCheckLoading.value = true
+  try {
+    agentCheckResult.value = await datasetService.checkAgent(id)
+  } finally {
+    agentCheckLoading.value = false
+  }
+}
+
+// T5: null rate computation
+async function computeNullRates() {
+  if (!id) return
+  try {
+    await datasetService.computeNullRates(id)
+    // Reload fields to get updated null rates
+    const fieldsRes = await datasetService.getFields(id)
+    fieldData.value = fieldsRes.items.map(mapFieldToRow)
+    fieldsPagination.total = fieldsRes.total
+  } catch { /* ignore */ }
+}
+
 const semanticMappings = [
   { field: 'order_id', semantic: '订单.订单ID', confidence: '高' },
   { field: 'customer_name', semantic: '客户.客户名称', confidence: '高' },
@@ -479,6 +539,17 @@ async function loadData() {
       fieldData.value = fieldsRes.items.map(mapFieldToRow)
       fieldsPagination.total = fieldsRes.total
     } catch { /* fields optional */ }
+
+    // T4: Load sample data
+    try {
+      const sample = await datasetService.getSampleData(id, 10)
+      sampleColumns.value = sample.columns
+      sampleData.value = sample.rows.map(row => {
+        const obj: Record<string, unknown> = {}
+        sample.columns.forEach((col, i) => { obj[col] = row[i] })
+        return obj
+      })
+    } catch { /* sample optional */ }
 
     // Load quality records
     try {

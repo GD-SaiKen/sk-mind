@@ -61,7 +61,10 @@ class DatasetResponse(CamelModel):
     tags: Optional[str] = None
     sensitivity_level: str
     is_agent_accessible: bool
+    agent_unavailable_reason: Optional[str] = None  # T6
     status: str
+    source_name: Optional[str] = None  # derived from JOIN data_sources
+    quality_status: Optional[str] = None  # ok / warning / error
     created_at: datetime
     updated_at: datetime
 
@@ -88,6 +91,7 @@ class DatasetFieldResponse(CamelModel):
     quality_status: Optional[str] = None
     is_primary_key: bool = False
     source_column: Optional[str] = None
+    null_rate: Optional[float] = None  # T5
     sample_values: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -115,3 +119,35 @@ class DataTableResponse(CamelModel):
 class DataTableListResponse(CamelModel):
     items: list[DataTableResponse]
     total: int
+
+
+# ── T4: 字段编辑/批量打标 ──
+
+class DatasetFieldUpdate(CamelModel):
+    """编辑单个字段的元数据。"""
+    field_alias: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = None
+    sensitivity_level: Optional[str] = None  # internal / sensitive / high_sensitive
+
+
+class DatasetFieldBatchUpdate(CamelModel):
+    """批量更新字段元数据。"""
+    field_ids: list[uuid.UUID]
+    sensitivity_level: Optional[str] = None  # 批量修改敏感等级
+
+
+# ── T5: 空值率统计 ──
+
+class NullRateResult(CamelModel):
+    field_name: str
+    null_rate: Optional[float] = None  # 0.0 ~ 1.0
+
+
+# ── T6: Agent 可用性检查 ──
+
+class AgentCheckResponse(CamelModel):
+    """Agent 可用性检查结果。"""
+    passed: bool  # 是否通过所有检查
+    reasons: list[str] = []  # 不通过的原因列表
+    field_description_coverage: float = 0.0  # 字段说明覆盖率
+    unmarked_sensitive_count: int = 0  # 未标记的敏感字段数

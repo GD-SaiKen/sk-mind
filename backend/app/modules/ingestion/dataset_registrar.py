@@ -180,10 +180,13 @@ class DatasetRegistrar:
             {"code": code},
         ).scalar_one_or_none()
 
-        # Count actual rows in the physical table
-        actual_count = self._db.execute(
-            text(f"SELECT count(*) FROM {schema}.\"{table}\"")
-        ).scalar()
+        # Count actual rows in the physical table (fallback to API pulled count)
+        try:
+            actual_count = self._db.execute(
+                text(f"SELECT count(*) FROM {schema}.\"{table}\"")
+            ).scalar()
+        except Exception:
+            actual_count = record_count
 
         # Count physical columns (excluding tracking columns)
         field_count = self._count_business_columns(schema, table)

@@ -194,7 +194,10 @@ export interface DatasetResponse {
   tags: string | null
   sensitivityLevel: string
   isAgentAccessible: boolean
+  agentUnavailableReason: string | null  // T6
   status: string
+  sourceName: string | null  // derived from JOIN data_sources
+  qualityStatus: string | null  // ok / warning / error
   createdAt: string
   updatedAt: string
 }
@@ -211,6 +214,9 @@ export interface DatasetFieldResponse {
   ordinalPosition: number
   sensitivityLevel: string
   qualityStatus: string | null
+  isPrimaryKey: boolean          // T1
+  sourceColumn: string | null     // T1
+  nullRate: number | null         // T5
   sampleValues: string | null
   createdAt: string
   updatedAt: string
@@ -396,4 +402,31 @@ export interface CronPreview {
   nextRun: string | null
   isValid: boolean
   description: string | null
+}
+
+// ── T4: 字段编辑 ──
+export interface DatasetFieldUpdate {
+  fieldAlias?: string
+  description?: string
+  sensitivityLevel?: string
+}
+
+export interface DatasetFieldBatchUpdate {
+  fieldIds: string[]
+  sensitivityLevel?: string
+}
+
+// T4: 样例数据
+export interface SampleDataResponse {
+  columns: string[]
+  rows: unknown[][]
+  total: number
+}
+
+// ── T6: Agent 可用性检查 ──
+export interface AgentCheckResponse {
+  passed: boolean
+  reasons: string[]
+  fieldDescriptionCoverage: number
+  unmarkedSensitiveCount: number
 }

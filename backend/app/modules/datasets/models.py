@@ -6,7 +6,7 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,6 +55,8 @@ class Dataset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         String(20), default="internal", nullable=False
     )  # public / internal / sensitive / high_sensitive
     is_agent_accessible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    agent_unavailable_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # ^ T6: 最近一次 Agent 可用性检查不通过的原因列表 (JSON array of strings)
     status: Mapped[str] = mapped_column(
         String(20), default="draft", nullable=False, index=True
     )  # draft / active / archived
@@ -104,6 +106,10 @@ class DatasetField(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     source_column: Mapped[Optional[str]] = mapped_column(
         String(200), nullable=True
     )  # raw 表物理列名，对 raw 层与 field_name 相同；对 clean/serving 层追溯来源
+
+    # 空值率（T5 新增，定时/按需统计）
+    null_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # ^ 该字段 null 值占比（0.0 ~ 1.0），由统计任务计算
 
     # 样例值 (JSON)
     sample_values: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

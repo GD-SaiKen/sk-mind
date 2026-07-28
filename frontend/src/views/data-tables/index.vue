@@ -71,10 +71,10 @@ function mapDatasetToTable(ds: DatasetResponse): DataTable {
     tableName: ds.code,
     displayName: ds.name,
     layer: ds.dataLayer || '-',
-    sourceName: ds.dataSourceId || '-',
+    sourceName: ds.sourceName || ds.dataSourceId || '-',
     recordCount: ds.recordCount ?? 0,
     fieldCount: ds.fieldCount ?? 0,
-    qualityStatus: 'pass',
+    qualityStatus: ds.qualityStatus || (ds.status === 'active' ? 'ok' : ds.status === 'archived' ? 'error' : 'warning'),
     agentEnabled: ds.isAgentAccessible,
     updatedAt: ds.updatedAt,
   }
@@ -86,12 +86,11 @@ const loading = ref(false)
 
 const filterItems: FilterItem[] = [
   { key: 'keyword', placeholder: '搜索表名或显示名...', width: '220px' },
-  { key: 'source', type: 'select', placeholder: '来源', width: '130px',
-    options: [{ label: '全部来源', value: '' }, { label: 'SAP ERP', value: 'SAP ERP' }, { label: 'Plataine MES', value: 'Plataine MES' }, { label: 'Excel', value: 'Excel' }, { label: 'ERP API', value: 'ERP API' }, { label: 'MES MQTT', value: 'MES MQTT' }] },
+  { key: 'source', type: 'input', placeholder: '来源', width: '140px' },
   { key: 'layer', type: 'select', placeholder: '层级', width: '120px',
     options: [{ label: '全部层级', value: '' }, { label: 'Raw', value: 'raw' }, { label: 'Clean', value: 'clean' }, { label: 'Serving', value: 'serving' }] },
   { key: 'quality', type: 'select', placeholder: '质量状态', width: '120px',
-    options: [{ label: '全部', value: '' }, { label: '正常', value: 'pass' }, { label: '警告', value: 'warning' }, { label: '异常', value: 'error' }] },
+    options: [{ label: '全部', value: '' }, { label: '正常', value: 'ok' }, { label: '警告', value: 'warning' }, { label: '异常', value: 'error' }] },
   { key: 'agent', type: 'select', placeholder: 'Agent 可用', width: '130px',
     options: [{ label: '全部', value: '' }, { label: '已开放', value: 'true' }, { label: '未开放', value: 'false' }] },
 ]
@@ -113,8 +112,8 @@ function layerTagType(layer: string) {
   if (layer === 'clean' || layer === 'Clean') return 'warning'
   return ''
 }
-function qualityTagType(status: string) { if (status === 'pass') return 'success'; if (status === 'warning') return 'warning'; if (status === 'error') return 'danger'; return 'info' }
-function qualityLabel(status: string) { const map: Record<string, string> = { pass: '正常', warning: '警告', error: '异常' }; return map[status] ?? status }
+function qualityTagType(status: string) { if (status === 'ok' || status === 'pass') return 'success'; if (status === 'warning') return 'warning'; if (status === 'error') return 'danger'; return 'info' }
+function qualityLabel(status: string) { const map: Record<string, string> = { ok: '正常', pass: '正常', warning: '警告', error: '异常' }; return map[status] ?? status }
 
 const columns: ColumnSchema[] = [
   { type: 'custom', prop: 'name', label: '数据表', minWidth: 180 },
@@ -148,7 +147,7 @@ async function load() {
     if (fv.source) params.source = fv.source
     if (fv.layer) params.dataLayer = fv.layer
     if (fv.quality) params.quality = fv.quality
-    if (fv.agent) params.accessibile = fv.agent
+    if (fv.agent !== undefined && fv.agent !== '') params.isAgentAccessible = fv.agent === 'true'
     const res = await datasetService.getList(params)
     tables.value = res.items.map(mapDatasetToTable)
     total.value = res.total
