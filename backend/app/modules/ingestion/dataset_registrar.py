@@ -180,6 +180,11 @@ class DatasetRegistrar:
             {"code": code},
         ).scalar_one_or_none()
 
+        # Count actual rows in the physical table
+        actual_count = self._db.execute(
+            text(f"SELECT count(*) FROM {schema}.\"{table}\"")
+        ).scalar()
+
         # Count physical columns (excluding tracking columns)
         field_count = self._count_business_columns(schema, table)
 
@@ -197,7 +202,7 @@ class DatasetRegistrar:
                     """
                 ),
                 {
-                    "record_count": record_count,
+                    "record_count": actual_count,
                     "field_count": field_count,
                     "batch_id": str(batch_id),
                     "id": existing,
@@ -234,7 +239,7 @@ class DatasetRegistrar:
                 "data_source_id": str(data_source_id),
                 "task_id": str(task_id),
                 "batch_id": str(batch_id),
-                "record_count": record_count,
+                "record_count": actual_count,
                 "field_count": field_count,
                 "business_domain": business_domain,
                 "status": "active",
