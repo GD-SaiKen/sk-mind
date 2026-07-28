@@ -95,6 +95,16 @@ class DatasetField(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         String(20), nullable=True
     )  # ok / warning / error / unknown
 
+    # 主键标记（T1 新增，T2 自动填写）
+    is_primary_key: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )  # 标记该字段来自 YAML pk_fields，upsert ON CONFLICT 列
+
+    # 源列名（T1 新增，T2 自动填写）
+    source_column: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True
+    )  # raw 表物理列名，对 raw 层与 field_name 相同；对 clean/serving 层追溯来源
+
     # 样例值 (JSON)
     sample_values: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

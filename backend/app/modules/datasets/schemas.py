@@ -86,6 +86,8 @@ class DatasetFieldResponse(CamelModel):
     ordinal_position: int
     sensitivity_level: str
     quality_status: Optional[str] = None
+    is_primary_key: bool = False
+    source_column: Optional[str] = None
     sample_values: Optional[str] = None
     created_at: datetime
     updated_at: datetime
