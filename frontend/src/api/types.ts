@@ -430,3 +430,64 @@ export interface AgentCheckResponse {
   fieldDescriptionCoverage: number
   unmarkedSensitiveCount: number
 }
+
+// ── Catalog (T7/T8) ──
+
+export interface CatalogDatasetItem {
+  id: string
+  name: string
+  displayName: string | null
+  code: string
+  description: string | null
+  sourceName: string | null
+  dataLayer: string
+  businessDomain: string | null
+  updatedAt: string
+  qualityStatus: string | null
+  permissionLevel: string
+  isAgentAccessible: boolean
+  recordCount: number | null
+  fieldCount: number | null
+}
+
+export interface CatalogDatasetListResponse {
+  items: CatalogDatasetItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CatalogFieldItem {
+  id: string
+  fieldName: string
+  fieldAlias: string | null
+  description: string | null
+  dataType: string
+  isPrimaryKey: boolean
+  isSensitive: boolean
+  sensitivityLevel: string
+  nullRate: number | null
+  datasetName: string
+  datasetId: string
+}
+
+export interface CatalogFieldListResponse {
+  items: CatalogFieldItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CatalogDatasetDetail extends CatalogDatasetItem {
+  agentAccessibleReason: string | null
+  fields: CatalogFieldItem[]
+  sensitiveFields: CatalogFieldItem[]
+}
+
+export interface CatalogStats {
+  total: number
+  qualityOk: number
+  qualityWarning: number
+  agentAccessible: number
+  byDomain: { domain: string; count: number }[]
+}

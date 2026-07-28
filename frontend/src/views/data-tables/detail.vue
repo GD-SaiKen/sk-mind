@@ -74,9 +74,23 @@
       >
         <Crud :pagination="fieldsPagination">
           <template #table>
+            <!-- T4: 批量操作工具栏 -->
+            <div v-if="selectedFields.length > 0" class="batch-toolbar">
+              <span class="batch-hint">已选 {{ selectedFields.length }} 个字段</span>
+              <el-button size="small" type="warning" plain @click="batchMarkSensitive">
+                批量标记为敏感
+              </el-button>
+              <el-button size="small" plain @click="batchMarkInternal">
+                批量标记为内部
+              </el-button>
+              <el-button size="small" plain @click="clearSelection">取消选择</el-button>
+            </div>
             <Table
+              ref="fieldTableRef"
               :columns="fieldColumns"
               :data="pagedFields"
+              row-key="id"
+              @selection-change="onFieldSelectionChange"
             >
               <template #col-nullRate="{ row }">
                 <span :style="{ color: row.nullRate > 0.1 ? '#dc2626' : row.nullRate > 0.01 ? '#ca8a04' : '' }">
@@ -127,6 +141,54 @@
             </el-button>
           </template>
         </Crud>
+
+        <!-- T4: 字段编辑对话框 -->
+        <el-dialog
+          v-model="editDialogVisible"
+          title="编辑字段"
+          width="440px"
+          :close-on-click-modal="false"
+        >
+          <el-form
+            v-if="editingField"
+            label-width="80px"
+            label-position="left"
+          >
+            <el-form-item label="字段名">
+              <span class="text-muted">{{ editingField.name }}</span>
+            </el-form-item>
+            <el-form-item label="显示名">
+              <el-input
+                v-model="editForm.displayName"
+                placeholder="输入字段别名"
+                maxlength="200"
+                show-word-limit
+              />
+            </el-form-item>
+            <el-form-item label="字段说明">
+              <el-input
+                v-model="editForm.description"
+                type="textarea"
+                :rows="3"
+                placeholder="字段的业务含义和用途"
+                maxlength="500"
+                show-word-limit
+              />
+            </el-form-item>
+            <el-form-item label="敏感级别">
+              <el-select v-model="editForm.sensitivityLevel" style="width: 100%">
+                <el-option label="公开（public）" value="public" />
+                <el-option label="内部（internal）" value="internal" />
+                <el-option label="敏感（sensitive）" value="sensitive" />
+                <el-option label="高敏感（high_sensitive）" value="high_sensitive" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="editSaving" @click="saveFieldEdit">保存</el-button>
+          </template>
+        </el-dialog>
       </el-tab-pane>
 
       <el-tab-pane
@@ -363,6 +425,7 @@ interface DataTableDetail {
 }
 
 interface FieldRow {
+  id: string
   name: string
   displayName: string
   type: string
@@ -371,6 +434,7 @@ interface FieldRow {
   description: string
   sensitive: boolean
   sensitiveType: string
+  sensitivityLevel: string
   isPk: boolean
   agentEnabled: boolean
   mappedField: string
@@ -384,6 +448,7 @@ function mapFieldToRow(f: DatasetFieldResponse): FieldRow {
     sensitiveType = f.sensitivityLevel === 'sensitive' ? 'PII' : f.sensitivityLevel
   }
   return {
+    id: f.id,
     name: f.fieldName,
     displayName: f.fieldAlias || f.fieldName,
     type: f.dataType + (f.fieldLength ? `(${f.fieldLength})` : ''),
@@ -392,6 +457,7 @@ function mapFieldToRow(f: DatasetFieldResponse): FieldRow {
     description: f.description || '',
     sensitive,
     sensitiveType,
+    sensitivityLevel: f.sensitivityLevel || 'internal',
     isPk: f.isPrimaryKey,                  // T1: real pk from API
     agentEnabled: true,
     mappedField: f.sourceColumn || '',
@@ -475,6 +541,7 @@ const pagedFields = computed(() => fieldData.value.slice(
 ))
 
 const fieldColumns: ColumnSchema[] = [
+  { type: 'selection', width: 50 },
   { type: 'text', prop: 'name', label: '字段名', width: 160, showOverflowTooltip: true },
   { type: 'text', prop: 'displayName', label: '显示名', width: 120 },
   { type: 'text', prop: 'type', label: '类型', width: 130 },
@@ -485,9 +552,96 @@ const fieldColumns: ColumnSchema[] = [
   { type: 'custom', prop: 'isPk', label: '主键', width: 70, align: 'center' },
   { type: 'custom', prop: 'agentEnabled', label: 'Agent可用', width: 90, align: 'center' },
   { type: 'custom', prop: 'mapped', label: '已映射', width: 130 },
+  {
+    type: 'action', label: '操作', width: 80,
+    buttons: [
+      { label: '编辑', type: 'primary', onClick: (row) => openFieldEdit(row as FieldRow) },
+    ],
+  },
 ]
 
 const qualityRecords = ref<QualityRecord[]>([])
+
+// ── T4: 字段批量选择状态 ──
+const selectedFields = ref<FieldRow[]>([])
+const fieldTableRef = ref()
+
+function onFieldSelectionChange(rows: FieldRow[]) {
+  selectedFields.value = rows
+}
+
+function clearSelection() {
+  selectedFields.value = []
+  fieldTableRef.value?.clearSelection()
+}
+
+async function batchMarkSensitive() {
+  if (!id || selectedFields.value.length === 0) return
+  try {
+    await datasetService.batchUpdateFields(id, {
+      fieldIds: selectedFields.value.map(f => f.id),
+      sensitivityLevel: 'sensitive',
+    })
+    await reloadFields()
+    clearSelection()
+  } catch { /* ignore */ }
+}
+
+async function batchMarkInternal() {
+  if (!id || selectedFields.value.length === 0) return
+  try {
+    await datasetService.batchUpdateFields(id, {
+      fieldIds: selectedFields.value.map(f => f.id),
+      sensitivityLevel: 'internal',
+    })
+    await reloadFields()
+    clearSelection()
+  } catch { /* ignore */ }
+}
+
+// ── T4: 字段编辑对话框状态 ──
+const editDialogVisible = ref(false)
+const editingField = ref<FieldRow | null>(null)
+const editSaving = ref(false)
+const editForm = reactive({
+  displayName: '',
+  description: '',
+  sensitivityLevel: 'internal',
+})
+
+function openFieldEdit(row: FieldRow) {
+  editingField.value = row
+  editForm.displayName = row.displayName
+  editForm.description = row.description
+  editForm.sensitivityLevel = row.sensitivityLevel
+  editDialogVisible.value = true
+}
+
+async function saveFieldEdit() {
+  if (!id || !editingField.value) return
+  editSaving.value = true
+  try {
+    await datasetService.updateField(id, editingField.value.id, {
+      fieldAlias: editForm.displayName || undefined,
+      description: editForm.description || undefined,
+      sensitivityLevel: editForm.sensitivityLevel,
+    })
+    editDialogVisible.value = false
+    await reloadFields()
+    clearSelection()
+  } catch { /* ignore */ } finally {
+    editSaving.value = false
+  }
+}
+
+async function reloadFields() {
+  if (!id) return
+  try {
+    const fieldsRes = await datasetService.getFields(id)
+    fieldData.value = fieldsRes.items.map(mapFieldToRow)
+    fieldsPagination.total = fieldsRes.total
+  } catch { /* ignore */ }
+}
 
 // T6: Agent check state
 const agentCheckResult = ref<AgentCheckResponse | null>(null)
@@ -508,10 +662,7 @@ async function computeNullRates() {
   if (!id) return
   try {
     await datasetService.computeNullRates(id)
-    // Reload fields to get updated null rates
-    const fieldsRes = await datasetService.getFields(id)
-    fieldData.value = fieldsRes.items.map(mapFieldToRow)
-    fieldsPagination.total = fieldsRes.total
+    await reloadFields()
   } catch { /* ignore */ }
 }
 
@@ -639,5 +790,28 @@ h3 {
 .chain-arrow {
   font-size: 18px;
   color: #d1d5db;
+}
+
+// T4: 批量操作工具栏
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+}
+
+.batch-hint {
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.text-muted {
+  color: #6b7280;
+  font-size: 13px;
 }
 </style>

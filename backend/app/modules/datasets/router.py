@@ -3,7 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, text
+from sqlalchemy import exc as sa_exc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -59,14 +59,15 @@ async def list_datasets(
     )
 
     # ── Enrich: source_name + quality_status ──
+    from app.modules.data_sources.models import DataSource
+
     ds_ids = [i.data_source_id for i in items if i.data_source_id]
     source_names: dict[uuid.UUID, str] = {}
     if ds_ids:
         _ds_rows = await db.execute(
-            select(text("id, name")).select_from(text("data_sources")).where(
-                text("id = ANY(:ids)")
+            select(DataSource.id, DataSource.name).where(
+                DataSource.id.in_(ds_ids)
             ),
-            {"ids": ds_ids},
         )
         source_names = {row[0]: row[1] for row in _ds_rows}
 
@@ -95,7 +96,10 @@ async def create_dataset(
     current_user: User = Depends(get_current_user),
 ):
     ds = Dataset(**data.model_dump())
-    ds = await dao.dataset_insert(db, ds)
+    try:
+        ds = await dao.dataset_insert(db, ds)
+    except sa_exc.IntegrityError:
+        raise HTTPException(status_code=409, detail="数据集名称或代码已存在")
     return _ok(
         DatasetResponse.model_validate(ds).model_dump(**_DUMP_OPTS),
         msg="创建成功",
@@ -166,6 +170,22 @@ async def get_dataset_fields(
     )
 
 
+@router.put("/{ds_id}/fields/batch")
+async def batch_update_fields(
+    ds_id: uuid.UUID,
+    data: DatasetFieldBatchUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """批量更新字段，目前支持批量修改 sensitivity_level。"""
+    if not data.field_ids:
+        raise HTTPException(status_code=400, detail="field_ids 不能为空")
+    updated = await dao.dataset_field_batch_set_sensitivity(
+        db, ds_id, data.field_ids, data.sensitivity_level,
+    )
+    return _ok({"updated": updated}, msg="批量更新成功")
+
+
 @router.put("/{ds_id}/fields/{field_id}")
 async def update_field(
     ds_id: uuid.UUID,
@@ -184,22 +204,6 @@ async def update_field(
         DatasetFieldResponse.model_validate(field).model_dump(**_DUMP_OPTS),
         msg="字段更新成功",
     )
-
-
-@router.put("/{ds_id}/fields/batch")
-async def batch_update_fields(
-    ds_id: uuid.UUID,
-    data: DatasetFieldBatchUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """批量更新字段，目前支持批量修改 sensitivity_level。"""
-    if not data.field_ids:
-        raise HTTPException(status_code=400, detail="field_ids 不能为空")
-    updated = await dao.dataset_field_batch_set_sensitivity(
-        db, ds_id, data.field_ids, data.sensitivity_level,
-    )
-    return _ok({"updated": updated}, msg="批量更新成功")
 
 
 @router.delete("/{ds_id}/fields/{field_id}")
@@ -290,4 +294,9 @@ async def check_agent_availability(
     if not ds:
         raise HTTPException(status_code=404, detail="数据集不存在")
     result = await service.check_agent_availability(db, ds)
+    # 持久化检查结果
+    reason = "; ".join(result["reasons"]) if result["reasons"] else None
+    ds.agent_unavailable_reason = reason
+    ds.is_agent_accessible = result["passed"]
+    await dao.dataset_update(db, ds)
     return _ok(AgentCheckResponse(**result).model_dump(**_DUMP_OPTS))

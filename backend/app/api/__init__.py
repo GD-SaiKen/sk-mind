@@ -8,6 +8,7 @@ from app.modules.ingestion.api.sse import sse_router
 from app.modules.ingestion.api.control import control_router
 from app.modules.data_sources.router import router as data_sources_router
 from app.modules.datasets.router import router as datasets_router
+from app.modules.catalog.router import router as catalog_router
 from app.modules.lineage.router import router as lineage_router
 from app.modules.quality.router import router as quality_router
 
@@ -21,6 +22,7 @@ router.include_router(control_router, prefix="/ingestion-tasks")
 router.include_router(browse_router)
 router.include_router(data_sources_router)
 router.include_router(datasets_router)
+router.include_router(catalog_router)
 router.include_router(lineage_router)
 router.include_router(quality_router)
 

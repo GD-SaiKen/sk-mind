@@ -93,6 +93,7 @@ const filterItems: FilterItem[] = [
     options: [{ label: '全部', value: '' }, { label: '正常', value: 'ok' }, { label: '警告', value: 'warning' }, { label: '异常', value: 'error' }] },
   { key: 'agent', type: 'select', placeholder: 'Agent 可用', width: '130px',
     options: [{ label: '全部', value: '' }, { label: '已开放', value: 'true' }, { label: '未开放', value: 'false' }] },
+  { key: 'category', type: 'input', placeholder: '业务域', width: '130px' },
 ]
 const filterValues = ref<Record<string, any>>({})
 
@@ -148,6 +149,7 @@ async function load() {
     if (fv.layer) params.dataLayer = fv.layer
     if (fv.quality) params.quality = fv.quality
     if (fv.agent !== undefined && fv.agent !== '') params.isAgentAccessible = fv.agent === 'true'
+    if (fv.category) params.category = fv.category
     const res = await datasetService.getList(params)
     tables.value = res.items.map(mapDatasetToTable)
     total.value = res.total

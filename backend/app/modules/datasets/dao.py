@@ -1,10 +1,12 @@
 """Dataset 模块数据访问层。"""
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
+import sqlalchemy as sa
 
 from app.modules.datasets.models import Dataset, DatasetField, DataTable
 
@@ -35,11 +37,12 @@ async def dataset_list_all(
         query = query.filter(Dataset.business_domain == category)
     # T4: source 过滤 — JOIN data_sources 按名称筛选
     if source:
+        ds_tbl = sa.table("data_sources", sa.column("id"), sa.column("name"))
         query = query.join(
-            text("data_sources"),
-            text("data_sources.id = datasets.data_source_id"),
+            ds_tbl,
+            ds_tbl.c.id == Dataset.data_source_id,
             isouter=True,
-        ).filter(text("data_sources.name ILIKE :src")).params(src=f"%{source}%")
+        ).filter(func.lower(ds_tbl.c.name).like(f"%{source.lower()}%"))
     # T4: quality 过滤 — 兼容中英文和 ok/warning/error 三值
     if quality:
         if quality in ("ok", "正常"):
@@ -112,13 +115,13 @@ async def dataset_field_batch_set_sensitivity(
     sensitivity_level: str,
 ) -> int:
     """Batch update sensitivity_level for multiple fields. Returns count updated."""
-    result = await db.execute(
-        text(
-            "UPDATE dataset_fields SET sensitivity_level = :level, updated_at = now() "
-            "WHERE dataset_id = :ds_id AND id = ANY(:ids)"
-        ),
-        {"level": sensitivity_level, "ds_id": dataset_id, "ids": field_ids},
+    stmt = (
+        sa_update(DatasetField)
+        .where(DatasetField.dataset_id == dataset_id)
+        .where(DatasetField.id.in_(field_ids))
+        .values(sensitivity_level=sensitivity_level)
     )
+    result = await db.execute(stmt)
     return result.rowcount
 
 
@@ -210,7 +213,7 @@ async def compute_null_rates(
         full_tbl = f'"{schema_name}"."{table_name}"'
         result = await db.execute(
             text(
-                f"SELECT count(*) FILTER (WHERE {fname} IS NULL)::float "
+                f"SELECT CAST(SUM(CASE WHEN \"{fname}\" IS NULL THEN 1 ELSE 0 END) AS REAL) "
                 f"/ NULLIF(count(*), 0) FROM {full_tbl}"
             ),
         )
@@ -220,15 +223,16 @@ async def compute_null_rates(
 
     # Batch update
     updated = 0
+    now = datetime.now(timezone.utc)
     for fid, fname in fields:
         rate = null_counts.get(fname)
         if rate is not None:
             await db.execute(
                 text(
-                    "UPDATE dataset_fields SET null_rate = :rate, updated_at = now() "
+                    "UPDATE dataset_fields SET null_rate = :rate, updated_at = :now "
                     "WHERE id = :id"
                 ),
-                {"rate": rate, "id": fid},
+                {"rate": rate, "id": fid, "now": now},
             )
             updated += 1
 
@@ -243,7 +247,7 @@ async def get_field_description_coverage(
     """Returns the ratio of fields with a non-null description.  0.0 ~ 1.0."""
     result = await db.execute(
         text(
-            "SELECT count(*) FILTER (WHERE description IS NOT NULL AND description != '')::float "
+            "SELECT CAST(SUM(CASE WHEN description IS NOT NULL AND description != '' THEN 1 ELSE 0 END) AS REAL) "
             "/ NULLIF(count(*), 0) "
             "FROM dataset_fields WHERE dataset_id = :ds_id"
         ),
@@ -274,9 +278,9 @@ async def set_agent_accessible(
 ) -> None:
     await db.execute(
         text(
-            "UPDATE datasets SET is_agent_accessible = :val, updated_at = now() "
+            "UPDATE datasets SET is_agent_accessible = :val, updated_at = :now "
             "WHERE id = :id"
         ),
-        {"val": accessible, "id": dataset_id},
+        {"val": accessible, "id": dataset_id, "now": datetime.now(timezone.utc)},
     )
     await db.flush()
