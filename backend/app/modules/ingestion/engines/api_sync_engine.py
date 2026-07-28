@@ -54,6 +54,8 @@ class ApiSyncEngine:
         db: Session,
         fetcher=None,
         replay_window_days: int = 3,
+        domain_map: dict[str, str] | None = None,
+        data_source_name: str = "",
     ):
         self._cfg = config
         self._db = db
@@ -63,6 +65,8 @@ class ApiSyncEngine:
         self._fetcher = fetcher  # None -> create per-interface
         self._ensured_tables: set[str] = set()
         self._replay_days = replay_window_days
+        self._domain_map = domain_map or {}
+        self._data_source_name = data_source_name
 
     # ─── public API ────────────────────────────
 
@@ -412,6 +416,27 @@ class ApiSyncEngine:
 
         # ── Save watermark on success ──
         self._watermark.save(data_source_id, iface["name"])
+
+        # ── Auto-register Dataset metadata (T2) ──
+        try:
+            from app.modules.ingestion.dataset_registrar import DatasetRegistrar
+
+            _domain = self._domain_map.get(iface["name"])
+            DatasetRegistrar(self._db).register(
+                target_table=target_table,
+                data_source_id=data_source_id,
+                task_id=batch.task_id,
+                batch_id=batch.id,
+                pk_fields=pk,
+                pulled=pulled,
+                domain=_domain,
+                data_source_name=self._data_source_name,
+            )
+        except Exception as e:
+            logger.warning(
+                "Dataset auto-registration failed for %s (non-fatal): %s",
+                iface["name"], e,
+            )
 
         # ── Progress: done ──
         # 写入行数 = 实际变更（新增+更新），与"拉取行数/跳过行数"区分开

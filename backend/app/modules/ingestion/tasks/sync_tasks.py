@@ -404,6 +404,7 @@ def run_api_full_sync(
 
         # 1. Try YAML — provides interfaces + default connection
         yaml_config = None
+        _actual_path = ""
         if config_path:
             _actual_path = config_path
             # If relative path doesn't resolve from CWD, try from backend root
@@ -439,6 +440,27 @@ def run_api_full_sync(
                     "Loaded YAML config: %s (%d interfaces)",
                     _actual_path, len(yaml_config.get("interfaces", [])),
                 )
+
+        # ── Parse business domains from YAML comments (T2) ──
+        _domain_map: dict[str, str] = {}
+        if _actual_path and _os.path.exists(_actual_path):
+            try:
+                from app.modules.ingestion.dataset_registrar import DatasetRegistrar
+                _domain_map = DatasetRegistrar.parse_domains_from_yaml(_actual_path)
+                if _domain_map:
+                    logger.info(
+                        "Parsed %d business domains from YAML comments", len(_domain_map),
+                    )
+            except Exception:
+                pass
+
+        # ── Get data source name (T2) ──
+        _data_source_name = ""
+        try:
+            _ds_obj = db.get(DataSource, _uuid.UUID(_ds_str)) if _ds_str else None
+            _data_source_name = _ds_obj.name if _ds_obj else ""
+        except Exception:
+            pass
 
         # 2. Try DB ConnectorConfig — overrides YAML connection
         db_config = None
@@ -482,7 +504,12 @@ def run_api_full_sync(
         except Exception:
             _replay_days = 3
 
-        engine = ApiSyncEngine(config, db, replay_window_days=_replay_days)
+        engine = ApiSyncEngine(
+            config, db,
+            replay_window_days=_replay_days,
+            domain_map=_domain_map,
+            data_source_name=_data_source_name,
+        )
         logger.info("Syncing all data for task %s", task_id[:8])
         result = engine.sync_all(
             task_id=task_uuid,
