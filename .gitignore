@@ -30,3 +30,6 @@ venv/
 
 # 环境变量文件
 .env
+
+# Windows 空设备名误生成文件（AI 工具 redirect > nul 产生）
+nul
