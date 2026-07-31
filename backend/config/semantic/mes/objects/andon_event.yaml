@@ -1,0 +1,97 @@
+object: andon_event
+display_name: Andon事件
+description: MES Andon 呼叫记录，记录设备异常呼叫、响应和处理全过程。
+domain: 设备管理
+source_of_truth: serving.andon_v1
+keys:
+  - ar_id
+properties:
+  - code: ar_id
+    name: Andon记录ID
+    property_type: identifier
+    data_type: INTEGER
+  - code: machine_no
+    name: 设备编号
+    property_type: descriptive
+    data_type: STRING
+  - code: create_date
+    name: 呼叫时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: andon_title
+    name: 呼叫标题
+    property_type: descriptive
+    data_type: STRING
+  - code: andon_status
+    name: Andon状态
+    property_type: status
+    data_type: INTEGER
+  - code: response_minutes
+    name: 响应分钟数
+    property_type: measure
+    data_type: DECIMAL
+  - code: processing_minutes
+    name: 处理分钟数
+    property_type: measure
+    data_type: DECIMAL
+  - code: total_minutes
+    name: 总分钟数
+    property_type: measure
+    data_type: DECIMAL
+  - code: is_response_timeout
+    name: 响应超时
+    property_type: status
+    data_type: BOOLEAN
+  - code: is_processing_timeout
+    name: 处理超时
+    property_type: status
+    data_type: BOOLEAN
+  - code: submit_name
+    name: 提交人
+    property_type: descriptive
+    data_type: STRING
+  - code: finish_name
+    name: 处理人
+    property_type: descriptive
+    data_type: STRING
+  - code: shift
+    name: 班次
+    property_type: descriptive
+    data_type: STRING
+  - code: product_code
+    name: 产品编码
+    property_type: descriptive
+    data_type: STRING
+  - code: product_name
+    name: 产品名称
+    property_type: descriptive
+    data_type: STRING
+  - code: mould_no
+    name: 模具号
+    property_type: descriptive
+    data_type: STRING
+bindings:
+  - source: serving.andon_v1
+    tables:
+      - schema: serving
+        table: andon_v1
+    status: active
+    key_map:
+      ar_id: ar_id
+    field_map:
+      ar_id: ar_id
+      machine_no: machine_no
+      create_date: create_date
+      andon_title: andon_title
+      andon_status: andon_status
+      response_minutes: response_minutes
+      processing_minutes: processing_minutes
+      total_minutes: total_minutes
+      is_response_timeout: is_response_timeout
+      is_processing_timeout: is_processing_timeout
+      submit_name: submit_name
+      finish_name: finish_name
+      shift: shift
+      product_code: product_code
+      product_name: product_name
+      mould_no: mould_no

@@ -1,0 +1,123 @@
+object: work_order
+display_name: 工单
+description: MES 工单主数据，记录生产工单的计划、进度、交期和状态信息。
+domain: 生产管理
+source_of_truth: serving.workorder_v1
+keys:
+  - workorder_no
+properties:
+  - code: workorder_no
+    name: 工单号
+    property_type: identifier
+    data_type: STRING
+  - code: workorder_type
+    name: 工单类型
+    property_type: descriptive
+    data_type: STRING
+  - code: material_no
+    name: 物料编码
+    property_type: descriptive
+    data_type: STRING
+  - code: material_desc
+    name: 物料描述
+    property_type: descriptive
+    data_type: STRING
+  - code: material_spec
+    name: 物料规格
+    property_type: descriptive
+    data_type: STRING
+  - code: unit
+    name: 单位
+    property_type: descriptive
+    data_type: STRING
+  - code: plan_qty
+    name: 计划数量
+    property_type: measure
+    data_type: DECIMAL
+  - code: completed_qty
+    name: 已完成数量
+    property_type: measure
+    data_type: DECIMAL
+  - code: status
+    name: 工单状态
+    property_type: status
+    data_type: STRING
+  - code: progress_pct
+    name: 进度百分比
+    property_type: metric
+    data_type: DECIMAL
+  - code: is_overdue
+    name: 是否超期
+    property_type: status
+    data_type: BOOLEAN
+  - code: overdue_days
+    name: 超期天数
+    property_type: measure
+    data_type: INTEGER
+  - code: create_time
+    name: 创建时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: start_time
+    name: 开工时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: end_time
+    name: 完工时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: require_end_time
+    name: 要求交期
+    property_type: temporal
+    data_type: DATETIME
+  - code: actual_complete_time
+    name: 实际完成时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: current_procedure
+    name: 当前工序
+    property_type: descriptive
+    data_type: STRING
+  - code: customer_no
+    name: 客户编码
+    property_type: descriptive
+    data_type: STRING
+  - code: salesorder_no
+    name: 销售订单号
+    property_type: descriptive
+    data_type: STRING
+  - code: workshop
+    name: 所属车间
+    property_type: descriptive
+    data_type: STRING
+bindings:
+  - source: serving.workorder_v1
+    tables:
+      - schema: serving
+        table: workorder_v1
+    status: active
+    key_map:
+      workorder_no: workorder_no
+    field_map:
+      woid: woid
+      workorder_no: workorder_no
+      workorder_type: workorder_type
+      material_no: material_no
+      material_desc: material_desc
+      material_spec: material_spec
+      unit: unit
+      plan_qty: plan_qty
+      completed_qty: completed_qty
+      status: status
+      progress_pct: progress_pct
+      is_overdue: is_overdue
+      overdue_days: overdue_days
+      create_time: create_time
+      start_time: start_time
+      end_time: end_time
+      require_end_time: require_end_time
+      actual_complete_time: actual_complete_time
+      current_procedure: current_procedure
+      customer_no: customer_no
+      salesorder_no: salesorder_no
+      workshop: workshop

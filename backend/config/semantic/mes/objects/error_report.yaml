@@ -1,0 +1,97 @@
+object: error_report
+display_name: 故障报告
+description: MES 设备故障/停机报告，记录设备异常停机原因、时长和处理情况。
+domain: 设备管理
+source_of_truth: serving.error_report_v1
+keys:
+  - lwl_id
+properties:
+  - code: lwl_id
+    name: 故障记录ID
+    property_type: identifier
+    data_type: INTEGER
+  - code: machine_no
+    name: 设备编号
+    property_type: descriptive
+    data_type: STRING
+  - code: machine_name
+    name: 设备名称
+    property_type: descriptive
+    data_type: STRING
+  - code: work_date
+    name: 工作日期
+    property_type: temporal
+    data_type: DATE
+  - code: shift_name
+    name: 班次名称
+    property_type: descriptive
+    data_type: STRING
+  - code: color
+    name: 停机颜色
+    property_type: status
+    data_type: STRING
+  - code: reason_code
+    name: 原因代码
+    property_type: descriptive
+    data_type: STRING
+  - code: wait_reason
+    name: 等待原因
+    property_type: descriptive
+    data_type: STRING
+  - code: reason_classification
+    name: 原因分类
+    property_type: descriptive
+    data_type: STRING
+  - code: duration
+    name: 持续时长
+    property_type: measure
+    data_type: DECIMAL
+  - code: wait_start_time
+    name: 开始时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: wait_end_time
+    name: 结束时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: workorder_no
+    name: 工单号
+    property_type: descriptive
+    data_type: STRING
+  - code: material_no
+    name: 物料编码
+    property_type: descriptive
+    data_type: STRING
+  - code: user_name
+    name: 操作员
+    property_type: descriptive
+    data_type: STRING
+  - code: workshop
+    name: 所属车间
+    property_type: descriptive
+    data_type: STRING
+bindings:
+  - source: serving.error_report_v1
+    tables:
+      - schema: serving
+        table: error_report_v1
+    status: active
+    key_map:
+      lwl_id: lwl_id
+    field_map:
+      lwl_id: lwl_id
+      machine_no: machine_no
+      machine_name: machine_name
+      work_date: work_date
+      shift_name: shift_name
+      color: color
+      reason_code: reason_code
+      wait_reason: wait_reason
+      reason_classification: reason_classification
+      duration: duration
+      wait_start_time: wait_start_time
+      wait_end_time: wait_end_time
+      workorder_no: workorder_no
+      material_no: material_no
+      user_name: user_name
+      workshop: workshop

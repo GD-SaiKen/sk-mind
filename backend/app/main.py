@@ -27,6 +27,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         start_scheduler()
     except Exception:
         logging.getLogger("sk-mind").warning("调度器启动失败（可能是 Redis 未就绪），定时任务不可用")
+
+    try:
+        from app.core.database import async_session_factory
+        from app.modules.semantic.loader import get_loader
+        async with async_session_factory() as db:
+            loader = get_loader("mes")
+            await loader.load_all_async(db)
+    except Exception:
+        logging.getLogger("sk-mind").warning("YAML 语义模型启动同步失败")
+
     yield
     shutdown_scheduler()
     await engine.dispose()
@@ -39,6 +49,7 @@ import app.modules.datasets.models      # noqa: F401
 import app.modules.ingestion.models     # noqa: F401
 import app.modules.lineage.models       # noqa: F401
 import app.modules.quality.models       # noqa: F401
+import app.modules.semantic.models    # noqa: F401
 
 app = FastAPI(
     title=settings.APP_NAME,

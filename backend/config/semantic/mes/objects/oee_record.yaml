@@ -1,0 +1,121 @@
+object: oee_record
+display_name: OEE记录
+description: MES OEE 综合效率报告，记录设备三色灯运行时间、OEE率、性能率等指标。
+domain: 设备管理
+source_of_truth: serving.oee_v1
+keys:
+  - mid
+  - sim_date
+  - shift_name
+properties:
+  - code: mid
+    name: 设备ID
+    property_type: identifier
+    data_type: INTEGER
+  - code: machine_no
+    name: 设备编号
+    property_type: descriptive
+    data_type: STRING
+  - code: machine_name
+    name: 设备名称
+    property_type: descriptive
+    data_type: STRING
+  - code: sim_date
+    name: 统计日期
+    property_type: temporal
+    data_type: DATE
+  - code: shift_name
+    name: 班次名称
+    property_type: descriptive
+    data_type: STRING
+  - code: start_time
+    name: 开始时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: end_time
+    name: 结束时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: green_minutes
+    name: 绿灯分钟数
+    property_type: measure
+    data_type: DECIMAL
+  - code: yellow_minutes
+    name: 黄灯分钟数
+    property_type: measure
+    data_type: DECIMAL
+  - code: red_minutes
+    name: 红灯分钟数
+    property_type: measure
+    data_type: DECIMAL
+  - code: close_minutes
+    name: 关机分钟数
+    property_type: measure
+    data_type: DECIMAL
+  - code: green_rate
+    name: 绿灯率
+    property_type: metric
+    data_type: DECIMAL
+  - code: oee_rate
+    name: OEE率
+    property_type: metric
+    data_type: DECIMAL
+  - code: performance_rate
+    name: 性能率
+    property_type: metric
+    data_type: DECIMAL
+  - code: is_low_efficiency
+    name: 低效标记
+    property_type: status
+    data_type: BOOLEAN
+  - code: workshop
+    name: 所属车间
+    property_type: descriptive
+    data_type: STRING
+  - code: department_name
+    name: 部门名称
+    property_type: descriptive
+    data_type: STRING
+  - code: good_qty
+    name: 良品数
+    property_type: measure
+    data_type: DECIMAL
+  - code: fault_count
+    name: 故障次数
+    property_type: measure
+    data_type: INTEGER
+  - code: wait_count
+    name: 等待次数
+    property_type: measure
+    data_type: INTEGER
+bindings:
+  - source: serving.oee_v1
+    tables:
+      - schema: serving
+        table: oee_v1
+    status: active
+    key_map:
+      mid: mid
+      sim_date: sim_date
+      shift_name: shift_name
+    field_map:
+      mid: mid
+      machine_no: machine_no
+      machine_name: machine_name
+      sim_date: sim_date
+      shift_name: shift_name
+      start_time: start_time
+      end_time: end_time
+      green_minutes: green_minutes
+      yellow_minutes: yellow_minutes
+      red_minutes: red_minutes
+      close_minutes: close_minutes
+      green_rate: green_rate
+      oee_rate: oee_rate
+      performance_rate: performance_rate
+      is_low_efficiency: is_low_efficiency
+      workshop: workshop
+      department_name: department_name
+      good_qty: good_qty
+      fault_count: fault_count
+      wait_count: wait_count

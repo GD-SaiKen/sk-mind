@@ -1,0 +1,56 @@
+metrics:
+  - metric: andon_call_count
+    display_name: Andon呼叫次数
+    description: 指定时间范围内 Andon 呼叫的总次数。
+    status: active
+    formula: COUNT(ar_id)
+    grain: machine
+    dimensions:
+      - machine_no
+      - shift
+      - date(create_date)
+    source_object: andon_event
+    caveats: 仅统计 create_date 可解析为有效时间戳的记录。
+    freshness_sla: 实时
+
+  - metric: andon_response_avg
+    display_name: Andon平均响应时间
+    description: Andon 呼叫的平均响应时间（分钟）。
+    status: active
+    formula: AVG(response_minutes)
+    grain: machine
+    dimensions:
+      - machine_no
+      - shift
+      - date(create_date)
+    source_object: andon_event
+    caveats: response_minutes 从 receive_time 计算得来。
+    freshness_sla: 实时
+
+  - metric: andon_processing_avg
+    display_name: Andon平均处理时间
+    description: Andon 呼叫的平均处理时间（分钟）。
+    status: active
+    formula: AVG(processing_minutes)
+    grain: machine
+    dimensions:
+      - machine_no
+      - shift
+      - date(create_date)
+    source_object: andon_event
+    caveats: processing_minutes 从 finish_time 计算得来。
+    freshness_sla: 实时
+
+  - metric: andon_timeout_rate
+    display_name: Andon超时率
+    description: 响应或处理超时的 Andon 记录占比。
+    status: active
+    formula: "CAST(SUM(CASE WHEN is_response_timeout OR is_processing_timeout THEN 1 ELSE 0 END) AS DECIMAL) / COUNT(*)"
+    grain: machine
+    dimensions:
+      - machine_no
+      - shift
+      - date(create_date)
+    source_object: andon_event
+    caveats: 超时判定基于 standard_response_time 和 standard_processing_time。
+    freshness_sla: 实时

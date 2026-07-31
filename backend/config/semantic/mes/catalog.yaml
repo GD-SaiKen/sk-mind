@@ -1,0 +1,33 @@
+source: mes
+display_name: MES 制造执行系统
+description: 生产制造数据语义模型，涵盖设备管理、生产管理、工艺管理三大领域。
+version: "1.0"
+objects:
+  - machine_dim
+  - andon_event
+  - error_report
+  - oee_record
+  - production_report
+  - work_order
+  - schedule_task
+  - craft_hours
+metrics:
+  - andon_call_count
+  - andon_response_avg
+  - andon_processing_avg
+  - andon_timeout_rate
+  - oee_avg
+  - green_rate_avg
+  - performance_rate_avg
+  - low_efficiency_rate
+  - fault_count_total
+  - total_production_qty
+  - good_qty_sum
+  - yield_rate_avg
+  - bad_qty_sum
+  - empty_shift_count
+  - machine_utilization_rate
+  - green_time_avg
+  - standard_complete_rate_avg
+  - schedule_completion_rate
+  - schedule_pending_qty

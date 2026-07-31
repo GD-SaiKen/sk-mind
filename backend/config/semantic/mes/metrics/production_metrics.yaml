@@ -1,0 +1,146 @@
+metrics:
+  - metric: total_production_qty
+    display_name: 总产量
+    description: 指定范围内所有生产报工的总产量（良品+不良品）。
+    status: active
+    formula: SUM(total_qty)
+    grain: workorder
+    dimensions:
+      - workorder_no
+      - procedure_no
+      - machine_no
+      - shift
+      - date(start_time)
+    source_object: production_report
+    caveats: total_qty = good_qty + bad_qty_manufacturing + bad_qty_incoming。
+    freshness_sla: 实时
+
+  - metric: good_qty_sum
+    display_name: 良品总数
+    description: 指定范围内的良品总产出数量。
+    status: active
+    formula: SUM(good_qty)
+    grain: workorder
+    dimensions:
+      - workorder_no
+      - procedure_no
+      - machine_no
+      - shift
+      - date(start_time)
+    source_object: production_report
+    caveats: 仅统计 good_qty。
+    freshness_sla: 实时
+
+  - metric: yield_rate_avg
+    display_name: 平均良率
+    description: 报工记录的平均良率。
+    status: active
+    formula: AVG(yield_rate)
+    grain: workorder
+    dimensions:
+      - workorder_no
+      - procedure_no
+      - machine_no
+      - shift
+      - date(start_time)
+    source_object: production_report
+    caveats: yield_rate = good_qty / total_qty。
+    freshness_sla: 实时
+
+  - metric: bad_qty_sum
+    display_name: 不良品总数
+    description: 制造不良和来料不良的总和。
+    status: active
+    formula: SUM(bad_qty_manufacturing + bad_qty_incoming)
+    grain: workorder
+    dimensions:
+      - workorder_no
+      - procedure_no
+      - machine_no
+      - shift
+      - date(start_time)
+    source_object: production_report
+    caveats: 不含隔离不良品(isolation_bad_qty)。
+    freshness_sla: 实时
+
+  - metric: empty_shift_count
+    display_name: 空班次数量
+    description: 无产出（良品+不良品=0）的班次数量。
+    status: active
+    formula: SUM(CASE WHEN is_empty THEN 1 ELSE 0 END)
+    grain: machine
+    dimensions:
+      - machine_no
+      - shift
+      - date(start_time)
+    source_object: production_report
+    caveats: 空班次可能是未排产、设备停机或数据缺失所致。
+    freshness_sla: 实时
+
+  - metric: machine_utilization_rate
+    display_name: 设备利用率
+    description: 报工记录中设备利用率的平均值。
+    status: active
+    formula: AVG(utilization_rate)
+    grain: machine
+    dimensions:
+      - machine_no
+      - shift
+      - date(start_time)
+    source_object: production_report
+    caveats: utilization_rate 来源于 MES 报工统计值。
+    freshness_sla: 实时
+
+  - metric: green_time_avg
+    display_name: 平均绿灯时间
+    description: 报工记录中的平均绿灯运行时间（分钟）。
+    status: active
+    formula: AVG(green_minutes)
+    grain: machine
+    dimensions:
+      - machine_no
+      - shift
+      - date(start_time)
+    source_object: production_report
+    caveats: green_duration 已转换为分钟。
+    freshness_sla: 实时
+
+  - metric: standard_complete_rate_avg
+    display_name: 平均标准完成率
+    description: 报工记录的平均标准完成率。
+    status: active
+    formula: AVG(standard_complete_rate)
+    grain: workorder
+    dimensions:
+      - workorder_no
+      - procedure_no
+      - date(start_time)
+    source_object: production_report
+    caveats: standard_complete_rate 来源于 MES 计算值。
+    freshness_sla: 实时
+
+  - metric: schedule_completion_rate
+    display_name: 排产完成率
+    description: 指定范围内排产任务的平均完成率。
+    status: active
+    formula: AVG(completion_rate)
+    grain: workorder
+    dimensions:
+      - workorder_no
+      - procedure_no
+    source_object: schedule_task
+    caveats: completion_rate = completed_qty / plan_qty。
+    freshness_sla: 每日
+
+  - metric: schedule_pending_qty
+    display_name: 待排产总数
+    description: 排产任务中尚未安排的待排数量总和。
+    status: active
+    formula: SUM(pending_qty)
+    grain: workorder
+    dimensions:
+      - workorder_no
+      - material_no
+    source_object: schedule_task
+    caveats: pending_qty 来源于 production_back_params 接口。
+    freshness_sla: 每日

@@ -1,0 +1,77 @@
+object: schedule_task
+display_name: 排产任务
+description: MES 生产排产反馈参数，记录工序级别的计划、待排、已排和完成数量。
+domain: 生产管理
+source_of_truth: serving.schedule_v1
+keys:
+  - wopid
+properties:
+  - code: wopid
+    name: 任务ID
+    property_type: identifier
+    data_type: STRING
+  - code: workorder_no
+    name: 工单号
+    property_type: descriptive
+    data_type: STRING
+  - code: material_no
+    name: 物料编码
+    property_type: descriptive
+    data_type: STRING
+  - code: material_desc
+    name: 物料描述
+    property_type: descriptive
+    data_type: STRING
+  - code: procedure_no
+    name: 工序编码
+    property_type: descriptive
+    data_type: STRING
+  - code: procedure_name
+    name: 工序名称
+    property_type: descriptive
+    data_type: STRING
+  - code: plan_qty
+    name: 计划数量
+    property_type: measure
+    data_type: DECIMAL
+  - code: pending_qty
+    name: 待排数量
+    property_type: measure
+    data_type: DECIMAL
+  - code: arranged_qty
+    name: 已排数量
+    property_type: measure
+    data_type: DECIMAL
+  - code: completed_qty
+    name: 完成数量
+    property_type: measure
+    data_type: DECIMAL
+  - code: completion_rate
+    name: 完成率
+    property_type: metric
+    data_type: DECIMAL
+  - code: progress_status
+    name: 进度状态
+    property_type: status
+    data_type: STRING
+bindings:
+  - source: serving.schedule_v1
+    tables:
+      - schema: serving
+        table: schedule_v1
+    status: active
+    key_map:
+      wopid: wopid
+    field_map:
+      wopid: wopid
+      workorder_no: workorder_no
+      material_no: material_no
+      material_desc: material_desc
+      procedure_no: procedure_no
+      procedure_name: procedure_name
+      plan_qty: plan_qty
+      pending_qty: pending_qty
+      arranged_qty: arranged_qty
+      completed_qty: completed_qty
+      completion_rate: completion_rate
+      progress_status: progress_status

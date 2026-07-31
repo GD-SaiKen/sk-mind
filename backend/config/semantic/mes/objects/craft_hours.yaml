@@ -1,0 +1,77 @@
+object: craft_hours
+display_name: 工艺工时
+description: MES 工艺工时，记录物料的标准工艺路线和工时定额。
+domain: 工艺管理
+source_of_truth: serving.craft_hours_v1
+keys:
+  - mtid
+properties:
+  - code: mtid
+    name: 物料工艺ID
+    property_type: identifier
+    data_type: INTEGER
+  - code: material_no
+    name: 物料编码
+    property_type: descriptive
+    data_type: STRING
+  - code: material_desc
+    name: 物料描述
+    property_type: descriptive
+    data_type: STRING
+  - code: material_spec
+    name: 物料规格
+    property_type: descriptive
+    data_type: STRING
+  - code: unit
+    name: 单位
+    property_type: descriptive
+    data_type: STRING
+  - code: auxiliary_unit
+    name: 辅助单位
+    property_type: descriptive
+    data_type: STRING
+  - code: conversion_coefficient
+    name: 转换系数
+    property_type: measure
+    data_type: DECIMAL
+  - code: create_time
+    name: 创建时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: update_time
+    name: 更新时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: material_nature
+    name: 物料性质
+    property_type: descriptive
+    data_type: INTEGER
+  - code: confirm
+    name: 确认状态
+    property_type: status
+    data_type: INTEGER
+  - code: workshop
+    name: 所属车间
+    property_type: descriptive
+    data_type: STRING
+bindings:
+  - source: serving.craft_hours_v1
+    tables:
+      - schema: serving
+        table: craft_hours_v1
+    status: active
+    key_map:
+      mtid: mtid
+    field_map:
+      mtid: mtid
+      material_no: material_no
+      material_desc: material_desc
+      material_spec: material_spec
+      unit: unit
+      auxiliary_unit: auxiliary_unit
+      conversion_coefficient: conversion_coefficient
+      create_time: create_time
+      update_time: update_time
+      material_nature: material_nature
+      confirm: confirm
+      workshop: workshop

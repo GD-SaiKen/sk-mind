@@ -1,0 +1,117 @@
+object: production_report
+display_name: 生产报工
+description: MES 生产报工统计，记录工序生产数量、良品/不良品、OEE/KPI指标等。
+domain: 生产管理
+source_of_truth: serving.reporting_v1
+keys:
+  - wtaid
+properties:
+  - code: wtaid
+    name: 报工记录ID
+    property_type: identifier
+    data_type: INTEGER
+  - code: workorder_no
+    name: 工单号
+    property_type: descriptive
+    data_type: STRING
+  - code: procedure_no
+    name: 工序编码
+    property_type: descriptive
+    data_type: STRING
+  - code: procedure_name
+    name: 工序名称
+    property_type: descriptive
+    data_type: STRING
+  - code: machine_no
+    name: 设备编号
+    property_type: descriptive
+    data_type: STRING
+  - code: machine_name
+    name: 设备名称
+    property_type: descriptive
+    data_type: STRING
+  - code: material_no
+    name: 物料编码
+    property_type: descriptive
+    data_type: STRING
+  - code: plan_qty
+    name: 计划数量
+    property_type: measure
+    data_type: DECIMAL
+  - code: good_qty
+    name: 良品数
+    property_type: measure
+    data_type: DECIMAL
+  - code: bad_qty_manufacturing
+    name: 制造不良数
+    property_type: measure
+    data_type: DECIMAL
+  - code: bad_qty_incoming
+    name: 来料不良数
+    property_type: measure
+    data_type: DECIMAL
+  - code: total_qty
+    name: 总产量
+    property_type: measure
+    data_type: DECIMAL
+  - code: yield_rate
+    name: 良率
+    property_type: metric
+    data_type: DECIMAL
+  - code: start_time
+    name: 开始时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: end_time
+    name: 结束时间
+    property_type: temporal
+    data_type: DATETIME
+  - code: is_empty
+    name: 空班次
+    property_type: status
+    data_type: BOOLEAN
+  - code: shift
+    name: 班次
+    property_type: descriptive
+    data_type: STRING
+  - code: workshop
+    name: 所属车间
+    property_type: descriptive
+    data_type: STRING
+  - code: department_name
+    name: 部门名称
+    property_type: descriptive
+    data_type: STRING
+  - code: workcenter_no
+    name: 工作中心
+    property_type: descriptive
+    data_type: STRING
+bindings:
+  - source: serving.reporting_v1
+    tables:
+      - schema: serving
+        table: reporting_v1
+    status: active
+    key_map:
+      wtaid: wtaid
+    field_map:
+      wtaid: wtaid
+      workorder_no: workorder_no
+      procedure_no: procedure_no
+      procedure_name: procedure_name
+      machine_no: machine_no
+      machine_name: machine_name
+      material_no: material_no
+      plan_qty: plan_qty
+      good_qty: good_qty
+      bad_qty_manufacturing: bad_qty_manufacturing
+      bad_qty_incoming: bad_qty_incoming
+      total_qty: total_qty
+      yield_rate: yield_rate
+      start_time: start_time
+      end_time: end_time
+      is_empty: is_empty
+      shift: shift
+      workshop: workshop
+      department_name: department_name
+      workcenter_no: workcenter_no

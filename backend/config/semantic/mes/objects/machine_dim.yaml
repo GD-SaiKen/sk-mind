@@ -1,0 +1,48 @@
+object: machine_dim
+display_name: 设备维度
+description: MES 设备主数据，包含设备编号、名称、SIM卡号、所属车间等信息。
+domain: 设备管理
+source_of_truth: serving.machine_dim_v1
+keys:
+  - machine_no
+properties:
+  - code: machine_no
+    name: 设备编号
+    property_type: identifier
+    data_type: STRING
+  - code: machine_name
+    name: 设备名称
+    property_type: descriptive
+    data_type: STRING
+  - code: sim
+    name: SIM卡号
+    property_type: descriptive
+    data_type: STRING
+  - code: workshop
+    name: 所属车间
+    property_type: descriptive
+    data_type: STRING
+  - code: department_name
+    name: 部门名称
+    property_type: descriptive
+    data_type: STRING
+  - code: status
+    name: 设备状态
+    property_type: status
+    data_type: INTEGER
+bindings:
+  - source: serving.machine_dim_v1
+    tables:
+      - schema: serving
+        table: machine_dim_v1
+    status: active
+    key_map:
+      machine_no: machine_no
+    field_map:
+      mid: mid
+      machine_no: machine_no
+      machine_name: machine_name
+      sim: sim
+      workshop: workshop
+      department_name: department_name
+      status: status
