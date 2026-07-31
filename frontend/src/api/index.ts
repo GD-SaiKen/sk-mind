@@ -7,6 +7,7 @@ export { datasetService } from './services/dataset';
 export { qualityService } from './services/quality';
 export { lineageService } from './services/lineage';
 export { dataBrowseService } from './services/data-browse';
+export { semanticService } from './services/semantic';
 export type {
   LoginParams,
   ApiInterfaceItem,
@@ -39,4 +40,8 @@ export type {
   QuarantineRecord,
   QuarantineStats,
   CronPreview,
+  SemanticObject,
+  SemanticProperty,
+  DataMappingItem,
+  SemanticStats,
 } from './types';

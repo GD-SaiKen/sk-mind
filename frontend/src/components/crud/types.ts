@@ -16,6 +16,8 @@ export interface ActionButton {
   hidden?: (row: Record<string, any>) => boolean
   /** 图标组件（@element-plus/icons-vue），传入后按钮只显示图标，悬浮显示 label */
   icon?: Component
+  /** 自定义 tooltip 文本，覆盖默认的 label tooltip */
+  tooltip?: string
 }
 
 // ==================== 列类型枚举 ====================

@@ -125,7 +125,7 @@
               >
                 <el-tooltip
                   v-if="btn.icon"
-                  :content="btn.label"
+                  :content="btn.tooltip ?? btn.label"
                   placement="top"
                   :show-after="400"
                 >

@@ -491,3 +491,68 @@ export interface CatalogStats {
   agentAccessible: number
   byDomain: { domain: string; count: number }[]
 }
+
+// ── Semantic Model ──
+
+export interface SemanticObject {
+  id: string
+  name: string
+  code: string
+  description: string | null
+  objectType: string
+  domain: string | null
+  status: string
+  propertyCount: number
+  mappingCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SemanticProperty {
+  id: string
+  semanticObjectId: string
+  name: string
+  code: string
+  description: string | null
+  propertyType: string
+  dataType: string
+  isRequired: boolean
+  isSensitive: boolean
+  ordinalPosition: number
+  status: string
+  objectName: string | null
+  hasMapping: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DataMappingItem {
+  id: string
+  mappingType: string
+  semanticObjectId: string | null
+  semanticPropertyId: string | null
+  semanticRelationId: string | null
+  targetType: string
+  targetId: string
+  transformRule: string | null
+  confidence: string
+  status: string
+  createdBy: string | null
+  confirmedBy: string | null
+  semanticObjectName: string | null
+  semanticPropertyName: string | null
+  targetName: string | null
+  targetTable: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SemanticStats {
+  totalObjects: number
+  activeObjects: number
+  totalProperties: number
+  totalMappings: number
+  confirmedMappings: number
+  byObjectType: { type: string; count: number }[]
+  byStatus: { status: string; count: number }[]
+}
