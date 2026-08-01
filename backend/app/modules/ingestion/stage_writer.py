@@ -51,12 +51,17 @@ class StageWriter:
     # --- Batch lifecycle ---
 
     def create_batch(
-        self, task_id: uuid.UUID, trigger_type: str = "manual", triggered_by: str | None = None
+        self,
+        task_id: uuid.UUID,
+        trigger_type: str = "manual",
+        triggered_by: str | None = None,
+        parent_id: uuid.UUID | None = None,
     ) -> IngestionBatch:
         batch = IngestionBatch(
             task_id=task_id,
             trigger_type=trigger_type,
             triggered_by=triggered_by,
+            parent_id=parent_id,
             status="pending",
         )
         self._db.add(batch)

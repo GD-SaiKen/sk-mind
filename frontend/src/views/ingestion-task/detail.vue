@@ -156,17 +156,26 @@
         </el-collapse>
       </el-tab-pane>
 
-      <el-tab-pane :label="`执行记录 (${batches.length})`" name="batches">
+      <el-tab-pane :label="`执行记录 (${groupedBatches.length})`" name="batches">
         <Crud :pagination="batchesPagination">
           <template #table>
-            <Table :columns="batchesColumns" :data="batches">
+            <Table
+              :columns="batchesColumns"
+              :data="pagedBatches"
+              :tree-props="{ children: 'children' }"
+              :expand-row-keys="expandedKeys"
+              :default-expand-all="false"
+              :row-class-name="batchRowClass"
+              @expand-change="onExpandChange"
+            >
               <template #col-createdAt="{ row }">{{ fmtDateTime(row.createdAt) }}</template>
               <template #col-sourceSignature="{ row }">
                 <span
                   v-if="(row.sourceSignature || '').startsWith('(')"
                   class="iface-tag iface-tag-agg"
                 >{{ row.sourceSignature }}</span>
-                <span v-else class="iface-tag">{{ ifaceLabel(row) }}</span>
+                <span v-else-if="row.isSummary" class="iface-tag iface-tag-agg">(汇总)</span>
+                <span v-else class="iface-tag" :class="{ 'child-iface': row.isChild }">{{ ifaceLabel(row) }}</span>
               </template>
               <template #col-triggerType="{ row }"><span class="trigger-text">{{ triggerLabel[row.triggerType] ?? row.triggerType }}</span></template>
               <template #col-status="{ row }">
@@ -540,6 +549,61 @@ const taskId = route.params.id as string
 const task = ref<IngestionTask | null>(null)
 const batches = ref<(IngestionBatch & { _pct?: number; _step?: string })[]>([])
 const activeTab = ref('batches')
+
+// 执行记录树形分组：基于后端显式维护的 parent_id 关联
+// （多接口任务：子接口批次 parent_id 指向其「(汇总)」父批次）。
+// 不再依赖「(汇总) 哨兵 + 时间连续归组」的脆弱推断，可正确处理
+// 「同一分钟多次运行交错 / 双 (汇总) 同秒」等场景，父子关系 100% 准确。
+const isSummary = (row: any) =>
+  (row.sourceSignature || '') === '(汇总)' ||
+  ((row.sourceSignature || '') === '' && (row.status === 'running' || row.status === 'pending'))
+const expandedKeys = ref<string[]>([])
+const groupedBatches = computed(() => {
+  const all = batches.value
+  const byId = new Map<string, any>()
+  for (const r of all) byId.set(r.id, r)
+  // parentId -> 子批次列表
+  const childrenOf = new Map<string, any[]>()
+  for (const r of all) {
+    const pid = (r as any).parentId
+    if (pid && byId.has(pid)) {
+      if (!childrenOf.has(pid)) childrenOf.set(pid, [])
+      childrenOf.get(pid)!.push(r)
+    }
+  }
+  const out: any[] = []
+  for (const r of all) {
+    // 顶层行 = parentId 为空的批次（(汇总) 父 或 单接口独立行）
+    if (!(r as any).parentId) {
+      const kids = (childrenOf.get(r.id) || []).slice()
+      kids.sort((a: any, b: any) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      out.push({ ...r, isSummary: isSummary(r), children: kids.map((c: any) => ({ ...c, isChild: true })) })
+    }
+  }
+  out.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  for (const g of out) {
+    if (g.children?.length) {
+      g.children.sort((a: any, b: any) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+  }
+  return out
+})
+// 新出现的汇总父节点默认展开（row-key=id 稳定，poll 重算后展开状态保持）
+watch(groupedBatches, (g) => {
+  for (const grp of g) {
+    if (grp.id && !expandedKeys.value.includes(grp.id as string)) {
+      expandedKeys.value.push(grp.id as string)
+    }
+  }
+}, { immediate: true })
+function onExpandChange(_row: any, expandedRows: any[]) {
+  expandedKeys.value = expandedRows.map((r) => r.id as string)
+}
+function batchRowClass({ row }: any): string {
+  return row.isSummary ? 'batch-row-summary' : ''
+}
 const executing = ref(false)
 const logDialog = ref(false)
 const isEditing = ref(route.query.edit === '1')
@@ -783,11 +847,30 @@ const summary = computed(() => [
   { label: '最近同步', value: fmtDateTime(task.value?.lastSyncAt, false) || '未同步过' },
   { label: '上次结果', value: task.value?.lastSyncStatus || '-' },
 ])
-const batchesPagination = reactive({ page: 1, pageSize: 20, total: 0, onPageChange() {}, onSizeChange() {} })
+const batchesPagination = reactive({
+  page: 1,
+  pageSize: 20,
+  total: 0,
+  onPageChange(p: number) { batchesPagination.page = p },
+  onSizeChange(s: number) { batchesPagination.pageSize = s; batchesPagination.page = 1 },
+})
+
+// 分页按「运行组」切片：每组 = 一次同步的 (汇总) 父 + 其接口子节点，
+// 避免按行分页把同一组的父子拆到两页、破坏树形折叠。
+watch(groupedBatches, (g) => {
+  batchesPagination.total = g.length
+  const maxPage = Math.max(1, Math.ceil(g.length / batchesPagination.pageSize))
+  if (batchesPagination.page > maxPage) batchesPagination.page = maxPage
+}, { immediate: true })
+
+const pagedBatches = computed(() => {
+  const start = (batchesPagination.page - 1) * batchesPagination.pageSize
+  return groupedBatches.value.slice(start, start + batchesPagination.pageSize)
+})
 
 const batchesColumns: ColumnSchema[] = [
+  { type: 'custom', prop: 'sourceSignature', label: '接口', width: 160 },
   { type: 'custom', prop: 'createdAt', label: '时间', width: 170 },
-  { type: 'custom', prop: 'sourceSignature', label: '接口', width: 130 },
   { type: 'custom', prop: 'triggerType', label: '触发', width: 90 },
   { type: 'custom', prop: 'status', label: '状态 / 进度', width: 200 },
   { type: 'custom', prop: 'successCount', label: '数据量', width: 160 },
@@ -909,11 +992,14 @@ async function handleExecute() {
     const placeholder: any = {
       id: batchId, triggerType: 'manual', status: 'pending',
       recordCount: 0, successCount: 0, failCount: 0,
-      sourceSignature: undefined,
+      sourceSignature: '(汇总)',
       createdAt: new Date().toISOString(),
       _pct: -1, _step: '等待 Worker...',
     }
-    batches.value.unshift(placeholder)
+    // 追加到末尾而非头部：聚合(汇总)行在最终列表里应始终排在最后，
+    // 若插到头部会产生"刚点同步时汇总先出现"的错觉（后端按 created_at
+    // 倒序时，汇总批次 created_at 最早，本就落在每个运行批次的底部）。
+    batches.value.push(placeholder)
     startTick()
     const es = ingestionService.streamProgress(batchId,
       (d) => {
@@ -1025,6 +1111,18 @@ watch(activeTab, (t) => {
 .trigger-text { color: $color-text-secondary; font-size: $font-size-sm; }
 .iface-tag { display: inline-block; padding: 1px 8px; border-radius: 4px; background: rgba(0,0,0,0.04); color: $color-text-secondary; font-size: 11px; font-family: monospace; }
 .iface-tag-agg { background: rgba(64,158,255,0.12); color: #2563eb; font-weight: 600; }
+// 子节点（接口行）沿用 el-table 原生树形缩进；仅用浅色区分层级，不再手动 padding
+.child-iface { color: $color-text-secondary; }
+// 执行记录树形：汇总父节点行加底色/加粗，与子节点区分
+:deep(.batch-row-summary) > td.el-table__cell {
+  background: #f5f7fa;
+}
+:deep(.batch-row-summary) .iface-tag-agg {
+  font-size: 12px;
+}
+:deep(.el-table__row.batch-row-summary) {
+  font-weight: 600;
+}
 .action-btns { display: flex; align-items: center; gap: 4px; }
 .log-summary-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;

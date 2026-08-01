@@ -123,6 +123,14 @@ class IngestionBatch(Base, UUIDPrimaryKeyMixin):
     error_items: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     source_signature: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
+    # 父子关系：多接口任务时，子接口批次的 parent_id 指向其「(汇总)」父批次；
+    # 父批次（含单接口任务复用父批次）parent_id 为 NULL。前端据此精确分组，
+    # 不再依赖「(汇总) 哨兵 + 时间连续归组」的脆弱推断（之前在「同一分钟多次
+    # 运行交错 / 双 (汇总) 同秒」时会把所有子接口塞进最后一个 (汇总)）。
+    parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingestion_batches.id"), nullable=True, index=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False, index=True
     )

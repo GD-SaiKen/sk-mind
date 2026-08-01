@@ -8,12 +8,17 @@
       :border="border"
       :stripe="stripe"
       :row-key="rowKey"
+      :tree-props="treeProps"
+      :expand-row-keys="expandRowKeys"
+      :default-expand-all="defaultExpandAll"
+      :row-class-name="rowClassName"
       :max-height="maxHeight"
       :height="maxHeight ? undefined : '100%'"
       :highlight-current-row="highlightCurrentRow"
       table-layout="auto"
       @row-click="onRowClick"
       @selection-change="onSelectionChange"
+      @expand-change="(r: any, e: any[]) => emit('expand-change', r, e)"
     >
       <template v-for="col in columns" :key="colKey(col)">
         <el-table-column
@@ -210,17 +215,27 @@ import type {
   TagColumn,
 } from './types'
 
-const props = withDefaults(defineProps<TableProps>(), {
+const props = withDefaults(defineProps<TableProps & {
+  treeProps?: { children?: string }
+  expandRowKeys?: (string | number)[]
+  defaultExpandAll?: boolean
+  rowClassName?: string | ((row: any, rowIndex: number) => string)
+}>(), {
   size: '' as const,
   loading: false,
   border: true,
   stripe: true,
   rowKey: 'id',
+  treeProps: undefined,
+  expandRowKeys: undefined,
+  defaultExpandAll: false,
+  rowClassName: undefined,
 })
 
 const emit = defineEmits<{
   'update:selection': [rows: any[]]
   'selection-change': [rows: any[]]
+  'expand-change': [row: any, expandedRows: any[]]
 }>()
 
 const tableRef = ref()

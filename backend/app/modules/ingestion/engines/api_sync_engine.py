@@ -96,6 +96,17 @@ class ApiSyncEngine:
             if not interfaces or i["name"] in interfaces
         ]
         multi = len(selected) > 1
+        # 多接口任务：运行期即把父 batch 标记为「(汇总)」，使前端能在第一个
+        # 子接口出现之前就把它识别为父节点。否则运行期间父 batch 的
+        # source_signature 仍为 NULL（直到所有接口跑完才在 run_api_full_sync
+        # 末尾被标记），会被前端误判为子节点、挂到上一个汇总分组下（用户报的
+        # 显示 bug：点同步后先冒出子节点而非先出父节点）。
+        if multi and batch is not None and not (batch.source_signature or "").startswith("("):
+            batch.source_signature = "(汇总)"
+            try:
+                self._db.commit()
+            except Exception:
+                pass
         for iface in selected:
             # ⚠️ 关键修复（多接口任务 batch 错标 bug）：
             # 传入的 `batch` 是路由预创建的「任务级父 batch」。它只应作为聚合摘要
@@ -115,7 +126,12 @@ class ApiSyncEngine:
                 # 「手动」，与父批次「定时」不一致（用户报的显示 bug）。
                 _tt = batch.trigger_type if batch is not None else "manual"
                 _tb = getattr(batch, "triggered_by", None) if batch is not None else None
-                b = self._writer.create_batch(task_id, trigger_type=_tt, triggered_by=_tb)
+                b = self._writer.create_batch(
+                    task_id, trigger_type=_tt, triggered_by=_tb,
+                    # 显式关联父批次：子接口批次的 parent_id 指向「(汇总)」父批次，
+                    # 前端据此精确分组，不再依赖时间哨兵推断。
+                    parent_id=batch.id if batch is not None else None,
+                )
             b.source_signature = iface["name"]
             self._writer.start_batch(b)
 
@@ -177,6 +193,7 @@ class ApiSyncEngine:
             qps_limit=conn.get("qps_limit", 10),
             timeout=conn.get("timeout", 30),
             ssl_verify=conn.get("ssl_verify", True),
+            proxy=conn.get("proxy"),
         )
 
     def _ensure_raw_table(self, target_table: str, sample_row: dict) -> None:
@@ -440,16 +457,17 @@ class ApiSyncEngine:
 
         # ── Progress: done ──
         # 写入行数 = 实际变更（新增+更新），与"拉取行数/跳过行数"区分开
+        # 透传真实拉取量；把"写入前校验拒绝"并回写入拒绝计数（必须在拼消息前完成，
+        # 否则消息里的"拒绝"会漏掉 validation_rejected，与 fail_count 对不上）。
+        result["pulled"] = pulled
+        result["rejected"] = result.get("rejected", 0) + validation_rejected
+        result["mode"] = mode
         self._update_progress(
             batch,
             f"{iface['name']} 完成 ({mode}): 写入 {result.get('success', 0)} 行 "
             f"(新增 {result.get('inserted', 0)}, 更新 {result.get('updated', 0)}, "
             f"跳过 {result.get('unchanged', 0)}), 拒绝 {result.get('rejected', 0)}",
         )
-        # 透传真实拉取量；把"写入前校验拒绝"并回写入拒绝计数
-        result["pulled"] = pulled
-        result["rejected"] = result.get("rejected", 0) + validation_rejected
-        result["mode"] = mode
 
         # ── 熔断器（B2.5）：隔离率超阈值 → 标记批次 partial_success ──
         try:

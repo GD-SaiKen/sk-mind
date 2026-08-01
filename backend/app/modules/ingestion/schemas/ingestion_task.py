@@ -81,6 +81,7 @@ class IngestionBatchResponse(CamelModel):
     progress_step: Optional[str] = None
     source_signature: Optional[str] = None
     rejected_rows: Optional[str] = None
+    parent_id: Optional[uuid.UUID] = None
     created_at: datetime
 
 
