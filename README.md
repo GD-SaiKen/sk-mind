@@ -104,6 +104,8 @@ npm install
 npm run dev
 ```
 
+> **说明**：前端 `vite.config.ts` 已设 `server.host: true`，`npm run dev` 自动监听 `0.0.0.0`，局域网内其他设备（如 Mac mini、平板）可通过本机 IP:5173 访问。
+
 > **说明**：`run_api.py` 内部即 `uvicorn.run("app.main:app", reload=True)`，等价于前端的 `npm run dev`。Git Bash 下路径写作 `../.venv/Scripts/python.exe`。API 与 Worker 是两个独立进程：API 负责即时应答与接收请求，Worker 在后台消费 Redis 队列执行数据同步等长任务，互不阻塞。
 
 ## API 文档
