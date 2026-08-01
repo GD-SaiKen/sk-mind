@@ -119,6 +119,7 @@ class StageWriter:
         sync_mode: str,
         pulled_at: Optional[datetime] = None,
         pk_fields: Optional[list[str]] = None,
+        hash_exclude_fields: Optional[list[str]] = None,
     ) -> dict:
         """Write rows to staging, then promote to raw if healthy.
 
@@ -152,7 +153,7 @@ class StageWriter:
             # 2. Write all rows to staging
             staging_success, rejected = self._insert_into_staging(
                 staging_full, batch, rows, source_id, source_signature, pulled_at,
-                pk_fields=pk_fields,
+                pk_fields=pk_fields, hash_exclude_fields=hash_exclude_fields,
             )
 
             if rejected > 0 and sync_mode == "full" and staging_success == 0:
@@ -199,6 +200,7 @@ class StageWriter:
         source_signature: str,
         pulled_at: datetime,
         pk_fields: Optional[list[str]] = None,
+        hash_exclude_fields: Optional[list[str]] = None,
     ) -> tuple[int, int]:
         """Batch-insert rows into the staging table."""
         data_cols = list(rows[0].keys())
@@ -226,7 +228,7 @@ class StageWriter:
             params["_batch_id"] = str(batch.id)
             params["_pulled_at"] = pulled_at
             params["_source_signature"] = source_signature
-            params["_row_hash"] = self._compute_row_hash(row, data_cols)
+            params["_row_hash"] = self._compute_row_hash(row, data_cols, hash_exclude_fields)
             params["_quality_flags"] = flags_json
             chunk.append(params)
 
@@ -467,7 +469,19 @@ class StageWriter:
         return (parts[0], parts[1]) if len(parts) == 2 else ("raw", parts[0])
 
     @staticmethod
-    def _compute_row_hash(row: dict, data_cols: list[str]) -> str:
-        subset = {k: row[k] for k in data_cols if k in row}
+    def _compute_row_hash(
+        row: dict, data_cols: list[str], exclude_cols: Optional[list[str]] = None
+    ) -> str:
+        """SHA-256 hash of business columns, excluding tracking + ``exclude_cols``.
+
+        ``exclude_cols`` lets an interface drop volatile tracking fields (e.g.
+        ``update_time``) from the dedup hash so that a server-side timestamp
+        refresh does not masquerade as a real business change.
+        """
+        subset = {
+            k: row[k]
+            for k in data_cols
+            if k in row and (not exclude_cols or k not in exclude_cols)
+        }
         serialized = json.dumps(subset, sort_keys=True, ensure_ascii=False, default=str)
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]

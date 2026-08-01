@@ -398,6 +398,7 @@ interfaces:
     method: POST
     target_table: raw.mes_select_error_report
     pk_fields: [lwl_id]
+    hash_exclude_fields: [update_time]
     time_config:
       param_start: date
       param_end: date

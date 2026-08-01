@@ -378,12 +378,22 @@ class ApiSyncEngine:
 
         if not rows:
             self._update_progress(batch, f"{iface['name']}: 无数据")
-            # Only save watermark for incremental syncs (empty result is valid —
-            # no new data since last sync). For first full sync, empty result
-            # might indicate an API error — don't save watermark so next sync
-            # retries as full.
-            if mode == "incremental":
+            # 增量模式空响应：仅当 API 明确返回 total=0 才推进水位（合法
+            # “无新数据”）；若 total 缺失(api_total is None)，无法区分“真实无
+            # 数据”与“上游 glitch 返回空 data”，保守地不推进水位，下轮增量
+            # 重试，避免 glitch 使水位跳过本应拉取的窗口（upsert 幂等，重试
+            # 安全）。首全量空响应本就不推进（见下方注释）。
+            # 注：单日期接口(如 selectErrorReport)未配 total_path，api_total
+            # 恒为 None，故其空响应永不推进水位——但因每轮都查 date=今天，
+            # 下一轮自愈，无副作用。
+            if mode == "incremental" and api_total is not None and api_total == 0:
                 self._watermark.save(data_source_id, iface["name"])
+            elif mode == "incremental":
+                logger.warning(
+                    "接口 %s 增量空响应但 API 未确认 total=0 (api_total=%s)，"
+                    "疑似上游 glitch，暂不推进水位，下轮重试",
+                    iface["name"], api_total,
+                )
             # 对账 L1（B1.3）：即使无数据也记录（若 API 有 total）
             self._run_reconcile_l1(
                 data_source_id, iface, target_table, api_total, batch,
@@ -429,6 +439,7 @@ class ApiSyncEngine:
             source_signature=iface["name"],
             sync_mode="upsert" if pk else "insert",
             pk_fields=pk if pk else None,
+            hash_exclude_fields=iface.get("hash_exclude_fields"),
         )
 
         # ── Save watermark on success ──

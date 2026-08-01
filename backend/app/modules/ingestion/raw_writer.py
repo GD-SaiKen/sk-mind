@@ -93,6 +93,7 @@ class RawWriter:
         source_signature: str,
         sync_mode: str,
         pulled_at: Optional[datetime] = None,
+        hash_exclude_fields: Optional[list[str]] = None,
     ) -> dict:
         """Write a batch of rows to the raw table.
 
@@ -117,7 +118,7 @@ class RawWriter:
             chunk = rows[i : i + self.BATCH_INSERT_SIZE]
             s, r = self._insert_chunk(
                 table_name, batch, chunk, source_id,
-                source_signature, pulled_at, sync_mode,
+                source_signature, pulled_at, sync_mode, hash_exclude_fields,
             )
             success += s
             rejected += r
@@ -133,6 +134,7 @@ class RawWriter:
         source_signature: str,
         pulled_at: datetime,
         sync_mode: str,
+        hash_exclude_fields: Optional[list[str]] = None,
     ) -> tuple[int, int]:
         """Insert a chunk of up to BATCH_INSERT_SIZE rows."""
         if not rows:
@@ -167,7 +169,7 @@ class RawWriter:
             params["_batch_id"] = str(batch.id)
             params["_pulled_at"] = pulled_at
             params["_source_signature"] = source_signature
-            params["_row_hash"] = self._compute_row_hash(row, data_cols)
+            params["_row_hash"] = self._compute_row_hash(row, data_cols, hash_exclude_fields)
             params["_quality_flags"] = quality_flags_json
 
             try:
@@ -181,8 +183,19 @@ class RawWriter:
         return success, rejected
 
     @staticmethod
-    def _compute_row_hash(row: dict, data_cols: list[str]) -> str:
-        """SHA-256 hash of business columns (excluding tracking columns)."""
-        subset = {k: row[k] for k in data_cols if k in row}
+    def _compute_row_hash(
+        row: dict, data_cols: list[str], exclude_cols: Optional[list[str]] = None
+    ) -> str:
+        """SHA-256 hash of business columns, excluding tracking + ``exclude_cols``.
+
+        ``exclude_cols`` lets an interface drop volatile tracking fields (e.g.
+        ``update_time``) from the dedup hash so a server-side timestamp refresh
+        does not masquerade as a real business change.
+        """
+        subset = {
+            k: row[k]
+            for k in data_cols
+            if k in row and (not exclude_cols or k not in exclude_cols)
+        }
         serialized = json.dumps(subset, sort_keys=True, ensure_ascii=False, default=str)
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
