@@ -320,7 +320,7 @@ async def list_batches(
     task_id: uuid.UUID,
     status: str | None = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

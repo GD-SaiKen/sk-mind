@@ -1,9 +1,7 @@
 ﻿<template>
   <div class="page-layout" v-if="task">
-    <Index
-      :title="task.name"
-      :breadcrumb="[{ label: '首页', to: '/' }, { label: '接入任务', to: '/ingestion' }, { label: task.name }]"
-    >
+    <Index :title="task.name"
+      :breadcrumb="[{ label: '首页', to: '/' }, { label: '接入任务', to: '/ingestion' }, { label: task.name }]">
       <template #tags>
         <el-tag type="success" effect="plain">正常</el-tag>
         <el-tag type="info" effect="plain">{{ task.code }}</el-tag>
@@ -81,21 +79,10 @@
         <!-- F3.2 — 软删除检测状态标记 -->
         <el-divider content-position="left">
           接口与软删除检测
-          <el-button
-            size="small"
-            type="primary"
-            plain
-            :loading="softDeleteChecking"
-            style="margin-left: 12px"
-            @click="triggerSoftDelete"
-          >立即检测</el-button>
+          <el-button size="small" type="primary" plain :loading="softDeleteChecking" style="margin-left: 12px"
+            @click="triggerSoftDelete">立即检测</el-button>
         </el-divider>
-        <el-table
-          :data="softDeleteInterfaces"
-          empty-text="暂无接口"
-          style="width: 100%"
-          size="small"
-        >
+        <el-table :data="softDeleteInterfaces" empty-text="暂无接口" style="width: 100%" size="small">
           <el-table-column prop="name" label="接口" min-width="170" />
           <el-table-column label="软删除检测" width="130">
             <template #default="{ row }">
@@ -116,11 +103,7 @@
           </el-table-column>
           <el-table-column label="上一次结果" min-width="160">
             <template #default="{ row }">
-              <el-tag
-                v-if="row.lastSkipped"
-                type="info"
-                size="small"
-              >跳过（{{ row.lastReason }}）</el-tag>
+              <el-tag v-if="row.lastSkipped" type="info" size="small">跳过（{{ row.lastReason }}）</el-tag>
               <el-tag v-else type="success" size="small">已检测</el-tag>
             </template>
           </el-table-column>
@@ -159,30 +142,25 @@
       <el-tab-pane :label="`执行记录 (${groupedBatches.length})`" name="batches">
         <Crud :pagination="batchesPagination">
           <template #table>
-            <Table
-              :columns="batchesColumns"
-              :data="pagedBatches"
-              :tree-props="{ children: 'children' }"
-              :expand-row-keys="expandedKeys"
-              :default-expand-all="false"
-              :row-class-name="batchRowClass"
-              @expand-change="onExpandChange"
-            >
+            <Table :columns="batchesColumns" :data="pagedBatches" :tree-props="{ children: 'children' }"
+              :expand-row-keys="expandedKeys" :default-expand-all="false" :row-class-name="batchRowClass"
+              @expand-change="onExpandChange">
               <template #col-createdAt="{ row }">{{ fmtDateTime(row.createdAt) }}</template>
               <template #col-sourceSignature="{ row }">
-                <span
-                  v-if="(row.sourceSignature || '').startsWith('(')"
-                  class="iface-tag iface-tag-agg"
-                >{{ row.sourceSignature }}</span>
+                <span v-if="(row.sourceSignature || '').startsWith('(')" class="iface-tag iface-tag-agg">{{
+                  row.sourceSignature }}</span>
                 <span v-else-if="row.isSummary" class="iface-tag iface-tag-agg">(汇总)</span>
-                <span v-else class="iface-tag" :class="{ 'child-iface': row.isChild }">{{ ifaceLabel(row) }}</span>
+                <span v-else class="iface-tag">{{ ifaceLabel(row) }}</span>
               </template>
-              <template #col-triggerType="{ row }"><span class="trigger-text">{{ triggerLabel[row.triggerType] ?? row.triggerType }}</span></template>
+              <template #col-triggerType="{ row }"><span class="trigger-text">{{ triggerLabel[row.triggerType] ??
+                row.triggerType }}</span></template>
               <template #col-status="{ row }">
                 <div class="status-cell">
-                  <el-tag :type="batchType[row.status]" effect="plain">{{ batchLabel[row.status] ?? row.status }}</el-tag>
+                  <el-tag :type="batchType[row.status]" effect="plain">{{ batchLabel[row.status] ?? row.status
+                    }}</el-tag>
                   <template v-if="row.status === 'running'">
-                    <el-progress :percentage="row._pct >= 0 ? row._pct : 0" :indeterminate="row._pct < 0" :stroke-width="5" :show-text="false" style="width: 100%" />
+                    <el-progress :percentage="row._pct >= 0 ? row._pct : 0" :indeterminate="row._pct < 0"
+                      :stroke-width="5" :show-text="false" style="width: 100%" />
                     <span v-if="row._step" class="step-text">{{ row._step }}</span>
                   </template>
                   <span v-if="row.errorSummary" class="err-text">{{ row.errorSummary }}</span>
@@ -198,16 +176,20 @@
                 <span v-else class="count-dim">-</span>
               </template>
               <template #col-duration="{ row }">
-                <span v-if="row.startedAt && row.finishedAt" class="dur-text">{{ duration(row.startedAt, row.finishedAt) }}</span>
-                <span v-else-if="row.status === 'running' && row.startedAt" class="dur-text">{{ elapsed(row.startedAt) }}</span>
+                <span v-if="row.startedAt && row.finishedAt" class="dur-text">{{ duration(row.startedAt, row.finishedAt)
+                  }}</span>
+                <span v-else-if="row.status === 'running' && row.startedAt" class="dur-text">{{ elapsed(row.startedAt)
+                  }}</span>
                 <span v-else>-</span>
               </template>
               <template #col-actions="{ row }">
                 <div class="action-btns">
-                  <el-button v-if="row.status === 'running'" text type="danger" @click="handleCancel(row.id)">停止</el-button>
+                  <el-button v-if="row.status === 'running'" text type="danger"
+                    @click="handleCancel(row.id)">停止</el-button>
                   <template v-else>
                     <el-button text @click="showLog(row)">日志</el-button>
-                    <el-button v-if="row.status === 'failed' || row.status === 'cancelled'" text type="warning" @click="handleRetry(row.id)">重试</el-button>
+                    <el-button v-if="row.status === 'failed' || row.status === 'cancelled'" text type="warning"
+                      @click="handleRetry(row.id)">重试</el-button>
                   </template>
                 </div>
               </template>
@@ -221,14 +203,16 @@
       <el-tab-pane name="recon">
         <template #label>
           <span>数据对账</span>
-          <el-badge v-if="reconSummary.toRepair > 0" :value="reconSummary.toRepair" type="danger" :max="99" style="margin-left: 4px" />
+          <el-badge v-if="reconSummary.toRepair > 0" :value="reconSummary.toRepair" type="danger" :max="99"
+            style="margin-left: 4px" />
         </template>
         <div v-loading="reconLoading">
           <!-- 概览卡片 -->
           <div class="recon-cards">
             <div class="recon-card">
               <span class="recon-card-label">最近对账</span>
-              <span class="recon-card-val">{{ reconSummary.lastCheck ? fmtDateTime(reconSummary.lastCheck) : '—' }}</span>
+              <span class="recon-card-val">{{ reconSummary.lastCheck ? fmtDateTime(reconSummary.lastCheck) : '—'
+                }}</span>
             </div>
             <div class="recon-card">
               <span class="recon-card-label">数据一致</span>
@@ -240,7 +224,9 @@
             </div>
             <div class="recon-card">
               <span class="recon-card-label">待修复</span>
-              <span class="recon-card-val" :class="{ 'recon-card-err': reconSummary.toRepair > 0 }">{{ reconSummary.toRepair }}</span>
+              <span class="recon-card-val" :class="{ 'recon-card-err': reconSummary.toRepair > 0 }">{{
+                reconSummary.toRepair
+                }}</span>
             </div>
           </div>
 
@@ -249,7 +235,8 @@
             <el-table-column prop="interfaceName" label="接口" min-width="170" />
             <el-table-column label="级别" width="90">
               <template #default="{ row }">
-                <el-tag :type="row.checkLevel === 'L1' ? 'info' : row.checkLevel === 'L2' ? 'warning' : 'danger'" size="small" effect="plain">{{ CHECK_LEVEL_LABELS[row.checkLevel] ?? row.checkLevel }}</el-tag>
+                <el-tag :type="row.checkLevel === 'L1' ? 'info' : row.checkLevel === 'L2' ? 'warning' : 'danger'"
+                  size="small" effect="plain">{{ CHECK_LEVEL_LABELS[row.checkLevel] ?? row.checkLevel }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="模式" width="80">
@@ -262,33 +249,35 @@
             <el-table-column prop="apiTotal" label="API 总量" width="100" align="right" />
             <el-table-column label="对比基准" width="110" align="right">
               <template #default="{ row }">
-                <el-tooltip
-                  :content="row.syncMode === 'incremental'
-                    ? '增量模式：与「本批拉取行数」对比（窗口内是否拉全）'
-                    : '全量模式：与「整表行数」对比'"
-                  placement="top"
-                >
-                  <span>{{ row.syncMode === 'incremental' ? (row.pulledCount ?? 0).toLocaleString() : (row.dbCount ?? 0).toLocaleString() }}</span>
+                <el-tooltip :content="row.syncMode === 'incremental'
+                  ? '增量模式：与「本批拉取行数」对比（窗口内是否拉全）'
+                  : '全量模式：与「整表行数」对比'" placement="top">
+                  <span>{{ row.syncMode === 'incremental' ? (row.pulledCount ?? 0).toLocaleString() : (row.dbCount ??
+                    0).toLocaleString() }}</span>
                 </el-tooltip>
               </template>
             </el-table-column>
             <el-table-column label="差异" width="90" align="right">
               <template #default="{ row }">
-                <span :class="{ 'diff-ok': row.status === 'pass', 'diff-warn': row.status === 'warning', 'diff-err': row.status === 'failed' }">
+                <span
+                  :class="{ 'diff-ok': row.status === 'pass', 'diff-warn': row.status === 'warning', 'diff-err': row.status === 'failed' }">
                   {{ (row.diffCount ?? 0) > 0 ? `+${row.diffCount}` : '0' }}
                 </span>
               </template>
             </el-table-column>
             <el-table-column label="差异率" width="100" align="right">
               <template #default="{ row }">
-                <span :class="{ 'diff-ok': row.status === 'pass', 'diff-warn': row.status === 'warning', 'diff-err': row.status === 'failed' }">
+                <span
+                  :class="{ 'diff-ok': row.status === 'pass', 'diff-warn': row.status === 'warning', 'diff-err': row.status === 'failed' }">
                   {{ ((row.diffRatio ?? 0) * 100).toFixed(2) }}%
                 </span>
               </template>
             </el-table-column>
             <el-table-column label="状态" width="100">
               <template #default="{ row }">
-                <el-tag :type="row.status === 'pass' ? 'success' : row.status === 'warning' ? 'warning' : row.status === 'failed' ? 'danger' : 'info'" size="small">{{ RECON_STATUS_LABELS[row.status] ?? row.status }}</el-tag>
+                <el-tag
+                  :type="row.status === 'pass' ? 'success' : row.status === 'warning' ? 'warning' : row.status === 'failed' ? 'danger' : 'info'"
+                  size="small">{{ RECON_STATUS_LABELS[row.status] ?? row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="checkedAt" label="检查时间" width="180">
@@ -298,8 +287,10 @@
               <template #default="{ row }">
                 <div class="action-btns">
                   <el-button text @click="showReconDetail(row)">查看详情</el-button>
-                  <el-button v-if="row.status === 'warning' || row.status === 'failed'" text type="warning" @click="handleTriggerRecon('L2')">触发深度对账</el-button>
-                  <el-button v-if="row.status === 'failed'" text type="danger" @click="handleRepair(row.id)">修复</el-button>
+                  <el-button v-if="row.status === 'warning' || row.status === 'failed'" text type="warning"
+                    @click="handleTriggerRecon('L2')">触发深度对账</el-button>
+                  <el-button v-if="row.status === 'failed'" text type="danger"
+                    @click="handleRepair(row.id)">修复</el-button>
                 </div>
               </template>
             </el-table-column>
@@ -318,29 +309,32 @@
                 <div class="recon-sum-item">
                   <span class="recon-label">
                     对比基准
-                    <el-tag
-                      :type="reconDetail.syncMode === 'incremental' ? 'warning' : 'success'"
-                      size="small" effect="plain" style="margin-left: 4px"
-                    >{{ SYNC_MODE_LABELS[reconDetail.syncMode ?? 'full'] ?? '全量' }}</el-tag>
+                    <el-tag :type="reconDetail.syncMode === 'incremental' ? 'warning' : 'success'" size="small"
+                      effect="plain" style="margin-left: 4px">{{ SYNC_MODE_LABELS[reconDetail.syncMode ?? 'full'] ??
+                        '全量' }}</el-tag>
                   </span>
                   <span class="recon-val">
-                    {{ (reconDetail.syncMode === 'incremental' ? reconDetail.pulledCount : reconDetail.dbCount)?.toLocaleString() }}
+                    {{ (reconDetail.syncMode === 'incremental' ? reconDetail.pulledCount :
+                      reconDetail.dbCount)?.toLocaleString() }}
                     <span class="recon-sub">{{ reconDetail.syncMode === 'incremental' ? '（本批拉取）' : '（整表行数）' }}</span>
                   </span>
                 </div>
                 <div class="recon-sum-item">
                   <span class="recon-label">差异行数</span>
-                  <span class="recon-val" :class="{ 'diff-err': (reconDetail.diffCount ?? 0) > 0 }">{{ reconDetail.diffCount?.toLocaleString() }}</span>
+                  <span class="recon-val" :class="{ 'diff-err': (reconDetail.diffCount ?? 0) > 0 }">{{
+                    reconDetail.diffCount?.toLocaleString() }}</span>
                 </div>
                 <div class="recon-sum-item">
                   <span class="recon-label">差异率</span>
-                  <span class="recon-val" :class="{ 'diff-err': reconDetail.status === 'failed', 'diff-warn': reconDetail.status === 'warning' }">
+                  <span class="recon-val"
+                    :class="{ 'diff-err': reconDetail.status === 'failed', 'diff-warn': reconDetail.status === 'warning' }">
                     {{ ((reconDetail.diffRatio ?? 0) * 100).toFixed(2) }}%
                   </span>
                 </div>
               </div>
               <el-divider>分段明细（L2 深度对账）</el-divider>
-              <el-table v-if="reconDetail.detail && reconDetail.detail.length" :data="reconDetail.detail" stripe style="margin-top: 8px">
+              <el-table v-if="reconDetail.detail && reconDetail.detail.length" :data="reconDetail.detail" stripe
+                style="margin-top: 8px">
                 <el-table-column prop="dateRange" label="日期段" min-width="200" />
                 <el-table-column prop="apiCount" label="API 行数" width="100" align="right" />
                 <el-table-column prop="dbCount" label="DB 行数" width="100" align="right" />
@@ -351,7 +345,8 @@
                 </el-table-column>
                 <el-table-column label="状态" width="100">
                   <template #default="{ row }">
-                    <el-tag :type="row.diff === 0 ? 'success' : 'danger'" size="small">{{ row.diff === 0 ? '一致' : '需修复' }}</el-tag>
+                    <el-tag :type="row.diff === 0 ? 'success' : 'danger'" size="small">{{ row.diff === 0 ? '一致' : '需修复'
+                      }}</el-tag>
                   </template>
                 </el-table-column>
               </el-table>
@@ -365,7 +360,8 @@
       <el-tab-pane name="quarantine">
         <template #label>
           <span>隔离区</span>
-          <el-badge v-if="quarantineStats.pending > 0" :value="quarantineStats.pending" type="warning" :max="99" style="margin-left: 4px" />
+          <el-badge v-if="quarantineStats.pending > 0" :value="quarantineStats.pending" type="warning" :max="99"
+            style="margin-left: 4px" />
         </template>
         <div v-loading="quarantineLoading">
           <!-- 熔断状态卡片 -->
@@ -376,12 +372,8 @@
             </div>
             <div class="qb-circuit-rate">
               <span class="qb-rate-label">隔离率</span>
-              <el-progress
-                :percentage="Math.min(quarantineStats.quarantineRate, 100)"
-                :color="circuitState.color"
-                :stroke-width="14"
-                :format="() => `${quarantineStats.quarantineRate}%`"
-              />
+              <el-progress :percentage="Math.min(quarantineStats.quarantineRate, 100)" :color="circuitState.color"
+                :stroke-width="14" :format="() => `${quarantineStats.quarantineRate}%`" />
               <span class="qb-threshold">阈值 {{ quarantineStats.threshold }}%</span>
             </div>
             <div class="qb-circuit-counts">
@@ -393,12 +385,14 @@
 
           <!-- 筛选 -->
           <div class="qb-filter">
-            <el-select v-model="qFilter.status" placeholder="状态" clearable style="width: 140px" @change="loadQuarantine">
+            <el-select v-model="qFilter.status" placeholder="状态" clearable style="width: 140px"
+              @change="loadQuarantine">
               <el-option label="待处理" value="pending" />
               <el-option label="已修复" value="resolved" />
               <el-option label="已忽略" value="ignored" />
             </el-select>
-            <el-select v-model="qFilter.interfaceName" placeholder="接口" clearable filterable style="width: 200px" @change="loadQuarantine">
+            <el-select v-model="qFilter.interfaceName" placeholder="接口" clearable filterable style="width: 200px"
+              @change="loadQuarantine">
               <el-option v-for="iface in quarantineInterfaces" :key="iface" :label="iface" :value="iface" />
             </el-select>
             <el-button :icon="Refresh" @click="loadQuarantine">刷新</el-button>
@@ -410,7 +404,8 @@
             <el-table-column prop="pkValue" label="PK 值" min-width="140" show-overflow-tooltip />
             <el-table-column label="拒绝原因" width="130">
               <template #default="{ row }">
-                <el-tag :type="reasonTag(row.rejectionReason)" size="small">{{ reasonLabel(row.rejectionReason) }}</el-tag>
+                <el-tag :type="reasonTag(row.rejectionReason)" size="small">{{ reasonLabel(row.rejectionReason)
+                  }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="原始数据" min-width="100">
@@ -437,13 +432,8 @@
             </el-table-column>
           </el-table>
           <div class="qb-pager" v-if="qTotal > 0">
-            <el-pagination
-              layout="total, prev, pager, next"
-              :total="qTotal"
-              :page-size="qPageSize"
-              :current-page="qPage"
-              @current-change="(p: number) => { qPage = p; loadQuarantine() }"
-            />
+            <el-pagination layout="total, prev, pager, next" :total="qTotal" :page-size="qPageSize"
+              :current-page="qPage" @current-change="(p: number) => { qPage = p; loadQuarantine() }" />
           </div>
         </div>
       </el-tab-pane>
@@ -461,7 +451,8 @@
         <div class="log-summary-grid">
           <div class="log-sum-item">
             <span class="log-sum-label">状态</span>
-            <el-tag :type="batchType[logBatch.status]" effect="plain" size="small">{{ batchLabel[logBatch.status] ?? logBatch.status }}</el-tag>
+            <el-tag :type="batchType[logBatch.status]" effect="plain" size="small">{{ batchLabel[logBatch.status] ??
+              logBatch.status }}</el-tag>
           </div>
           <div class="log-sum-item" v-if="logBatch.sourceSignature">
             <span class="log-sum-label">接口</span>
@@ -473,7 +464,8 @@
           </div>
           <div class="log-sum-item">
             <span class="log-sum-label">耗时</span>
-            <span class="log-sum-val" v-if="logBatch.startedAt && logBatch.finishedAt">{{ duration(logBatch.startedAt, logBatch.finishedAt) }}</span>
+            <span class="log-sum-val" v-if="logBatch.startedAt && logBatch.finishedAt">{{ duration(logBatch.startedAt,
+              logBatch.finishedAt) }}</span>
             <span class="log-sum-val" v-else>-</span>
           </div>
           <div class="log-sum-item">
@@ -486,18 +478,21 @@
           </div>
           <div class="log-sum-item">
             <span class="log-sum-label">跳过行数<small class="log-sub">（已存在未变）</small></span>
-            <span class="log-sum-val" :class="{ 'log-warn-val': (logBatch.skipCount ?? 0) > 0 }">{{ logBatch.skipCount?.toLocaleString() ?? 0 }}</span>
+            <span class="log-sum-val" :class="{ 'log-warn-val': (logBatch.skipCount ?? 0) > 0 }">{{
+              logBatch.skipCount?.toLocaleString() ?? 0 }}</span>
           </div>
           <div class="log-sum-item">
             <span class="log-sum-label">拒绝行数</span>
-            <span class="log-sum-val" :class="{ 'log-err-val': (logBatch.failCount ?? 0) > 0 }">{{ logBatch.failCount?.toLocaleString() ?? 0 }}</span>
+            <span class="log-sum-val" :class="{ 'log-err-val': (logBatch.failCount ?? 0) > 0 }">{{
+              logBatch.failCount?.toLocaleString() ?? 0 }}</span>
           </div>
         </div>
 
         <!-- 时间范围 -->
         <div class="log-time-row" v-if="logBatch.startedAt">
           <span class="log-sum-label">执行时间</span>
-          <span class="log-sum-val">{{ fmtDateTime(logBatch.startedAt) }} → {{ fmtDateTime(logBatch.finishedAt) || '进行中' }}</span>
+          <span class="log-sum-val">{{ fmtDateTime(logBatch.startedAt) }} → {{ fmtDateTime(logBatch.finishedAt) || '进行中'
+            }}</span>
         </div>
 
         <!-- 最后步骤 -->
@@ -507,14 +502,8 @@
         </div>
 
         <!-- 错误摘要 -->
-        <el-alert
-          v-if="logBatch.errorSummary"
-          :title="logBatch.errorSummary"
-          type="error"
-          :closable="false"
-          show-icon
-          style="margin-top: 12px"
-        />
+        <el-alert v-if="logBatch.errorSummary" :title="logBatch.errorSummary" type="error" :closable="false" show-icon
+          style="margin-top: 12px" />
 
         <!-- 错误清单 -->
         <el-table v-if="errorList.length > 0" :data="errorList" stripe style="margin-top: 12px">
@@ -817,6 +806,21 @@ function stopTick() {
   if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null }
 }
 
+// 一次性拉取该任务的全部批次（后端按 page_size 分页，但前端需要完整数据做客户端分页）。
+// 用后端返回的 real total 计算总页数翻页，避免只取到第一页导致「执行记录只显示少量」的问题。
+async function fetchAllBatches(taskId: string): Promise<any[]> {
+  const pageSize = 100
+  const first = await ingestionService.getBatches(taskId, { page: 1, pageSize })
+  const total: number = (first as any)?.total ?? (first as any)?.items?.length ?? 0
+  const all: any[] = [...((first as any).items ?? [])]
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  for (let page = 2; page <= totalPages; page++) {
+    const b = await ingestionService.getBatches(taskId, { page, pageSize })
+    all.push(...((b as any).items ?? []))
+  }
+  return all
+}
+
 // Re-fetch batches periodically while any are still running.
 // The engine creates one batch per interface for a multi-interface task, but the
 // SSE progress stream is only opened for the first batch. Secondary batches (e.g.
@@ -824,9 +828,9 @@ function stopTick() {
 // stay "running" forever even after they finished on the backend.
 async function pollRunning() {
   try {
-    const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
-    batches.value = b.items
-    const hasRunning = b.items.some((x: any) => x.status === 'running' || x.status === 'pending')
+    const items = await fetchAllBatches(taskId)
+    batches.value = items
+    const hasRunning = items.some((x: any) => x.status === 'running' || x.status === 'pending')
     if (!hasRunning) stopPolling()
   } catch { /* ignore transient poll errors */ }
 }
@@ -869,11 +873,11 @@ const pagedBatches = computed(() => {
 })
 
 const batchesColumns: ColumnSchema[] = [
-  { type: 'custom', prop: 'sourceSignature', label: '接口', width: 160 },
+  { type: 'custom', prop: 'sourceSignature', label: '接口', width: 180 },
   { type: 'custom', prop: 'createdAt', label: '时间', width: 170 },
   { type: 'custom', prop: 'triggerType', label: '触发', width: 90 },
   { type: 'custom', prop: 'status', label: '状态 / 进度', width: 200 },
-  { type: 'custom', prop: 'successCount', label: '数据量', width: 160 },
+  { type: 'custom', prop: 'successCount', label: '数据量' },
   { type: 'custom', prop: 'duration', label: '耗时', width: 80 },
   { type: 'custom', prop: 'actions', label: '操作', width: 160 },
 ]
@@ -969,10 +973,10 @@ async function load() {
   task.value = await ingestionService.get(taskId)
   // F2.4 — 定时任务下次执行时间
   await loadNextRun()
-  const b = await ingestionService.getBatches(taskId, { pageSize: 50 })
-  batches.value = b.items
+  const allItems = await fetchAllBatches(taskId)
+  batches.value = allItems
   // Start/stop tick + polling timers based on whether any batch is running
-  const hasRunning = b.items.some((x: any) => x.status === 'running' || x.status === 'pending')
+  const hasRunning = allItems.some((x: any) => x.status === 'running' || x.status === 'pending')
   if (hasRunning) { startTick(); startPolling() }
   else { stopTick(); stopPolling() }
   // F1.2 — Schema 变更审计列表
@@ -1094,97 +1098,381 @@ watch(activeTab, (t) => {
 </script>
 
 <style lang="scss" scoped>
-.page { }
-.summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
-.sum-item { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid $color-border-light; border-radius: 6px; }
-.sum-label { font-size: $font-size-xs; color: $color-text-placeholder; }
-.sum-val { font-size: $font-size-lg; font-weight: $font-weight-semibold; }
-.empty { text-align: center; padding: 60px; color: $color-text-placeholder; }
-.status-cell { display: flex; flex-direction: column; gap: 4px; }
-.step-text { font-size: 11px; color: $color-primary; }
-.err-text { font-size: 11px; color: $color-danger; }
-.count-ok { font-weight: $font-weight-semibold; color: $color-success; }
-.count-err { color: $color-danger; font-size: $font-size-xs; }
-.count-warn { color: #ca8a04; font-size: $font-size-xs; }
-.count-dim { color: $color-text-placeholder; }
-.dur-text { color: $color-text-secondary; font-size: $font-size-sm; }
-.trigger-text { color: $color-text-secondary; font-size: $font-size-sm; }
-.iface-tag { display: inline-block; padding: 1px 8px; border-radius: 4px; background: rgba(0,0,0,0.04); color: $color-text-secondary; font-size: 11px; font-family: monospace; }
-.iface-tag-agg { background: rgba(64,158,255,0.12); color: #2563eb; font-weight: 600; }
-// 子节点（接口行）沿用 el-table 原生树形缩进；仅用浅色区分层级，不再手动 padding
-.child-iface { color: $color-text-secondary; }
+.page {}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sum-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid $color-border-light;
+  border-radius: 6px;
+}
+
+.sum-label {
+  font-size: $font-size-xs;
+  color: $color-text-placeholder;
+}
+
+.sum-val {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+}
+
+.empty {
+  text-align: center;
+  padding: 60px;
+  color: $color-text-placeholder;
+}
+
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-text {
+  font-size: 11px;
+  color: $color-primary;
+}
+
+.err-text {
+  font-size: 11px;
+  color: $color-danger;
+}
+
+.count-ok {
+  font-weight: $font-weight-semibold;
+  color: $color-success;
+}
+
+.count-err {
+  color: $color-danger;
+  font-size: $font-size-xs;
+}
+
+.count-warn {
+  color: #ca8a04;
+  font-size: $font-size-xs;
+}
+
+.count-dim {
+  color: $color-text-placeholder;
+}
+
+.dur-text {
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+}
+
+.trigger-text {
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+}
+
+.iface-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.04);
+  color: $color-text-secondary;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.iface-tag-agg {
+  background: rgba(64, 158, 255, 0.12);
+  color: #2563eb;
+  font-weight: 600;
+}
+
+// 执行记录树形缩进现由 el-table 原生(.el-table__indent)负责：
+// table.vue 在 tree 模式(.tree-mode)下已对树形表关闭 flex / auto 布局，
+// 故此处无需手动兜底，子节点会自动获得 level×16px 的原生缩进。
 // 执行记录树形：汇总父节点行加底色/加粗，与子节点区分
-:deep(.batch-row-summary) > td.el-table__cell {
+:deep(.batch-row-summary)>td.el-table__cell {
   background: #f5f7fa;
 }
+
 :deep(.batch-row-summary) .iface-tag-agg {
   font-size: 12px;
 }
+
 :deep(.el-table__row.batch-row-summary) {
   font-weight: 600;
 }
-.action-btns { display: flex; align-items: center; gap: 4px; }
+
+.action-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .log-summary-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-  padding: 12px 0; border-bottom: 1px solid $color-border-light;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid $color-border-light;
 }
-.log-sum-item { display: flex; flex-direction: column; gap: 4px; }
-.log-sum-label { font-size: 12px; color: $color-text-placeholder; }
-.log-sum-val { font-size: 14px; font-weight: $font-weight-semibold; color: $color-text-primary; }
-.log-ok-val { color: $color-success; }
-.log-err-val { color: $color-danger; }
-.log-warn-val { color: #ca8a04; }
-.log-sub { font-size: 11px; color: $color-text-placeholder; margin-left: 2px; font-weight: normal; }
-.log-time-row, .log-step-row {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 8px 0; font-size: 13px;
+
+.log-sum-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
+
+.log-sum-label {
+  font-size: 12px;
+  color: $color-text-placeholder;
+}
+
+.log-sum-val {
+  font-size: 14px;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.log-ok-val {
+  color: $color-success;
+}
+
+.log-err-val {
+  color: $color-danger;
+}
+
+.log-warn-val {
+  color: #ca8a04;
+}
+
+.log-sub {
+  font-size: 11px;
+  color: $color-text-placeholder;
+  margin-left: 2px;
+  font-weight: normal;
+}
+
+.log-time-row,
+.log-step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
 .log-step-code {
-  font-size: 12px; color: $color-primary;
-  background: rgba(0,0,0,0.04); padding: 2px 8px; border-radius: 4px;
-  word-break: break-all; flex: 1;
+  font-size: 12px;
+  color: $color-primary;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 2px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+  flex: 1;
 }
+
 /* F1.3 — 数据对账 */
 .recon-cards {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 4px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 4px;
 }
-.recon-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid $color-border-light; border-radius: 6px; }
-.recon-card-label { font-size: $font-size-xs; color: $color-text-placeholder; }
-.recon-card-val { font-size: $font-size-lg; font-weight: $font-weight-semibold; color: $color-text-primary; }
-.recon-card-err { color: $color-danger; }
+
+.recon-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid $color-border-light;
+  border-radius: 6px;
+}
+
+.recon-card-label {
+  font-size: $font-size-xs;
+  color: $color-text-placeholder;
+}
+
+.recon-card-val {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.recon-card-err {
+  color: $color-danger;
+}
+
 .recon-summary-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
-  padding: 12px 0; border-bottom: 1px solid $color-border-light;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid $color-border-light;
 }
-.recon-sum-item { display: flex; flex-direction: column; gap: 4px; }
-.recon-label { font-size: 12px; color: $color-text-placeholder; }
-.recon-val { font-size: 14px; font-weight: $font-weight-semibold; color: $color-text-primary; }
-.recon-sub { font-size: 12px; font-weight: $font-weight-normal; color: $color-text-placeholder; }
-.diff-ok { color: $color-success; font-weight: $font-weight-semibold; }
-.diff-warn { color: #ca8a04; font-weight: $font-weight-semibold; }
-.diff-err { color: $color-danger; font-weight: $font-weight-semibold; }
+
+.recon-sum-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recon-label {
+  font-size: 12px;
+  color: $color-text-placeholder;
+}
+
+.recon-val {
+  font-size: 14px;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.recon-sub {
+  font-size: 12px;
+  font-weight: $font-weight-normal;
+  color: $color-text-placeholder;
+}
+
+.diff-ok {
+  color: $color-success;
+  font-weight: $font-weight-semibold;
+}
+
+.diff-warn {
+  color: #ca8a04;
+  font-weight: $font-weight-semibold;
+}
+
+.diff-err {
+  color: $color-danger;
+  font-weight: $font-weight-semibold;
+}
 
 /* F2.4 — 调度状态展示 */
-.sched-block { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cron-code { font-family: monospace; background: rgba(0,0,0,0.04); padding: 1px 8px; border-radius: 4px; font-size: 13px; color: $color-text-primary; }
-.sched-next { font-size: 12px; color: $color-text-secondary; }
-.sched-dim { color: $color-text-placeholder; }
+.sched-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cron-code {
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: $color-text-primary;
+}
+
+.sched-next {
+  font-size: 12px;
+  color: $color-text-secondary;
+}
+
+.sched-dim {
+  color: $color-text-placeholder;
+}
 
 /* F2.3 — 隔离区 */
-.qb-circuit { padding: 16px; border: 1px solid $color-border-light; border-radius: 8px; margin-bottom: 16px; background: rgba(0,0,0,0.015); }
-.qb-circuit-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.qb-circuit-title { font-size: 14px; font-weight: $font-weight-semibold; }
-.qb-circuit-rate { display: flex; align-items: center; gap: 12px; }
-.qb-rate-label { font-size: 13px; color: $color-text-secondary; white-space: nowrap; }
-.qb-circuit-rate :deep(.el-progress) { flex: 1; }
-.qb-threshold { font-size: 12px; color: $color-text-placeholder; white-space: nowrap; }
-.qb-circuit-counts { display: flex; gap: 24px; margin-top: 12px; font-size: 13px; color: $color-text-secondary; }
-.qb-circuit-counts b { color: $color-text-primary; font-size: 15px; }
-.qb-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.qb-pager { display: flex; justify-content: flex-end; margin-top: 12px; }
-.raw-json { background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 6px; font-size: 12px; line-height: 1.6; max-height: 500px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-family: monospace; }
+.qb-circuit {
+  padding: 16px;
+  border: 1px solid $color-border-light;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.qb-circuit-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.qb-circuit-title {
+  font-size: 14px;
+  font-weight: $font-weight-semibold;
+}
+
+.qb-circuit-rate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.qb-rate-label {
+  font-size: 13px;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.qb-circuit-rate :deep(.el-progress) {
+  flex: 1;
+}
+
+.qb-threshold {
+  font-size: 12px;
+  color: $color-text-placeholder;
+  white-space: nowrap;
+}
+
+.qb-circuit-counts {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: $color-text-secondary;
+}
+
+.qb-circuit-counts b {
+  color: $color-text-primary;
+  font-size: 15px;
+}
+
+.qb-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.qb-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.raw-json {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 500px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: monospace;
+}
 
 /* F3.2 — 软删除检测 */
-.sd-count { font-size: 12px; color: $color-danger; margin-left: 8px; }
-.sd-dim { color: $color-text-placeholder; }
+.sd-count {
+  font-size: 12px;
+  color: $color-danger;
+  margin-left: 8px;
+}
+
+.sd-dim {
+  color: $color-text-placeholder;
+}
 </style>
