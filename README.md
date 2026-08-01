@@ -75,28 +75,36 @@ docker-compose exec backend python -m app.seed
 
 ### 方式二：本地开发
 
-**前置条件：** Python 3.11+ / Node.js 18+
+**前置条件：** Python 3.11+ / Node.js 18+。项目已在根目录自带虚拟环境 `.venv`，无需另行创建。
 
-```bash
+```powershell
 # 1. 启动 PostgreSQL 和 Redis（任选一种）
 docker-compose up -d postgres redis
 
 # 2. 安装后端依赖
 cd backend
-pip install -r requirements.txt
+..\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 # 3. 初始化数据库
 cp ../.env.example ../.env
-python -m app.seed
+..\.venv\Scripts\python.exe -m app.seed
 
-# 4. 启动后端（开发模式，热重载）
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# 4. 启动后端 API（开发模式，热重载）
+..\.venv\Scripts\python.exe run_api.py
 
-# 5. 新终端，启动前端
+# 5. 新终端，启动后台 Worker（消费同步任务队列，必须单独启动）
+..\.venv\Scripts\python.exe run_worker.py
+
+# 6.（可选）新终端，启动定时调度器
+..\.venv\Scripts\python.exe run_scheduler.py
+
+# 7. 新终端，启动前端
 cd ../frontend
 npm install
 npm run dev
 ```
+
+> **说明**：`run_api.py` 内部即 `uvicorn.run("app.main:app", reload=True)`，等价于前端的 `npm run dev`。Git Bash 下路径写作 `../.venv/Scripts/python.exe`。API 与 Worker 是两个独立进程：API 负责即时应答与接收请求，Worker 在后台消费 Redis 队列执行数据同步等长任务，互不阻塞。
 
 ## API 文档
 
@@ -150,6 +158,17 @@ alembic upgrade head
 # 回滚
 alembic downgrade -1
 ```
+
+### 本地启动（VSCode / 一键）
+
+- **VSCode 调试**：按 F5 选择 `sk-mind Backend (API)` 断点调试（首次需安装 `debugpy`，F5 会提示）。
+- **一键启动（Git Bash）**：`backend/` 下已提供 `Makefile`：
+  - `make dev` 启动 API
+  - `make worker` 启动 Worker
+  - `make scheduler` 启动调度器
+  - `make install` 安装依赖
+- **为什么分 API 与 Worker**：API 负责即时应答与接收请求；Worker 在后台消费 Redis 队列执行数据同步等长任务，二者进程独立、互不阻塞。
+- 完整启动命令见上文「方式二：本地开发」。
 
 ## 开发阶段
 
