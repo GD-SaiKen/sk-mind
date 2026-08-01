@@ -130,7 +130,20 @@ interfaces:
     request_body_template: {}
     records_path: data
 
-  # 8. selectWorkorderTaskActionStatistics
+  # 8. selectWorkorderTaskActionStatistics（报工明细）
+  # ⚠️ 以下配置经 2026-08-01 真实 API 实测确定，勿凭文档想当然修改：
+  #  1) 时间参数必须是 Java 毫秒整数（format: millis）。传
+  #     "%Y-%m-%d %H:%M:%S" 字符串 → API 返回 success=false/code=1001「操作失败」。
+  #     （响应里 endTime 也是毫秒时间戳，如 1785587726000，可相互印证。）
+  #  2) 绝对不能传 did: 0。did 是产线 id，传 0 会被当作「按产线 id=0 过滤」，
+  #     而不存在该产线 → totalItems 恒为 0。实测：无 did 近7天=1179 条，
+  #     带 did=0 → 0 条。文档虽标 did 必填，实际可省略。
+  #  3) statusList: [] 无害（实测带与不带结果一致），保留以满足文档必填声明。
+  #  4) 本接口无时间跨度限制（实测全量 2020 起 totalItems=34213 正常），
+  #     与同组 #3/#4/#7 的「只支持跨度两天内的查询」不同。
+  # 响应 data[] 内嵌 productSpecificationQtyVOS 数组 —— ColumnMapper 自动序列化为
+  # JSON 文本列（schema-drift 检测自动加列），无阻断风险。
+  # total_path=totalItems 启用 L1 对账，并使增量空响应的水位加固精确（仅 total=0 推进）。
   - name: selectWorkorderTaskActionStatistics
     endpoint: "/lightmesapi/open/workorderController/selectWorkorderTaskActionStatistics"
     method: POST
@@ -139,16 +152,23 @@ interfaces:
     time_config:
       param_start: startTime
       param_end: endTime
-      format: "%Y-%m-%d %H:%M:%S"
+      format: millis
       is_time_based: true
+    # 全量回溯下界：系统约 2025 年上线（实测该接口真实数据始于 2026 前后，
+    # 2025 全年均无数据）。首全量以此为起点做二分探测，避免无谓回溯到 2020。
+    probe_floor: "2025-01-01"
     request_body_template:
       pageNum: 1
-      pageSize: 100
-      did: 0
+      # 实测：pageSize 100→1.36s/页、500→1.68s、1000→1.92s，API 接受且行数随页大小线性增长。
+      # 本接口全量约 3.4 万行，pageSize=100 需 ~340 页≈11 分钟；改为 1000 后 ~34 页≈1 分钟，提速 ~10×。
+      pageSize: 1000
       statusList: []
-      shiftStartTime: "2026-01-01 00:00:00"
-      shiftEndTime: "2026-12-31 23:59:59"
     records_path: data
+    total_path: totalItems
+    reconciliation:
+      enabled: true
+      threshold_pct: 5
+      auto_repair: false
 
   # 9. andonApiController
   # 日期参数 startDate/endDate 为 Java 毫秒时间戳（整数），非字符串

@@ -2,7 +2,7 @@
 
 Sync strategy per interface:
 - **First sync** (no watermark, is_time_based=True): full pull with a wide date
-  range (2020-01-01 ~ now). Some MES APIs accept date filtering (optional params);
+  range (2025-01-01 ~ now). Some MES APIs accept date filtering (optional params);
   sending a broad range ensures we get all data in one paginated pull.
   Single paginated request, NOT day-by-day slicing.
 - **Incremental sync** (watermark exists, is_time_based=True): pull only data
@@ -25,7 +25,10 @@ import yaml
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.modules.ingestion.connectors.api_client import HttpxApiConnector
+from app.modules.ingestion.connectors.api_client import (
+    ApiBusinessError,
+    HttpxApiConnector,
+)
 from app.modules.ingestion.connectors.api_mapper import ColumnMapper
 from app.modules.ingestion.reconciler import DEFAULT_THRESHOLD_PCT, Reconciler
 from app.modules.ingestion.schema_manager import TRACKING_COLUMNS, _INDEX_COLUMNS
@@ -239,6 +242,23 @@ class ApiSyncEngine:
         self._ensured_tables.add(target_table)
         logger.info("Auto-created raw table %s with %d data columns", full_name, len(col_names))
 
+    def _resolve_probe_floor(self, iface: dict) -> datetime:
+        """解析首次全量回溯下界（probe_floor）。
+
+        优先取 iface["probe_floor"]，其次 cfg["probe_floor"]，默认 2025-01-01。
+        格式 "YYYY-MM-DD"（按 UTC 解析）。用于把全量起点收敛到已知上线日附近，
+        避免无谓回溯多年空历史。
+        """
+        raw = iface.get("probe_floor") or self._cfg.get("probe_floor")
+        if raw:
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                logger.warning(
+                    "probe_floor 格式错误(%r)，回退默认 2025-01-01", raw
+                )
+        return datetime(2025, 1, 1, tzinfo=timezone.utc)
+
     def _determine_sync_mode(
         self, iface: dict, data_source_id: uuid.UUID
     ) -> tuple[str, Optional[datetime], Optional[datetime]]:
@@ -247,7 +267,7 @@ class ApiSyncEngine:
         Returns:
             (mode, start_dt, end_dt)
             - mode="full", start=None, end=None: non-time-based → no date params
-            - mode="full", start=2020-01-01, end=now: first sync of time-based →
+            - mode="full", start=2025-01-01, end=now: first sync of time-based →
               wide date range (API date params are optional, broad range ensures
               complete data in one pull)
             - mode="incremental", start=wm-replay, end=now: time-based + watermark
@@ -266,7 +286,10 @@ class ApiSyncEngine:
             # First sync — wide date range (single request, NOT day-by-day slicing).
             # API date params are optional; sending a broad range ensures we get
             # all data in one paginated pull even if the API supports date filtering.
-            start = datetime(2020, 1, 1, tzinfo=timezone.utc)
+            # floor 默认 2025-01-01，可用 iface["probe_floor"] / cfg["probe_floor"]
+            # 收紧到已知上线日（如 2025-01-01），避免无谓回溯；后续由
+            # _probe_earliest_data_date 在 [floor, now] 内二分细化到真实最早日期。
+            start = self._resolve_probe_floor(iface)
             return "full", start, now
 
         # Incremental: replay window for safety (upsert handles overlaps)
@@ -309,6 +332,114 @@ class ApiSyncEngine:
             param_end: end_local.strftime(fmt),
         }
 
+    # ── 最早有数据日期探测 ──────────────────────
+
+    def _probe_window_has_data(
+        self,
+        connector: HttpxApiConnector,
+        iface: dict,
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> bool:
+        """探测 [start_dt, end_dt] 窗口内是否存在数据。
+
+        仅取第 1 页、pageSize=1，开销极小。返回 True 表示窗口内有 >=1 条记录。
+        接口返回业务错误（success=false，如跨度超限）时视为“无有效数据”，
+        返回 False，不向上抛错（探测本身允许失败）。
+        """
+        body = {
+            **iface.get("request_body_template", {}),
+            "pageNum": 1,
+            "pageSize": 1,
+        }
+        date_params = self._build_date_params(iface, start_dt, end_dt)
+        body.update(date_params)
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                result = connector.fetch_page(
+                    iface["endpoint"],
+                    method=iface.get("method", "POST"),
+                    body=body,
+                    page=1,
+                    page_size=1,
+                )
+                return len(result.records) > 0
+            except ApiBusinessError as e:
+                logger.debug(
+                    "接口 %s 探测窗口 %s~%s 业务无数据: %s",
+                    iface["name"], start_dt.date(), end_dt.date(), e,
+                )
+                return False
+            except Exception as e:  # 连接/SSL 等瞬态错误：重试，避免抖动误判为无数据
+                last_err = e
+                logger.warning(
+                    "接口 %s 探测窗口 %s~%s 瞬态错误(重试 %d/3): %s",
+                    iface["name"], start_dt.date(), end_dt.date(), attempt + 1, e,
+                )
+                time.sleep(2 ** attempt)
+        logger.warning(
+            "接口 %s 探测窗口 %s~%s 重试耗尽，按无数据处理: %s",
+            iface["name"], start_dt.date(), end_dt.date(), last_err,
+        )
+        return False
+
+    def _probe_earliest_data_date(
+        self,
+        connector: HttpxApiConnector,
+        iface: dict,
+        end_dt: datetime,
+        floor_dt: datetime,
+    ) -> datetime:
+        """二分查找最早有数据的日期，避免无谓地从 floor（如 2025-01-01）空拉多年历史。
+
+        适用场景：time_based 接口首次全量。系统实际可能 2025 年才上线，但全量
+        起点写死 2020 会拉取大量空区间（现已将默认起点改为 2025-01-01）。本函数在 [floor, end] 内二分，找到
+        “最早存在数据的日期”，后续全量只从该日期拉起。
+
+        算法：对候选中点 mid 探测单天窗口 [mid, mid+1天] 是否有数据。
+        - 有数据 → 记录 earliest=mid，继续向更早（high=mid）搜索；
+        - 无数据 → 向更晚（low=mid+1天）搜索。
+        数据在系统上线后持续产生（单调），二分可稳定收敛到上线日期（±1 天）。
+        API 延迟按单页 ~2-5s 计，二分约 log2(跨度天数) 次探测，开销可忽略。
+
+        返回：最早有数据的 datetime（UTC）；若全程无数据，回退 floor_dt。
+        """
+        # 探测窗口固定 1 天：对所有接口（含「跨度两天内」限制的 #3/#4/#7）均安全。
+        probe_days = 1
+        low = floor_dt
+        high = end_dt
+        earliest: datetime | None = None
+        max_iters = 40  # log2(约 4000 天) ≈ 12，留足余量
+
+        for _ in range(max_iters):
+            if low >= high:
+                break
+            mid = low + (high - low) // 2
+            win_end = min(mid + timedelta(days=probe_days), high)
+            if self._probe_window_has_data(connector, iface, mid, win_end):
+                earliest = mid
+                high = mid  # 更早可能还有数据
+            else:
+                # 注意：不能用 low = win_end，否则会跳过 mid 当天（若 mid 恰是
+                # 最早数据日，单天窗口无数据会漏判）。改为 low = mid 保留当天。
+                low = mid  # 往后再找（保留 mid 当天待查）
+
+        # 退出时 low==high，补探 low 当天（二分可能停在有数据的边界日之前）
+        if earliest is None:
+            if self._probe_window_has_data(
+                connector, iface, low, min(low + timedelta(days=probe_days), high)
+            ):
+                earliest = low
+
+        if earliest is None or earliest == floor_dt:
+            logger.info(
+                "接口 %s 未探测到更早数据，全量起点维持 %s"
+                "（可能数据稀疏/非单调，或 floor 即最早）",
+                iface["name"], floor_dt.date(),
+            )
+        return earliest or floor_dt
+
     def _sync_interface(
         self,
         iface: dict,
@@ -327,8 +458,32 @@ class ApiSyncEngine:
         # ── Determine sync mode ──
         mode, start_dt, end_dt = self._determine_sync_mode(iface, data_source_id)
 
+        # ── 首次全量（time_based）探测最早有数据日期 ──
+        # 避免从过早起点无谓空拉多年历史（系统实际 2025 年才上线，默认起点即 2025-01-01）。
+        # 探测仅在“无水位 + time_based”的首全量发生，日常增量不受影响。
+        # 可用 iface["probe_start_date"]=false 关闭（默认开启）。
+        if (
+            mode == "full"
+            and start_dt is not None
+            and iface.get("probe_start_date", True)
+        ):
+            probed = self._probe_earliest_data_date(connector, iface, end_dt, start_dt)
+            if probed != start_dt:
+                logger.info(
+                    "接口 %s 探测到最早数据日期 %s，替代默认全量起点 %s",
+                    iface["name"], probed.date(), start_dt.date(),
+                )
+                start_dt = probed
+
         # ── Build request body ──
-        body = {**iface.get("request_body_template", {}), "pageNum": 1, "pageSize": 100}
+        # pageSize 取自接口 YAML 的 request_body_template.pageSize（默认 100）。
+        # 注意：本次修复前引擎在 body 写死 pageSize=100，且 fetch_page 会用
+        # fetch_all_pages 的 page_size 参数覆盖 body，导致 YAML 配大页无效。
+        # 现在显式读取并透传给 fetch_all_pages(page_size=...)，使 per-interface
+        # 大页配置真正生效（如 #8 改 1000 提速约 10×）。
+        template = iface.get("request_body_template", {})
+        effective_page_size = int(template.get("pageSize", 100))
+        body = {**template, "pageNum": 1, "pageSize": effective_page_size}
 
         # Add date params for both incremental and first-full (time-based APIs
         # may accept date filtering even though params are optional).
@@ -369,6 +524,7 @@ class ApiSyncEngine:
             iface["endpoint"],
             method=iface.get("method", "POST"),
             body=body,
+            page_size=effective_page_size,
         ))
         # 捕获 API 第一页 total（来自 total_path），供对账 L1 使用
         api_total = connector.last_total

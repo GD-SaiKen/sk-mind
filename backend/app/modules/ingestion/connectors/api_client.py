@@ -13,6 +13,21 @@ from app.modules.ingestion.connectors.rate_limiter import TokenBucket
 from app.modules.ingestion.connectors.token_manager import TokenManager
 
 
+class ApiBusinessError(RuntimeError):
+    """API 返回 HTTP 200 但业务状态为失败（如 ``success=false``）。
+
+    很多国产接口（含 MES lightmes）在参数非法、超出查询跨度限制等情况下
+    仍返回 HTTP 200，仅在响应体里用 ``success=false`` + ``code``/``message``
+    表达错误。若不显式检查，``data`` 字段为 null 会被当作“无数据”，导致
+    同步批次被错误地标记为“成功 0 行”，真实错误被静默吞掉。
+    """
+
+    def __init__(self, message: str, code: Any = None, payload: Any = None):
+        super().__init__(message)
+        self.code = code
+        self.payload = payload
+
+
 class HttpxApiConnector(ApiConnector):
     """基于 httpx 的通用 API 连接器。
 
@@ -199,6 +214,18 @@ class HttpxApiConnector(ApiConnector):
         )
 
         data = response.json()
+
+        # 业务状态校验：HTTP 200 不代表业务成功。若响应体显式带 success=false，
+        # 必须抛错让批次标记为“失败”，而不是把 data=null 误判为“无数据成功”。
+        # 仅在响应确实包含 success 字段时校验 —— 对无该字段的 API 零影响。
+        if isinstance(data, dict) and "success" in data and not data["success"]:
+            raise ApiBusinessError(
+                f"API 业务错误: {data.get('message') or '未知错误'} "
+                f"(code={data.get('code')}, endpoint={endpoint})",
+                code=data.get("code"),
+                payload=data,
+            )
+
         records = self._extract_nested(data, self._records_path) or []
         total = self._extract_nested(data, self._total_path)
         # 记录本页 total，供对账 L1 读取（total_path 总量在各页一致）。
