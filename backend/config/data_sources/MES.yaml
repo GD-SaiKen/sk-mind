@@ -390,6 +390,9 @@ interfaces:
 
   # ── 异常域 ──
   # 25. selectErrorReport
+  # 注意: 该接口为「单日期」查询——只接受单个 date(yyyy-MM-dd)，不接受起止区间；
+  # param_start/param_end 都写 date 会 collapsing 成 date=end(今天)。务必用纯日期格式，
+  # 不能带 HH:MM:SS（引擎发 "2026-08-01 12:46:55" 这类带时刻的值时 API 按天匹配会返回 0）。
   - name: selectErrorReport
     endpoint: "/lightmesapi/open/errorReportAPIController/selectErrorReport"
     method: POST
@@ -398,7 +401,7 @@ interfaces:
     time_config:
       param_start: date
       param_end: date
-      format: "%Y-%m-%d %H:%M:%S"
+      format: "%Y-%m-%d"
       is_time_based: true
     request_body_template:
       pageNum: 1
