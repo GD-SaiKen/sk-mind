@@ -49,6 +49,7 @@ class HttpxApiConnector(ApiConnector):
         total_path: str = "data.total",
         default_headers: dict[str, str] | None = None,
         ssl_verify: bool = True,
+        proxy: str | None = None,
     ):
         """初始化 API 连接器。
 
@@ -70,6 +71,10 @@ class HttpxApiConnector(ApiConnector):
             total_path: 响应 JSON 中总数的路径。
             default_headers: 默认请求头。
             ssl_verify: 是否验证 SSL 证书（自签名证书场景设为 False）。
+            proxy: 代理地址。默认为 None，即**不使用任何代理**（显式绕过系统
+                HTTPS_PROXY/HTTP_PROXY 环境变量）。数据同步 Worker 连的是企业内网/
+                云 MES/ERP，不应走开发者的个人代理；若某数据源确实需要代理，
+                在 YAML connection 中设置 ``proxy: "http://host:port"`` 即可。
         """
         self._base_url = base_url.rstrip("/")
         self._ssl_verify = ssl_verify
@@ -90,6 +95,7 @@ class HttpxApiConnector(ApiConnector):
         # 最近一次 fetch_page 的 total（来自 total_path），供对账 L1 读取
         self.last_total: int | None = None
         self._default_headers = default_headers or {}
+        self._proxy = proxy
 
         self._client: httpx.Client | None = None
         self._rate_limiter: TokenBucket | None = None
@@ -129,6 +135,7 @@ class HttpxApiConnector(ApiConnector):
             timeout=self._timeout,
             headers=headers,
             verify=self._ssl_verify,
+            proxy=self._proxy,
         )
         self._rate_limiter = TokenBucket(rate=self._qps_limit)
 

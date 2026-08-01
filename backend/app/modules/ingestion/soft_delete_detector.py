@@ -135,6 +135,7 @@ class SoftDeleteDetector:
             qps_limit=conn.get("qps_limit", 10),
             timeout=conn.get("timeout", 30),
             ssl_verify=conn.get("ssl_verify", True),
+            proxy=conn.get("proxy"),
         )
 
     def _ensure_deleted_at_column(self, target_table: str) -> None:

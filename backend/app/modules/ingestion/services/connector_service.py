@@ -104,6 +104,7 @@ class ConnectorService:
             records_path=config.get("records_path", "data.list"),
             total_path=config.get("total_path", "data.total"),
             default_headers=config.get("default_headers"),
+            proxy=config.get("proxy"),
         )
 
     @staticmethod
