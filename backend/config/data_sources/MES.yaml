@@ -20,7 +20,18 @@ connection:
 
 interfaces:
   # ── 工单域 ──
-  # 1. filterWorkorder
+  # 1. filterWorkorder（工单主数据）
+  # ⚠️ 以下配置经 2026-08-02 真实 API 实测确定，勿凭文档想当然修改：
+  #  1) 时间参数 startDate/endDate 为「日期」格式 "%Y-%m-%d"。传带时刻的
+  #     "%Y-%m-%d %H:%M:%S" → API 返回 code=1001「操作失败」；millis 也能用，
+  #     但与同组接口一致采用日期格式更清晰。
+  #  2) 每页上限 500 条（pageSize=1000 → code=1001「每页最大查询数量不能超过500条」），
+  #     故 pageSize 取 500。全量约 1.4 万行 → 28 页，半分钟内完成。
+  #  3) workOrderStatus: [] 无害（实测带/不带 total 一致=13912），保留满足文档必填。
+  #  4) 响应字段实测：woid 为字符串（文档标 int64）、createTime/endTime 为 Java 毫秒
+  #     整数（文档标 date-time 字符串）；simpleProcedureVOS/customFields 为内嵌数组，
+  #     ColumnMapper 自动序列化为 JSON 文本列。
+  #  5) total_path=totalItems 启用 L1 对账；pk=woid 走 upsert（需 raw 表 UNIQUE(woid)）。
   - name: filterWorkorder
     endpoint: "/lightmesapi/open/workorderController/filterWorkorder"
     method: POST
@@ -31,11 +42,19 @@ interfaces:
       param_end: endDate
       format: "%Y-%m-%d"
       is_time_based: true
+    # 全量回溯下界：系统约 2025 年上线（工单真实数据始于 2025 前后）。
+    probe_floor: "2025-01-01"
     request_body_template:
       pageNum: 1
-      pageSize: 100
+      # 实测每页上限 500。全量约 1.4 万行 → 28 页，约半分钟完成。
+      pageSize: 500
       workOrderStatus: []
     records_path: data
+    total_path: totalItems
+    reconciliation:
+      enabled: true
+      threshold_pct: 5
+      auto_repair: false
 
   # 2. selectComplishReport
   - name: selectComplishReport
