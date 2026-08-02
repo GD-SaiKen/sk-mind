@@ -74,6 +74,12 @@ interfaces:
     records_path: data
 
   # 3. selectProceduresReportDataByTime
+  # ⚠️ 2026-08-02 全接口跨度扫描发现：本接口与 #4 同属 workorderController，
+  # 共享同一服务端限制——跨度 >2 天直接 code=1001「只支持跨度两天内的查询」。
+  # 在引擎支持分片之前，本接口的全量（约 300 天）与增量（replay 3 天）都必然
+  # 被拒、恒 0 行。补 max_window_days: 1 后才能真正拉到数。
+  # 注：本接口的字段/表结构尚未按真实响应校准（target_table 可能仍是残缺 stub），
+  # 正式启用前需比照 #4 的流程实测建表。
   - name: selectProceduresReportDataByTime
     endpoint: "/lightmesapi/open/workorderController/selectProceduresReportDataByTime"
     method: POST
@@ -84,10 +90,32 @@ interfaces:
       param_end: endTime
       format: "%Y-%m-%d %H:%M:%S"
       is_time_based: true
+    max_window_days: 1
     request_body_template: {}
     records_path: data
 
-  # 4. selectProductionBackParamsByTime
+  # 4. selectProductionBackParamsByTime（工序排产结果）
+  # ⚠️ 以下配置经 2026-08-02 真实 API 实测确定，勿凭文档想当然修改：
+  #  1) 时间语义是「工序任务排产的时间」，不是创建时间；参数必须是
+  #     "%Y-%m-%d %H:%M:%S"，传纯日期 "%Y-%m-%d" → code=1001「操作失败」。
+  #  2) 服务端硬限查询跨度：>2 天直接 code=1001「只支持跨度两天内的查询」。
+  #     故必须配 max_window_days，由引擎自动分片（见 ApiSyncEngine._iter_windows）。
+  #     取 1 天（文档承诺值，最稳）：全量约 300 片、增量 replay 3 天=3 片。
+  #  3) 每页上限 500（1000 → code=1001「每页最大查询数量不能超过500条」）。
+  #  4) 数据起点实测 2025-10-13（2025-10-12 及以前逐日为 0），故 probe_floor
+  #     取 2025-10-01。同时关闭二分探测：本接口按天分布稀疏（多日 total=0，
+  #     如 2026-02-20 / 04-06 / 06-20 / 07-26），二分假设的“上线后单调有数据”
+  #     不成立，会把起点误判到偏晚的日期，反而漏历史。
+  #  5) ⚠️ 上游分页排序不稳定：单窗口 total>pageSize 需翻页时，跨页会重复投递
+  #     部分行、并漏掉另一些（实测 2026-07-31 total=615，pageSize=500 时
+  #     distinct wopid=509、pageSize=200 时 566，两次运行 wopid 集合还不同）。
+  #     缓解：① 窗口切到 1 天，日均约 132 行 < 500 → 绝大多数天单页拉完、不翻页；
+  #     ② 重复行字节完全一致，引擎批内静默去重 + pk 幂等 upsert，无副作用；
+  #     ③ 少数超 500 行的大日（如 07-31）漏的行由后续增量回放窗口逐步补齐。
+  #  6) 响应字段实测与文档一致（15 个标量 + productionBackWorkcenters 数组）；
+  #     wopid 单日内可重复但跨日不重叠，作为 pk 走 upsert 安全。
+  #     planQty/pendingQty 等 number 实际返回 float，procedureOrder/completionStage
+  #     为 int；嵌套数组由 ColumnMapper 序列化为 JSON 文本列 production_back_workcenters。
   - name: selectProductionBackParamsByTime
     endpoint: "/lightmesapi/open/workorderController/selectProductionBackParamsByTime"
     method: POST
@@ -98,10 +126,22 @@ interfaces:
       param_end: endTime
       format: "%Y-%m-%d %H:%M:%S"
       is_time_based: true
+    # 服务端限制单次查询跨度 ≤2 天 → 强制 1 天分片
+    max_window_days: 1
+    # 全量回溯下界；数据实测始于 2025-10-13
+    probe_floor: "2025-10-01"
+    # 关闭最早日期二分探测（数据按天稀疏、非单调，二分会误判）
+    probe_start_date: false
     request_body_template:
       pageNum: 1
-      pageSize: 100
+      # 实测每页上限 500
+      pageSize: 500
     records_path: data
+    total_path: totalItems
+    reconciliation:
+      enabled: true
+      threshold_pct: 5
+      auto_repair: false
 
   # 5. selectTaskUseMaterial
   - name: selectTaskUseMaterial
@@ -136,6 +176,9 @@ interfaces:
     records_path: data
 
   # 7. selectWorkorderReportDataByTime
+  # ⚠️ 同 #3：workorderController 系列共享「只支持跨度两天内的查询」服务端限制
+  # （2026-08-02 扫描实测），必须分片，否则全量/增量一律 code=1001 恒 0 行。
+  # 字段/表结构同样尚未按真实响应校准，正式启用前需比照 #4 流程实测建表。
   - name: selectWorkorderReportDataByTime
     endpoint: "/lightmesapi/open/workorderController/selectWorkorderReportDataByTime"
     method: POST
@@ -146,6 +189,7 @@ interfaces:
       param_end: endTime
       format: "%Y-%m-%d %H:%M:%S"
       is_time_based: true
+    max_window_days: 1
     request_body_template: {}
     records_path: data
 

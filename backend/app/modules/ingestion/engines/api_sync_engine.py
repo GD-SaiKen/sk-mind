@@ -332,6 +332,36 @@ class ApiSyncEngine:
             param_end: end_local.strftime(fmt),
         }
 
+    # ── 时间窗口分片 ────────────────────────────
+
+    @staticmethod
+    def _iter_windows(
+        start_dt: datetime, end_dt: datetime, max_days: float | None
+    ) -> list[tuple[datetime, datetime]]:
+        """把 [start_dt, end_dt] 切成不超过 max_days 的连续窗口列表。
+
+        部分 MES 接口对单次查询的时间跨度有服务端硬限制，超限直接返回业务错误
+        （如 selectProductionBackParamsByTime：``只支持跨度两天内的查询``）。
+        这类接口必须在 YAML 里声明 ``max_window_days``，由引擎自动分片拉取，
+        否则首次全量（数百天）与增量（回放窗口 replay_window_days）都会被拒。
+
+        约定：
+        - ``max_days`` 为 None/<=0 → 不分片，返回单个窗口（历史行为，默认）。
+        - 相邻窗口共享边界时刻（前片 end == 后片 start）。边界行可能被重复拉取，
+          但目标表走 upsert 幂等，且完全相同的重复行会被批内静默去重，无副作用。
+        - 至少返回 1 个窗口（即使 start >= end），避免调用方拿到空列表。
+        """
+        if not max_days or max_days <= 0 or start_dt >= end_dt:
+            return [(start_dt, end_dt)]
+        step = timedelta(days=max_days)
+        windows: list[tuple[datetime, datetime]] = []
+        cur = start_dt
+        while cur < end_dt:
+            nxt = min(cur + step, end_dt)
+            windows.append((cur, nxt))
+            cur = nxt
+        return windows or [(start_dt, end_dt)]
+
     # ── 最早有数据日期探测 ──────────────────────
 
     def _probe_window_has_data(
@@ -489,6 +519,14 @@ class ApiSyncEngine:
         # may accept date filtering even though params are optional).
         time_cfg = iface.get("time_config", {})
 
+        # 时间窗口分片：部分接口服务端限制单次查询跨度（见 _iter_windows）。
+        # 未配 max_window_days 的接口 windows 恒为单元素，行为与改造前一致。
+        max_window_days = iface.get("max_window_days")
+        windows = (
+            self._iter_windows(start_dt, end_dt, max_window_days)
+            if start_dt is not None else [(None, None)]
+        )
+
         if start_dt is not None:
             date_params = self._build_date_params(iface, start_dt, end_dt)
             body.update(date_params)
@@ -502,10 +540,11 @@ class ApiSyncEngine:
             if start_local and end_local else ""
         )
 
+        shard_hint = f"，分 {len(windows)} 片" if len(windows) > 1 else ""
         if mode == "incremental":
-            progress_msg = f"正在拉取 {iface['name']} (增量: {range_str})..."
+            progress_msg = f"正在拉取 {iface['name']} (增量: {range_str}{shard_hint})..."
         elif start_dt is not None:
-            progress_msg = f"正在拉取 {iface['name']} (全量: {range_str})..."
+            progress_msg = f"正在拉取 {iface['name']} (全量: {range_str}{shard_hint})..."
         else:
             progress_msg = f"正在拉取 {iface['name']} (全量)..."
 
@@ -520,17 +559,35 @@ class ApiSyncEngine:
         self._update_progress(batch, progress_msg)
         logger.info("Syncing %s: mode=%s", iface["name"], mode)
 
-        rows = list(connector.fetch_all_pages(
-            iface["endpoint"],
-            method=iface.get("method", "POST"),
-            body=body,
-            page_size=effective_page_size,
-        ))
-        # 捕获 API 第一页 total（来自 total_path），供对账 L1 使用
-        api_total = connector.last_total
-
-        # Restore original paths
-        connector._records_path, connector._total_path = saved_paths
+        rows: list[dict] = []
+        api_total: int | None = None
+        try:
+            for idx, (w_start, w_end) in enumerate(windows, start=1):
+                shard_body = dict(body)
+                if w_start is not None:
+                    shard_body.update(self._build_date_params(iface, w_start, w_end))
+                if len(windows) > 1:
+                    # 分片进度：长回溯（数百片）时让用户看到推进，避免误判卡死
+                    if idx == 1 or idx == len(windows) or idx % 10 == 0:
+                        self._update_progress(
+                            batch,
+                            f"正在拉取 {iface['name']} ({mode}) 第 {idx}/{len(windows)} 片 "
+                            f"[{w_start.astimezone(bj_tz):%Y-%m-%d}]，累计 {len(rows)} 行...",
+                        )
+                shard_rows = list(connector.fetch_all_pages(
+                    iface["endpoint"],
+                    method=iface.get("method", "POST"),
+                    body=shard_body,
+                    page_size=effective_page_size,
+                ))
+                rows.extend(shard_rows)
+                # 分片模式下 api_total 累加各片 total，才能与拉取总量对账；
+                # 单片模式保持原语义（直接取第一页 total）。
+                if connector.last_total is not None:
+                    api_total = (api_total or 0) + connector.last_total
+        finally:
+            # Restore original paths（分片中途异常也必须还原，否则污染后续接口）
+            connector._records_path, connector._total_path = saved_paths
 
         if not rows:
             self._update_progress(batch, f"{iface['name']}: 无数据")
@@ -685,8 +742,16 @@ class ApiSyncEngine:
         """写入前校验，被拒绝的行写入隔离区（B2.4）而非丢弃。
 
         - PK 非空：PK 为 null/空的行拒绝（reason=null_pk）。
-        - 批内去重：重复 PK 保留首条，后出现的行进隔离区（reason=dup_in_batch）。
+        - 批内去重：重复 PK 保留首条。**仅当后出现的行内容与首条不同**才算冲突，
+          进隔离区（reason=dup_in_batch）；内容完全相同的重复行静默丢弃。
         - 质量标记：create_date 非数字的打 invalid_create_date 标记（不阻塞）。
+
+        为什么"相同内容的重复"不该进隔离区：部分 MES 接口服务端分页排序不稳定
+        （典型：selectProductionBackParamsByTime，单日 total=615 但 distinct
+        wopid 仅 509，且 106 个重复 wopid 的行**字节完全一致**）。这类重复是上游
+        分页实现缺陷，不是数据质量问题——把它们塞进隔离区会污染隔离区、并让隔离率
+        （106/615≈17%）虚高误触熔断器，把本来正常的批次错标成 partial_success。
+        真正需要人工关注的是"同 PK 但内容打架"，只有这种才隔离。
 
         Returns: (valid_rows, rejected_count)
         """
@@ -696,6 +761,14 @@ class ApiSyncEngine:
         valid: list[dict] = []
         rejected = 0
         seen: dict[str, int] = {}
+        dup_identical = 0
+
+        def _content_sig(r: dict) -> str:
+            """行内容签名：忽略引擎注入的 _ 前缀元字段，只比业务字段。"""
+            return json.dumps(
+                {k: v for k, v in r.items() if not k.startswith("_")},
+                sort_keys=True, ensure_ascii=False, default=str,
+            )
 
         for row in rows:
             pk_vals = [row.get(pk) for pk in pk_fields]
@@ -710,7 +783,12 @@ class ApiSyncEngine:
                 continue
             pk_key = "|".join(str(v) for v in pk_vals)
             if pk_key in seen:
-                # 批内重复：后出现的行进隔离区，保留首条
+                first = valid[seen[pk_key]]
+                if _content_sig(first) == _content_sig(row):
+                    # 上游分页重复投递同一行：静默去重，不算拒绝、不进隔离区
+                    dup_identical += 1
+                    continue
+                # 同 PK 内容冲突：这才是真问题，进隔离区
                 rejected += 1
                 self._quarantine(
                     batch=batch, data_source_id=data_source_id,
@@ -732,6 +810,12 @@ class ApiSyncEngine:
             if flags:
                 row["_quality_flags"] = flags
             valid.append(row)
+
+        if dup_identical:
+            logger.info(
+                "接口 %s 批内静默去重 %d 行（同 PK 且内容完全一致，上游分页重复投递）",
+                interface_name or "?", dup_identical,
+            )
 
         return valid, rejected
 
