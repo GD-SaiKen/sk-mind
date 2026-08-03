@@ -699,6 +699,7 @@ class ApiSyncEngine:
                 flat_rows, pk,
                 batch=batch, data_source_id=data_source_id,
                 interface_name=iface["name"],
+                hash_exclude_fields=iface.get("hash_exclude_fields"),
             )
 
         result = self._writer.write(
@@ -795,6 +796,7 @@ class ApiSyncEngine:
         batch=None,
         data_source_id=None,
         interface_name: str = "",
+        hash_exclude_fields: Optional[list[str]] = None,
     ) -> tuple[list[dict], int]:
         """写入前校验，被拒绝的行写入隔离区（B2.4）而非丢弃。
 
@@ -820,10 +822,18 @@ class ApiSyncEngine:
         seen: dict[str, int] = {}
         dup_identical = 0
 
+        excluded = set(hash_exclude_fields or [])
+
         def _content_sig(r: dict) -> str:
-            """行内容签名：忽略引擎注入的 _ 前缀元字段，只比业务字段。"""
+            """行内容签名：忽略引擎注入的 _ 前缀元字段与声明易变的字段
+            （hash_exclude_fields，如 update_time），只比其余业务字段。
+            否则同一业务行被多次拉取、仅易变字段变化时会误判为“内容冲突”
+            进隔离区（典型：selectErrorReport 的 updateTime 每次调用都变）。"""
             return json.dumps(
-                {k: v for k, v in r.items() if not k.startswith("_")},
+                {
+                    k: v for k, v in r.items()
+                    if not k.startswith("_") and k not in excluded
+                },
                 sort_keys=True, ensure_ascii=False, default=str,
             )
 

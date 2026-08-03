@@ -484,21 +484,34 @@ interfaces:
 
   # ── 异常域 ──
   # 25. selectErrorReport
-  # 注意: 该接口为「单日期」查询——只接受单个 date(yyyy-MM-dd)，不接受起止区间；
-  # param_start/param_end 都写 date 会 collapsing 成 date=end(今天)。务必用纯日期格式，
-  # 不能带 HH:MM:SS（引擎发 "2026-08-01 12:46:55" 这类带时刻的值时 API 按天匹配会返回 0）。
+  # ⚠️ 2026-08-03 实测校准（勿凭文档想当然修改）：
+  #  1) 单日期查询：body 只有 date（yyyy-MM-dd 纯日期即可），不接受起止区间；
+  #     param_start/param_end 都写 date 会 collapsing 成 date=窗口结束日，
+  #     故必须配 max_window_days: 1 让全量逐日扫描，否则只查「今天」。
+  #  2) lwlId 不是唯一键（同日多台设备共享同一 lwlId，实测 2026-08-03 一天 53 行
+  #     的 lwlId 只有 1 个值）——pk 必须用复合键 (lwlId, mid)，且 raw 表需
+  #     UNIQUE(lwl_id, mid) 索引；原 UNIQUE(lwl_id) 会把跨设备行互相覆盖/拒绝。
+  #  3) 响应有 totalItems，pageNum 分页有效，pageSize=500 实测可用（单日最大 282 行）。
+  #  4) 数据按天稀疏非单调（2026-01-01 实测为 0），关闭二分探测，floor 取 2025-10-01。
   - name: selectErrorReport
     endpoint: "/lightmesapi/open/errorReportAPIController/selectErrorReport"
     method: POST
     target_table: raw.mes_select_error_report
-    pk_fields: [lwl_id]
+    pk_fields: [lwl_id, mid]
     hash_exclude_fields: [update_time]
     time_config:
       param_start: date
       param_end: date
       format: "%Y-%m-%d"
       is_time_based: true
+    # 单日期接口：1 天一片，全量 = 逐日扫描历史
+    max_window_days: 1
+    # 数据稀疏非单调，二分探测会误判起点（同 #3/#4）
+    probe_start_date: false
+    probe_floor: "2025-10-01"
     request_body_template:
       pageNum: 1
-      pageSize: 100
+      # 实测 pageSize=500 可用，减少逐日扫描的请求数
+      pageSize: 500
     records_path: data
+    total_path: totalItems
