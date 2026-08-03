@@ -14,12 +14,20 @@ from app.modules.agent.schemas import (
     QueryMetricsRequest,
     QueryObjectsResponse,
     QueryMetricsResponse,
+    QueryRelationsRequest,
+    QueryRelationsResponse,
+    RelationItem,
+    QueryGraphRequest,
+    QueryGraphResponse,
+    GraphPathItem,
+    GraphPathEdgeItem,
     CatalogObject,
     CatalogMetric,
     CatalogResponse,
 )
 from app.modules.semantic.loader import get_loader
 from app.modules.semantic.mapper import ObjectQueryMapper, MetricQueryMapper
+from app.modules.graph.dao import graph_query
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 logger = logging.getLogger("sk-mind")
@@ -125,6 +133,89 @@ async def query_metrics(
         columns=columns,
         rows=_rows_to_dict(columns, rows),
         total=len(rows),
+    )
+
+
+# ── POST /api/agent/query_relations ─────────────────────
+
+
+@router.post("/query_relations", response_model=QueryRelationsResponse)
+async def query_relations(
+    body: QueryRelationsRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """根据 YAML 定义返回语义关系目录（类型层）。"""
+    try:
+        loader = get_loader(body.source)
+    except FileNotFoundError:
+        raise HTTPException(status_code=400, detail=f"Source '{body.source}' not found")
+
+    relations = loader.list_relations()
+    if body.relation_type:
+        relations = [
+            r for r in relations if r.get("relation_type") == body.relation_type
+        ]
+    if body.subject_object:
+        relations = [
+            r for r in relations if r.get("subject") == body.subject_object
+        ]
+    if body.object_object:
+        relations = [
+            r for r in relations if r.get("object") == body.object_object
+        ]
+    if body.agent_enabled_only:
+        relations = [r for r in relations if r.get("agent_enabled", True)]
+
+    items = [
+        RelationItem(
+            code=r["code"],
+            name=r.get("name", r["code"]),
+            relation_type=r.get("relation_type", ""),
+            subject_object=r.get("subject", ""),
+            object_object=r.get("object", ""),
+            cardinality=r.get("cardinality", "1:N"),
+            join_mechanism=r.get("join_mechanism"),
+            description=r.get("description"),
+            agent_enabled=r.get("agent_enabled", True),
+        )
+        for r in relations
+    ]
+    return QueryRelationsResponse(
+        source=body.source,
+        relations=items,
+        total=len(items),
+    )
+
+
+# ── POST /api/agent/query_graph ──────────────────────────
+
+
+@router.post("/query_graph", response_model=QueryGraphResponse)
+async def query_graph(
+    body: QueryGraphRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """查询业务关系图谱中的实例路径（1-3 跳）。"""
+    paths = await graph_query(
+        db,
+        object_type=body.object_type,
+        entity_id=body.entity_id,
+        relation_code=body.relation_code,
+        hops=body.hops,
+        min_confidence=body.min_confidence,
+        confirmed_only=body.confirmed_only,
+    )
+    return QueryGraphResponse(
+        source=body.source,
+        paths=[
+            GraphPathItem(
+                edges=[GraphPathEdgeItem(**e) for e in path]
+            )
+            for path in paths
+        ],
+        hops=body.hops,
+        total=len(paths),
     )
 
 
