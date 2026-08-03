@@ -14,6 +14,8 @@ connection:
   auth_header_name_2: "AccessKeySecret"
   qps_limit: 10
   timeout: 30
+  # 单次请求硬性总时长上限：防止服务端涓流响应导致 read 超时永不触发、Worker 冻结。
+  total_timeout: 180
   ssl_verify: false
   auth_credentials_env: "MES_ACCESS_KEY_ID"
   auth_credentials_2_env: "MES_ACCESS_KEY_SECRET"
@@ -78,8 +80,9 @@ interfaces:
   # 共享同一服务端限制——跨度 >2 天直接 code=1001「只支持跨度两天内的查询」。
   # 在引擎支持分片之前，本接口的全量（约 300 天）与增量（replay 3 天）都必然
   # 被拒、恒 0 行。补 max_window_days: 1 后才能真正拉到数。
-  # 注：本接口的字段/表结构尚未按真实响应校准（target_table 可能仍是残缺 stub），
-  # 正式启用前需比照 #4 的流程实测建表。
+  # 注：table 已按真实响应校准（2026-08-02 实测 66/66 字段齐全、wtaid 唯一、
+  # 经 backfill 落 12396 行，但数据仅到 2026-04-11）。当前缺水位 → 增量未生效；
+  # 需跑一次全量重同步（或回填后补设水位=最大 task_end_time）才能持续增量。
   - name: selectProceduresReportDataByTime
     endpoint: "/lightmesapi/open/workorderController/selectProceduresReportDataByTime"
     method: POST
@@ -91,8 +94,11 @@ interfaces:
       format: "%Y-%m-%d %H:%M:%S"
       is_time_based: true
     max_window_days: 1
-    request_body_template: {}
+    request_body_template:
+      pageNum: 1
+      pageSize: 500
     records_path: data
+    total_path: totalItems
 
   # 4. selectProductionBackParamsByTime（工序排产结果）
   # ⚠️ 以下配置经 2026-08-02 真实 API 实测确定，勿凭文档想当然修改：

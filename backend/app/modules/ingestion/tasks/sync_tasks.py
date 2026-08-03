@@ -504,12 +504,38 @@ def run_api_full_sync(
         except Exception:
             _replay_days = 3
 
+        # ── 取消订阅：监听 batch:{batch_id}:control 的 "cancel" 信号 ──
+        # 用户在前端点「取消」时，control.py 既发 Redis pub/sub 信号，又通过
+        # RQ send_stop_job_command 置停止标志。此处订阅并在每个安全点轮询，
+        # 使运行中（含长回溯分片）的同步能真正中止，而非「只改 DB、Worker 照跑」。
+        _pubsub = None
+        _cancel_ctrl_channel = f"batch:{batch_id}:control"
+        try:
+            from app.core.queue import redis_conn as _rc2
+            _pubsub = _rc2.pubsub()
+            _pubsub.subscribe(_cancel_ctrl_channel)
+
+            def _cancelled() -> bool:
+                if not _pubsub:
+                    return False
+                msg = _pubsub.get_message()
+                while msg:
+                    if msg.get("type") == "message" and msg.get("data") == b"cancel":
+                        return True
+                    msg = _pubsub.get_message()
+                return False
+        except Exception:
+            _pubsub = None
+            _cancelled = lambda: False  # noqa: E731 - 订阅失败则永不取消
+
         engine = ApiSyncEngine(
             config, db,
             replay_window_days=_replay_days,
             domain_map=_domain_map,
             data_source_name=_data_source_name,
+            cancel_check=_cancelled,
         )
+        from app.modules.ingestion.engines.api_sync_engine import SyncCancelled
         logger.info("Syncing all data for task %s", task_id[:8])
         result = engine.sync_all(
             task_id=task_uuid,
@@ -517,6 +543,11 @@ def run_api_full_sync(
             interfaces=interfaces,
             batch=batch,
         )
+
+        # 提交成功前再确认一次取消，避免「用户已点取消但本批恰好跑完」把
+        # 状态覆盖回 success（取消信号可能在最后一个分片拉取期间到达）。
+        if _cancelled():
+            raise SyncCancelled("同步被用户取消（收尾前确认）")
 
         # Update the router's batch with final stats.
         # 拉取行数 = 真实从 API 拉取的总量；写入行数 = 实际变更（新增+更新）；
@@ -555,6 +586,41 @@ def run_api_full_sync(
         db.commit()
 
         logger.info("API full sync done: %s (batch %s)", {k: v["success"] for k, v in result.items()}, batch_id[:8])
+    except SyncCancelled:
+        # 用户取消：批次标记为 cancelled（非失败），不进入失败重试/告警流程。
+        logger.info("API full sync cancelled by user: task=%s batch=%s", task_id[:8], batch_id[:8])
+        try:
+            db.rollback()  # 清理解可能中止的事务
+        except Exception:
+            pass
+        try:
+            _fresh_batch = db.get(IngestionBatch, batch_uuid)
+            if _fresh_batch:
+                _fresh_batch.status = "cancelled"
+                _fresh_batch.finished_at = datetime.now(timezone.utc)
+                _fresh_batch.error_summary = "用户取消"
+        except Exception:
+            logger.warning("Failed to update batch status to 'cancelled'", exc_info=True)
+        try:
+            _fresh_task = db.get(IngestionTask, task_uuid)
+            if _fresh_task:
+                _fresh_task.last_sync_status = "cancelled"
+        except Exception:
+            logger.warning("Failed to update task last_sync_status", exc_info=True)
+        try:
+            db.commit()
+        except Exception:
+            logger.warning("Failed to commit cancel status", exc_info=True)
+        # 发布 SSE 取消事件，让前端即时收尾
+        try:
+            import json as _json
+            from app.core.queue import redis_conn as _rc3
+            _rc3.publish(
+                f"batch:{batch_id}:progress",
+                _json.dumps({"pct": 0, "step": "已取消", "status": "cancelled"}),
+            )
+        except Exception:
+            pass
     except Exception:
         logger.exception("API full sync failed: task=%s batch=%s", task_id[:8], batch_id[:8])
         try:
@@ -586,6 +652,12 @@ def run_api_full_sync(
                 from app.core.queue import redis_conn as _rc
 
                 _rc.delete(batch_lock_key)
+            except Exception:
+                pass
+        if _pubsub is not None:
+            try:
+                _pubsub.unsubscribe(_cancel_ctrl_channel)
+                _pubsub.close()
             except Exception:
                 pass
         db.close()

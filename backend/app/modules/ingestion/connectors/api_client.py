@@ -3,6 +3,7 @@
 对应策略文档：03-API拉取同步策略 §2。
 """
 
+import threading
 import time
 from typing import Any, Iterator
 
@@ -26,6 +27,20 @@ class ApiBusinessError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.payload = payload
+
+
+class ApiHardTimeoutError(RuntimeError):
+    """单次 HTTP 请求在硬性总时长上限内仍未完成（疑似服务端涓流挂死）。
+
+    httpx 的 ``read`` 超时是「两次 recv 之间」的间隔，当服务端以极低速率
+    持续吐字节（涓流）时该超时永不触发，导致请求无限挂起、Worker 线程冻结。
+    本异常由硬性总超时守卫抛出，确保任何单请求都有可预期的上界，并进入
+    重试/失败流程而不是永久卡死。
+    """
+
+    def __init__(self, message: str, budget: float | None = None):
+        super().__init__(message)
+        self.budget = budget
 
 
 class HttpxApiConnector(ApiConnector):
@@ -65,6 +80,7 @@ class HttpxApiConnector(ApiConnector):
         default_headers: dict[str, str] | None = None,
         ssl_verify: bool = True,
         proxy: str | None = None,
+        total_timeout: int = 180,
     ):
         """初始化 API 连接器。
 
@@ -90,6 +106,9 @@ class HttpxApiConnector(ApiConnector):
                 HTTPS_PROXY/HTTP_PROXY 环境变量）。数据同步 Worker 连的是企业内网/
                 云 MES/ERP，不应走开发者的个人代理；若某数据源确实需要代理，
                 在 YAML connection 中设置 ``proxy: "http://host:port"`` 即可。
+            total_timeout: 单次 HTTP 请求的**硬性总时长上限**（秒）。即使服务端
+                以涓流方式持续吐字节导致 ``read`` 超时永不触发，超过此上限也会
+                强制抛 ``ApiHardTimeoutError``，防止 Worker 线程无限冻结。
         """
         self._base_url = base_url.rstrip("/")
         self._ssl_verify = ssl_verify
@@ -111,6 +130,9 @@ class HttpxApiConnector(ApiConnector):
         self.last_total: int | None = None
         self._default_headers = default_headers or {}
         self._proxy = proxy
+        # 单次请求硬性总时长上限（秒）。防止服务端涓流导致 read 超时永不触发、
+        # 进而 Worker 永久冻结。默认 180s：远大于正常 30s 读超时，仅在真正异常时兜底。
+        self._total_timeout = total_timeout
 
         self._client: httpx.Client | None = None
         self._rate_limiter: TokenBucket | None = None
@@ -145,9 +167,18 @@ class HttpxApiConnector(ApiConnector):
                 f"{self._auth_token_prefix} {token}"
             )
 
+        # 显式分段超时：connect/read/write/pool 分别设定。
+        # 注意 read 超时是「两次 recv 之间」的间隔，服务端涓流时不会触发，
+        # 真正的无限挂死兜底由 _request_with_hard_timeout 的硬性总时长守卫负责。
+        _timeout = httpx.Timeout(
+            connect=10,
+            read=max(30, int(self._timeout)),
+            write=10,
+            pool=10,
+        )
         self._client = httpx.Client(
             base_url=self._base_url,
-            timeout=self._timeout,
+            timeout=_timeout,
             headers=headers,
             verify=self._ssl_verify,
             proxy=self._proxy,
@@ -275,7 +306,15 @@ class HttpxApiConnector(ApiConnector):
         params: dict[str, Any] | None = None,
         json_data: dict[str, Any] | None = None,
     ) -> httpx.Response:
-        """带重试和限流的 HTTP 请求。"""
+        """带重试和限流的 HTTP 请求。
+
+        捕获 httpx 的全部超时（TimeoutException）与传输层/网络异常
+        （TransportError 涵盖 ConnectError / ReadError / RemoteProtocolError /
+        ProtocolError / NetworkError 等），以及本连接器自有的硬性总超时
+        （ApiHardTimeoutError）。这些异常都会触发退避重试；超过最大重试次数后
+        向上抛出，由调用方标记批次失败。业务错误（ApiBusinessError）不在此捕获，
+        会立即穿透，避免把 ``success=false`` 误判为无数据成功。
+        """
         last_exception: Exception | None = None
 
         for attempt in range(self._max_retries):
@@ -283,11 +322,11 @@ class HttpxApiConnector(ApiConnector):
                 self._rate_limiter.acquire()
 
             try:
-                response = self._client.request(  # type: ignore[union-attr]
+                response = self._request_with_hard_timeout(
                     method=method,
                     url=url,
                     params=params,
-                    json=json_data,
+                    json_data=json_data,
                 )
 
                 # 限流重试
@@ -301,13 +340,71 @@ class HttpxApiConnector(ApiConnector):
                 response.raise_for_status()
                 return response
 
-            except (httpx.TimeoutException, httpx.HTTPStatusError) as e:
+            except (
+                httpx.TimeoutException,
+                httpx.TransportError,
+                ApiHardTimeoutError,
+            ) as e:
                 last_exception = e
                 if attempt < self._max_retries - 1:
                     delay = self._retry_backoff ** attempt
                     time.sleep(delay)
 
         raise last_exception or RuntimeError("HTTP 请求失败")
+
+    def _request_with_hard_timeout(
+        self,
+        method: str,
+        url: str,
+        params: dict[str, Any] | None = None,
+        json_data: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        """在硬性总时长上限内执行单次阻塞请求，超时即抛 ``ApiHardTimeoutError``。
+
+        实现：在守护线程中发起阻塞的 ``client.request``，主线程 ``join(total)``。
+        超时则关闭并丢弃当前 client（杀掉挂死的底层 socket），强制下次重试时
+        ``connect()`` 重建连接；被卡线程为守护线程，不会阻止进程退出。
+        请求体在子线程内先 ``read()`` 完整缓冲，避免跨线程复用 client 的隐患。
+        """
+        if self._client is None:
+            self.connect()
+
+        result_holder: list[httpx.Response] = []
+        error_holder: list[BaseException] = []
+
+        def _blocking() -> None:
+            try:
+                resp = self._client.request(  # type: ignore[union-attr]
+                    method=method,
+                    url=url,
+                    params=params,
+                    json=json_data,
+                )
+                resp.read()  # 在子线程内完整缓冲响应体，主线程再 .json() 安全
+                result_holder.append(resp)
+            except BaseException as exc:  # noqa: BLE001 - 跨线程传递异常
+                error_holder.append(exc)
+
+        worker = threading.Thread(target=_blocking, daemon=True)
+        worker.start()
+        worker.join(timeout=self._total_timeout)
+
+        if worker.is_alive():
+            # 硬性超时：服务端涓流/挂死，强制丢弃当前 client 以释放底层 socket。
+            try:
+                self._client.close()
+            except Exception:
+                pass
+            self._client = None
+            raise ApiHardTimeoutError(
+                f"请求在 {self._total_timeout}s 内未完成（疑似服务端无响应/涓流挂死），"
+                f"endpoint={url}",
+                budget=self._total_timeout,
+            )
+
+        if error_holder:
+            raise error_holder[0]
+        return result_holder[0]
 
     @staticmethod
     def _extract_nested(data: dict, path: str) -> Any:

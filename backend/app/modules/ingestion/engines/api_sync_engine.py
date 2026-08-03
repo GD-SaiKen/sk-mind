@@ -18,6 +18,7 @@ WatermarkStore (watermark tracking).
 import json
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -44,6 +45,14 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+class SyncCancelled(Exception):
+    """用户取消同步时由引擎抛出，用于把「取消」与「失败」区分开。
+
+    调用方（run_api_full_sync）捕获后把批次标记为 cancelled 而非 failed，
+    且不再进入失败重试/告警流程。
+    """
+
+
 class ApiSyncEngine:
     """Executes sync for a configured API data source.
 
@@ -59,6 +68,7 @@ class ApiSyncEngine:
         replay_window_days: int = 3,
         domain_map: dict[str, str] | None = None,
         data_source_name: str = "",
+        cancel_check: Callable[[], bool] | None = None,
     ):
         self._cfg = config
         self._db = db
@@ -70,6 +80,8 @@ class ApiSyncEngine:
         self._replay_days = replay_window_days
         self._domain_map = domain_map or {}
         self._data_source_name = data_source_name
+        # 取消检查回调：返回 True 时引擎应在安全点中止并抛 SyncCancelled。
+        self._cancel_check = cancel_check
 
     # ─── public API ────────────────────────────
 
@@ -93,6 +105,8 @@ class ApiSyncEngine:
             {"interface_name": {"success": N, "rejected": N, "mode": "full"|"incremental"}, ...}
         """
         results: dict[str, dict] = {}
+        _failed = False
+        _cancelled = False
         # 仅选中真正要同步的接口（与手动/部分同步一致）
         selected = [
             i for i in self._cfg["interfaces"]
@@ -110,52 +124,84 @@ class ApiSyncEngine:
                 self._db.commit()
             except Exception:
                 pass
-        for iface in selected:
-            # ⚠️ 关键修复（多接口任务 batch 错标 bug）：
-            # 传入的 `batch` 是路由预创建的「任务级父 batch」。它只应作为聚合摘要
-            # 记录（由调用方 run_api_full_sync 在 sync_all 之后写入总和），绝不能
-            # 被复用为某个接口的批次——否则它会顶着第一个接口名（如 andonApiController）
-            # 显示聚合总量，与真正的 per-interface 子批次重名，UI 出现两个同名行、
-            # 数字对不上的错觉（之前表现为「闪一下 114 又变 691」）。
-            # 因此：单接口任务才复用父 batch（保持 1 行的历史行为），多接口任务每个
-            # 接口都建独立子 batch，父 batch 留给调用方写聚合摘要。
-            if not multi and batch is not None:
-                b = batch
-            else:
-                # 多接口任务：每个接口建独立子批次。
-                # 关键修复：子批次必须继承「父批次」的真实触发方式
-                # （scheduled/manual/retry/backfill…），绝不能硬编码 "manual"。
-                # 否则 cron 调度的多接口任务（如「(汇总)」）其子接口批次会错显为
-                # 「手动」，与父批次「定时」不一致（用户报的显示 bug）。
-                _tt = batch.trigger_type if batch is not None else "manual"
-                _tb = getattr(batch, "triggered_by", None) if batch is not None else None
-                b = self._writer.create_batch(
-                    task_id, trigger_type=_tt, triggered_by=_tb,
-                    # 显式关联父批次：子接口批次的 parent_id 指向「(汇总)」父批次，
-                    # 前端据此精确分组，不再依赖时间哨兵推断。
-                    parent_id=batch.id if batch is not None else None,
-                )
-            b.source_signature = iface["name"]
-            self._writer.start_batch(b)
+        try:
+            for iface in selected:
+                # ⚠️ 关键修复（多接口任务 batch 错标 bug）：
+                # 传入的 `batch` 是路由预创建的「任务级父 batch」。它只应作为聚合摘要
+                # 记录（由调用方 run_api_full_sync 在 sync_all 之后写入总和），绝不能
+                # 被复用为某个接口的批次——否则它会顶着第一个接口名（如 andonApiController）
+                # 显示聚合总量，与真正的 per-interface 子批次重名，UI 出现两个同名行、
+                # 数字对不上的错觉（之前表现为「闪一下 114 又变 691」）。
+                # 因此：单接口任务才复用父 batch（保持 1 行的历史行为），多接口任务每个
+                # 接口都建独立子 batch，父 batch 留给调用方写聚合摘要。
+                if not multi and batch is not None:
+                    b = batch
+                else:
+                    # 多接口任务：每个接口建独立子批次。
+                    # 关键修复：子批次必须继承「父批次」的真实触发方式
+                    # （scheduled/manual/retry/backfill…），绝不能硬编码 "manual"。
+                    # 否则 cron 调度的多接口任务（如「(汇总)」）其子接口批次会错显为
+                    # 「手动」，与父批次「定时」不一致（用户报的显示 bug）。
+                    _tt = batch.trigger_type if batch is not None else "manual"
+                    _tb = getattr(batch, "triggered_by", None) if batch is not None else None
+                    b = self._writer.create_batch(
+                        task_id, trigger_type=_tt, triggered_by=_tb,
+                        # 显式关联父批次：子接口批次的 parent_id 指向「(汇总)」父批次，
+                        # 前端据此精确分组，不再依赖时间哨兵推断。
+                        parent_id=batch.id if batch is not None else None,
+                    )
+                b.source_signature = iface["name"]
+                self._writer.start_batch(b)
 
-            connector = self._get_connector()
-            connector.connect()
-            try:
-                result = self._sync_interface(iface, connector, b, data_source_id)
-                self._writer.finish_batch(
-                    b, "success",
-                    pulled=result.get("pulled", 0),
-                    success=result.get("success", 0),
-                    rejected=result.get("rejected", 0),
-                    skip=result.get("unchanged", 0),
-                    source_signature=iface["name"],
-                )
-                results[iface["name"]] = result
-            except Exception:
-                self._writer.finish_batch(b, "failed", error_summary="sync error")
-                raise
-            finally:
-                connector.disconnect()
+                connector = self._get_connector()
+                connector.connect()
+                try:
+                    result = self._sync_interface(
+                        iface, connector, b, data_source_id,
+                    )
+                    self._writer.finish_batch(
+                        b, "success",
+                        pulled=result.get("pulled", 0),
+                        success=result.get("success", 0),
+                        rejected=result.get("rejected", 0),
+                        skip=result.get("unchanged", 0),
+                        source_signature=iface["name"],
+                    )
+                    results[iface["name"]] = result
+                except SyncCancelled:
+                    # 用户取消：子批次标记 cancelled，停止后续接口。
+                    try:
+                        self._writer.finish_batch(
+                            b, "cancelled", error_summary="用户取消",
+                        )
+                    except Exception:
+                        logger.warning("子批次 %s 标记取消状态异常", b.id, exc_info=True)
+                    _cancelled = True
+                    break
+                except Exception:
+                    # 标记子批次失败——但事务可能已因原始异常中止，
+                    # 此处必须包 try/except，否则 commit 抛 InFailedSqlTransaction
+                    # 会掩盖原始异常、导致批次永远 running（僵尸批次）。
+                    try:
+                        self._writer.finish_batch(b, "failed", error_summary="sync error")
+                    except Exception:
+                        logger.warning("子批次 %s 标记失败状态异常", b.id, exc_info=True)
+                    raise
+                finally:
+                    connector.disconnect()
+        except Exception:
+            _failed = True
+            raise
+        finally:
+            # 异常/取消退出时清理本次同步留下的孤儿 staging 表，避免 DROP 残留累积。
+            if _failed or _cancelled:
+                try:
+                    self._writer.cleanup()
+                except Exception:
+                    logger.warning("StageWriter.cleanup 失败", exc_info=True)
+
+        if _cancelled:
+            raise SyncCancelled("同步被用户取消")
 
         return results
 
@@ -195,6 +241,7 @@ class ApiSyncEngine:
             auth_credentials_2=auth_credentials_2,
             qps_limit=conn.get("qps_limit", 10),
             timeout=conn.get("timeout", 30),
+            total_timeout=conn.get("total_timeout", 180),
             ssl_verify=conn.get("ssl_verify", True),
             proxy=conn.get("proxy"),
         )
@@ -563,6 +610,12 @@ class ApiSyncEngine:
         api_total: int | None = None
         try:
             for idx, (w_start, w_end) in enumerate(windows, start=1):
+                # 安全点检查取消：长回溯（数百片）或分片拉取中途，用户可在
+                # 本片开始前中止，避免占用 Worker。单页级冻结由 connector 的
+                # 硬性总超时（total_timeout）兜底，本检查在每片返回后再次确认。
+                if self._cancel_check and self._cancel_check():
+                    raise SyncCancelled(f"接口 {iface['name']} 被用户取消")
+
                 shard_body = dict(body)
                 if w_start is not None:
                     shard_body.update(self._build_date_params(iface, w_start, w_end))
@@ -585,6 +638,10 @@ class ApiSyncEngine:
                 # 单片模式保持原语义（直接取第一页 total）。
                 if connector.last_total is not None:
                     api_total = (api_total or 0) + connector.last_total
+
+                # 每片拉完再确认一次取消（覆盖单页冻结后恢复的场景）
+                if self._cancel_check and self._cancel_check():
+                    raise SyncCancelled(f"接口 {iface['name']} 被用户取消")
         finally:
             # Restore original paths（分片中途异常也必须还原，否则污染后续接口）
             connector._records_path, connector._total_path = saved_paths

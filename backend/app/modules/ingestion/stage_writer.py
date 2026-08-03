@@ -420,6 +420,21 @@ class StageWriter:
         except Exception:
             pass
 
+    def cleanup(self) -> None:
+        """Drop every staging table still tracked (best-effort).
+
+        在同步异常/中断后调用，避免留下孤儿 ``staging.*`` 表（如 promote 阶段
+        因 ON CONFLICT 等异常中断、临时表从未被 DROP 的情形）。先回滚以清理解
+        处于中止状态的会话事务，再逐个 DROP；任何单次失败都不影响其余。
+        """
+        try:
+            self._db.rollback()
+        except Exception:
+            pass
+        for staging_full in list(self._staging_tables):
+            self._drop_staging(staging_full)
+        self._staging_tables.clear()
+
     # --- Table structure clone ---
 
     def _clone_table_structure(self, source_full: str, target_full: str) -> None:
