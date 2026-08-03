@@ -7,7 +7,12 @@ import sqlalchemy as sa
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.semantic.models import SemanticObject, SemanticProperty, DataMapping
+from app.modules.semantic.models import (
+    SemanticObject,
+    SemanticProperty,
+    SemanticRelation,
+    DataMapping,
+)
 from app.modules.datasets.models import Dataset, DatasetField
 
 
@@ -332,6 +337,151 @@ async def data_mapping_update_values(
 async def data_mapping_delete(db: AsyncSession, mapping: DataMapping) -> None:
     await db.delete(mapping)
     await db.flush()
+
+
+# ═══════════════════════════════════════════════════════
+# SemanticRelation
+# ═══════════════════════════════════════════════════════
+
+async def semantic_relation_list(
+    db: AsyncSession,
+    *,
+    keyword: str | None = None,
+    relation_type: str | None = None,
+    subject_object_id: uuid.UUID | None = None,
+    object_object_id: uuid.UUID | None = None,
+    agent_enabled: bool | None = None,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[dict], int]:
+    """返回 relations 为 list[dict]，带主体/客体对象名与边数。"""
+    sr = SemanticRelation
+    query = (
+        select(
+            sr.id,
+            sr.name,
+            sr.code,
+            sr.relation_type,
+            sr.subject_object_id,
+            sr.object_object_id,
+            sr.cardinality,
+            sr.join_mechanism,
+            sr.description,
+            sr.agent_enabled,
+            sr.status,
+            sr.created_at,
+            sr.updated_at,
+            SemanticObject.name.label("_subject_name"),
+        )
+        .select_from(sr)
+        .join(
+            SemanticObject,
+            SemanticObject.id == sr.subject_object_id,
+            isouter=False,
+        )
+    )
+    if keyword:
+        query = query.filter(
+            sr.name.ilike(f"%{keyword}%") | sr.code.ilike(f"%{keyword}%")
+        )
+    if relation_type:
+        query = query.filter(sr.relation_type == relation_type)
+    if subject_object_id:
+        query = query.filter(sr.subject_object_id == subject_object_id)
+    if object_object_id:
+        query = query.filter(sr.object_object_id == object_object_id)
+    if agent_enabled is not None:
+        query = query.filter(sr.agent_enabled == agent_enabled)
+    if status:
+        query = query.filter(sr.status == status)
+
+    count_q = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_q)).scalar_one()
+
+    query = query.order_by(sr.updated_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    rows = result.all()
+
+    # 收集主体/客体 object ids 解析对象名
+    obj_ids = {row[4] for row in rows} | {row[5] for row in rows}
+    obj_names: dict[uuid.UUID, str] = {}
+    if obj_ids:
+        obj_result = await db.execute(
+            select(SemanticObject.id, SemanticObject.name).where(
+                SemanticObject.id.in_(obj_ids)
+            )
+        )
+        obj_names = {row[0]: row[1] for row in obj_result}
+
+    # 边数统计
+    from app.modules.graph.models import BusinessGraphEdge
+
+    rel_ids = [row[0] for row in rows]
+    edge_counts: dict[uuid.UUID, int] = {}
+    if rel_ids:
+        edge_result = await db.execute(
+            select(
+                BusinessGraphEdge.relation_id,
+                func.count(BusinessGraphEdge.id),
+            )
+            .where(BusinessGraphEdge.relation_id.in_(rel_ids))
+            .group_by(BusinessGraphEdge.relation_id)
+        )
+        edge_counts = {row[0]: row[1] for row in edge_result}
+
+    items = []
+    for row in rows:
+        items.append({
+            "id": row[0],
+            "name": row[1],
+            "code": row[2],
+            "relation_type": row[3],
+            "subject_object_id": row[4],
+            "object_object_id": row[5],
+            "cardinality": row[6],
+            "join_mechanism": row[7],
+            "description": row[8],
+            "agent_enabled": bool(row[9]),
+            "status": row[10],
+            "created_at": row[11],
+            "updated_at": row[12],
+            "subject_object_name": obj_names.get(row[4]),
+            "object_object_name": obj_names.get(row[5]),
+            "edge_count": edge_counts.get(row[0], 0),
+        })
+    return items, total
+
+
+async def semantic_relation_get_by_id(
+    db: AsyncSession, relation_id: uuid.UUID,
+) -> SemanticRelation | None:
+    return await db.get(SemanticRelation, relation_id)
+
+
+async def semantic_relation_get_by_code(
+    db: AsyncSession, code: str,
+) -> SemanticRelation | None:
+    result = await db.execute(
+        select(SemanticRelation).where(SemanticRelation.code == code)
+    )
+    return result.scalar_one_or_none()
+
+
+async def semantic_relation_insert(
+    db: AsyncSession, rel: SemanticRelation,
+) -> SemanticRelation:
+    db.add(rel)
+    await db.flush()
+    return rel
+
+
+async def semantic_relation_update(
+    db: AsyncSession, rel: SemanticRelation,
+) -> SemanticRelation:
+    await db.flush()
+    return rel
 
 
 # ═══════════════════════════════════════════════════════

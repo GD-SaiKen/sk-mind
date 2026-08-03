@@ -158,6 +158,61 @@ class DataMappingListResponse(CamelModel):
 
 
 # ═══════════════════════════════════════════════════════
+# SemanticRelation
+# ═══════════════════════════════════════════════════════
+
+class SemanticRelationCreate(CamelModel):
+    name: str = Field(..., max_length=200)
+    code: str = Field(..., max_length=100)
+    relation_type: str = Field(..., max_length=50)
+    subject_object_id: uuid.UUID
+    object_object_id: uuid.UUID
+    cardinality: str = Field("1:N", max_length=10)
+    join_mechanism: Optional[str] = None
+    description: Optional[str] = None
+    agent_enabled: bool = True
+    status: str = "draft"
+
+
+class SemanticRelationUpdate(CamelModel):
+    name: Optional[str] = Field(None, max_length=200)
+    relation_type: Optional[str] = Field(None, max_length=50)
+    subject_object_id: Optional[uuid.UUID] = None
+    object_object_id: Optional[uuid.UUID] = None
+    cardinality: Optional[str] = Field(None, max_length=10)
+    join_mechanism: Optional[str] = None
+    description: Optional[str] = None
+    agent_enabled: Optional[bool] = None
+    status: Optional[str] = None
+
+
+class SemanticRelationResponse(CamelModel):
+    id: uuid.UUID
+    name: str
+    code: str
+    relation_type: str
+    subject_object_id: uuid.UUID
+    object_object_id: uuid.UUID
+    cardinality: str
+    join_mechanism: Optional[str] = None
+    description: Optional[str] = None
+    agent_enabled: bool
+    status: str
+    subject_object_name: Optional[str] = None
+    object_object_name: Optional[str] = None
+    edge_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class SemanticRelationListResponse(CamelModel):
+    items: list[SemanticRelationResponse]
+    total: int
+    page: int = 1
+    page_size: int = 20
+
+
+# ═══════════════════════════════════════════════════════
 # Stats
 # ═══════════════════════════════════════════════════════
 

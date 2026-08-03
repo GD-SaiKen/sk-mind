@@ -10,12 +10,21 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.modules.auth.models import User
 from app.modules.semantic import dao
-from app.modules.semantic.models import SemanticObject, SemanticProperty, DataMapping
+from app.modules.semantic.models import (
+    SemanticObject,
+    SemanticProperty,
+    SemanticRelation,
+    DataMapping,
+)
 from app.modules.semantic.schemas import (
     DataMappingCreate,
     DataMappingListResponse,
     DataMappingResponse,
     DataMappingUpdate,
+    SemanticRelationCreate,
+    SemanticRelationListResponse,
+    SemanticRelationResponse,
+    SemanticRelationUpdate,
     SemanticObjectCreate,
     SemanticObjectListResponse,
     SemanticObjectResponse,
@@ -331,6 +340,155 @@ async def delete_mapping(
         raise HTTPException(status_code=404, detail="映射不存在")
     await dao.data_mapping_delete(db, dm)
     return _ok(msg="已删除")
+
+
+# ═══════════════════════════════════════
+# SemanticRelation CRUD
+# ═══════════════════════════════════════
+
+@router.get("/relations")
+async def list_relations(
+    keyword: str | None = Query(None),
+    relation_type: str | None = Query(None, alias="relationType"),
+    subject_object_id: uuid.UUID | None = Query(None, alias="subjectObjectId"),
+    object_object_id: uuid.UUID | None = Query(None, alias="objectObjectId"),
+    agent_enabled: bool | None = Query(None, alias="agentEnabled"),
+    status: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    items, total = await dao.semantic_relation_list(
+        db,
+        keyword=keyword,
+        relation_type=relation_type,
+        subject_object_id=subject_object_id,
+        object_object_id=object_object_id,
+        agent_enabled=agent_enabled,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
+    resp_items = [SemanticRelationResponse(**item) for item in items]
+    return _ok(
+        SemanticRelationListResponse(
+            items=resp_items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        ).model_dump(**_DUMP_OPTS)
+    )
+
+
+@router.post("/relations", status_code=201)
+async def create_relation(
+    data: SemanticRelationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # 校验主体/客体对象存在
+    subject = await dao.semantic_object_get_by_id(db, data.subject_object_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail="主体业务对象不存在")
+    obj = await dao.semantic_object_get_by_id(db, data.object_object_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="客体业务对象不存在")
+
+    rel = SemanticRelation(**data.model_dump())
+    try:
+        rel = await dao.semantic_relation_insert(db, rel)
+    except sa_exc.IntegrityError:
+        raise HTTPException(status_code=409, detail="关系编码已存在")
+
+    item = {
+        "id": rel.id,
+        "name": rel.name,
+        "code": rel.code,
+        "relation_type": rel.relation_type,
+        "subject_object_id": rel.subject_object_id,
+        "object_object_id": rel.object_object_id,
+        "cardinality": rel.cardinality,
+        "join_mechanism": rel.join_mechanism,
+        "description": rel.description,
+        "agent_enabled": rel.agent_enabled,
+        "status": rel.status,
+        "created_at": rel.created_at,
+        "updated_at": rel.updated_at,
+        "subject_object_name": subject.name,
+        "object_object_name": obj.name,
+        "edge_count": 0,
+    }
+    return _ok(
+        SemanticRelationResponse(**item).model_dump(**_DUMP_OPTS),
+        msg="创建成功",
+    )
+
+
+@router.get("/relations/{relation_id}")
+async def get_relation(
+    relation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rel = await dao.semantic_relation_get_by_id(db, relation_id)
+    if not rel:
+        raise HTTPException(status_code=404, detail="语义关系不存在")
+    items, _ = await dao.semantic_relation_list(db, page=1, page_size=1)
+    item = next((i for i in items if i["id"] == relation_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="语义关系不存在")
+    return _ok(SemanticRelationResponse(**item).model_dump(**_DUMP_OPTS))
+
+
+@router.put("/relations/{relation_id}")
+async def update_relation(
+    relation_id: uuid.UUID,
+    data: SemanticRelationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rel = await dao.semantic_relation_get_by_id(db, relation_id)
+    if not rel:
+        raise HTTPException(status_code=404, detail="语义关系不存在")
+
+    values = data.model_dump(exclude_unset=True)
+    if values.get("subject_object_id"):
+        subject = await dao.semantic_object_get_by_id(
+            db, values["subject_object_id"]
+        )
+        if not subject:
+            raise HTTPException(status_code=404, detail="主体业务对象不存在")
+    if values.get("object_object_id"):
+        obj = await dao.semantic_object_get_by_id(db, values["object_object_id"])
+        if not obj:
+            raise HTTPException(status_code=404, detail="客体业务对象不存在")
+
+    for k, v in values.items():
+        if v is not None:
+            setattr(rel, k, v)
+    await dao.semantic_relation_update(db, rel)
+
+    items, _ = await dao.semantic_relation_list(db, page=1, page_size=1)
+    item = next((i for i in items if i["id"] == relation_id), None)
+    return _ok(
+        SemanticRelationResponse(**item).model_dump(**_DUMP_OPTS),
+        msg="更新成功",
+    )
+
+
+@router.delete("/relations/{relation_id}")
+async def delete_relation(
+    relation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rel = await dao.semantic_relation_get_by_id(db, relation_id)
+    if not rel:
+        raise HTTPException(status_code=404, detail="语义关系不存在")
+    rel.status = "archived"
+    await dao.semantic_relation_update(db, rel)
+    return _ok(msg="已归档")
 
 
 # ═══════════════════════════════════════

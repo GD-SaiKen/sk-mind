@@ -1,9 +1,12 @@
-"""语义模型 ORM 模型 — 业务对象、对象属性、数据映射。
+"""语义模型 ORM 模型 — 业务对象、对象属性、数据映射、语义关系。
 
 Phase 1 覆盖 3 种元模型类型：
 - semantic_objects → 业务对象
 - semantic_properties → 对象属性
 - data_mappings → 数据映射
+
+Phase 2 新增：
+- semantic_relations → 语义关系（类型层，对象间关系定义）
 """
 
 import uuid
@@ -117,3 +120,46 @@ class DataMapping(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<DataMapping {self.mapping_type}>"
+
+
+class SemanticRelation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """语义关系定义 — 类型层：业务对象之间的关系模板。"""
+
+    __tablename__ = "semantic_relations"
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    code: Mapped[str] = mapped_column(
+        String(100), unique=True, nullable=False, index=True
+    )
+    relation_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )  # structural / transactional / resource / process / responsibility / financial / quality / event
+
+    subject_object_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("semantic_objects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    object_object_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("semantic_objects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    cardinality: Mapped[str] = mapped_column(
+        String(10), nullable=False
+    )  # 1:1 / 1:N / N:1 / N:M
+    join_mechanism: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    agent_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft", nullable=False
+    )  # draft / active / archived
+
+    def __repr__(self) -> str:
+        return f"<SemanticRelation {self.code}>"

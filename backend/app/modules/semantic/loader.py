@@ -439,6 +439,7 @@ def get_loader(source: str) -> SourceSemanticLoader:
         )
 
     loader = SourceSemanticLoader(source)
+    loader.load_all()
     _LOADER_CACHE[source] = loader
     return loader
 
