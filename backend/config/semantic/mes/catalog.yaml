@@ -31,3 +31,15 @@ metrics:
   - standard_complete_rate_avg
   - schedule_completion_rate
   - schedule_pending_qty
+relations:
+  - REL-M01
+  - REL-M02
+  - REL-M03
+  - REL-M04
+  - REL-M05
+  - REL-M06
+  - REL-M07
+  - REL-M08
+  - REL-M09
+  - REL-M10
+  - REL-M11

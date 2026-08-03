@@ -33,6 +33,7 @@ class SourceSemanticLoader:
         self._config_dir = Path(_SEMANTIC_CONFIG_DIR) / source
         self._objects: dict[str, dict] = {}
         self._metrics: dict[str, dict] = {}
+        self._relations: dict[str, dict] = {}
         self._catalog: dict[str, Any] = {}
         self._file_mtimes: dict[str, float] = {}
         self._loaded = False
@@ -44,17 +45,22 @@ class SourceSemanticLoader:
         self._loaded = False
         self._objects = {}
         self._metrics = {}
+        self._relations = {}
         self._catalog = {}
         self._file_mtimes = {}
 
         self._scan_files()
         self._load_objects()
         self._load_metrics()
+        self._load_relations()
         self._load_catalog()
         self._loaded = True
         logger.info(
-            "Semantic loader [%s]: loaded %d objects, %d metrics",
-            self.source, len(self._objects), len(self._metrics),
+            "Semantic loader [%s]: loaded %d objects, %d metrics, %d relations",
+            self.source,
+            len(self._objects),
+            len(self._metrics),
+            len(self._relations),
         )
 
     def _scan_files(self) -> None:
@@ -101,6 +107,18 @@ class SourceSemanticLoader:
                 if metric_name:
                     self._metrics[metric_name] = m
 
+    def _load_relations(self) -> None:
+        relations_path = self._config_dir / "relations.yaml"
+        if not relations_path.is_file():
+            logger.warning("Relations file not found: %s", relations_path)
+            return
+        with open(relations_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        for rel in data.get("relations", []):
+            rel_code = rel.get("code")
+            if rel_code:
+                self._relations[rel_code] = rel
+
     def _load_catalog(self) -> None:
         catalog_path = self._config_dir / "catalog.yaml"
         if catalog_path.is_file():
@@ -115,11 +133,17 @@ class SourceSemanticLoader:
     def get_metric(self, name: str) -> dict | None:
         return self._metrics.get(name)
 
+    def get_relation(self, code: str) -> dict | None:
+        return self._relations.get(code)
+
     def list_objects(self) -> list[dict]:
         return list(self._objects.values())
 
     def list_metrics(self) -> list[dict]:
         return list(self._metrics.values())
+
+    def list_relations(self) -> list[dict]:
+        return list(self._relations.values())
 
     def get_catalog(self) -> dict:
         return self._catalog
@@ -137,6 +161,7 @@ class SourceSemanticLoader:
         - Property: INSERT ON CONFLICT (semantic_object_id, code) DO UPDATE
         - 清理过期属性: DELETE properties WHERE code NOT IN (yaml_codes)
         - Mapping: 为每个 object 创建一条 'object' 类型的 DataMapping
+        - Relation: INSERT ON CONFLICT (code) DO UPDATE（引用已存在对象）
         """
         objects_dir = self._config_dir / "objects"
         if not objects_dir.is_dir():
@@ -283,8 +308,89 @@ class SourceSemanticLoader:
                         },
                     )
 
+        # Relations: 依赖 objects 先同步完成
+        await self._sync_relations(db)
+
         await db.commit()
         logger.info("Semantic loader [%s]: sync_to_db complete", self.source)
+
+    async def _sync_relations(self, db: AsyncSession) -> None:
+        """将 relations.yaml 中的关系定义 upsert 到 semantic_relations。
+
+        subject/object 必须指向已同步的 semantic_objects（按 code 解析）。
+        """
+        relations_path = self._config_dir / "relations.yaml"
+        if not relations_path.is_file():
+            return
+
+        with open(relations_path, "r", encoding="utf-8") as f:
+            rel_data = yaml.safe_load(f) or {}
+
+        # 建立 object code → id 映射（code 形如 mes.machine_dim）
+        obj_rows = (await db.execute(
+            text("SELECT code, id FROM semantic_objects WHERE code LIKE :prefix"),
+            {"prefix": f"{self.source}.%"},
+        )).fetchall()
+        obj_id_by_code = {row[0]: row[1] for row in obj_rows}
+
+        for rel in rel_data.get("relations", []):
+            rel_code = rel.get("code")
+            if not rel_code:
+                continue
+
+            subject_code = f"{self.source}.{rel.get('subject')}"
+            object_code = f"{self.source}.{rel.get('object')}"
+            subject_id = obj_id_by_code.get(subject_code)
+            object_id = obj_id_by_code.get(object_code)
+            if subject_id is None or object_id is None:
+                logger.warning(
+                    "Relation [%s] skipped: subject=%s object=%s 未同步为对象",
+                    rel_code, subject_code, object_code,
+                )
+                continue
+
+            await db.execute(
+                text("""
+                    INSERT INTO semantic_relations
+                        (id, name, code, relation_type,
+                         subject_object_id, object_object_id,
+                         cardinality, join_mechanism, description,
+                         agent_enabled, status, created_at, updated_at)
+                    VALUES
+                        (:id, :name, :code, :relation_type,
+                         :subject_object_id, :object_object_id,
+                         :cardinality, :join_mechanism, :description,
+                         :agent_enabled, 'active', NOW(), NOW())
+                    ON CONFLICT (code) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        relation_type = EXCLUDED.relation_type,
+                        subject_object_id = EXCLUDED.subject_object_id,
+                        object_object_id = EXCLUDED.object_object_id,
+                        cardinality = EXCLUDED.cardinality,
+                        join_mechanism = EXCLUDED.join_mechanism,
+                        description = EXCLUDED.description,
+                        agent_enabled = EXCLUDED.agent_enabled,
+                        status = 'active',
+                        updated_at = NOW()
+                """),
+                {
+                    "id": uuid.uuid4(),
+                    "name": rel.get("name", rel_code),
+                    "code": rel_code,
+                    "relation_type": rel.get("relation_type", ""),
+                    "subject_object_id": subject_id,
+                    "object_object_id": object_id,
+                    "cardinality": rel.get("cardinality", "1:N"),
+                    "join_mechanism": rel.get("join_mechanism", ""),
+                    "description": rel.get("description", ""),
+                    "agent_enabled": rel.get("agent_enabled", True),
+                },
+            )
+
+        logger.info(
+            "Semantic loader [%s]: synced %d relations",
+            self.source, len(rel_data.get("relations", [])),
+        )
 
     def _infer_object_type(self, obj_data: dict) -> str:
         """从 YAML 数据推断 object_type。"""

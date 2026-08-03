@@ -1,0 +1,133 @@
+# MES 语义关系定义 — 类型层（SemanticRelation）
+# 来源: docs/技术设计/语义模型/2026-08-03-语义模型对象关系与Agent-MCP方案设计.md
+# 原则: subject/object 必须是 objects/ 下已定义的对象，join_mechanism 为
+#       serving 视图间可 join 的真实字段。
+
+relations:
+  - code: REL-M01
+    name: 产生安灯事件
+    relation_type: event
+    subject: machine_dim
+    object: andon_event
+    cardinality: "1:N"
+    join_mechanism: machine_no
+    description: 设备产生安灯呼叫事件（首件检验、调机请求、功能性异常等）
+    agent_enabled: true
+
+  - code: REL-M02
+    name: 发生故障上报
+    relation_type: event
+    subject: machine_dim
+    object: error_report
+    cardinality: "1:N"
+    join_mechanism: machine_no
+    description: 设备发生异常停机/故障并被上报
+    agent_enabled: true
+
+  - code: REL-M03
+    name: 产出OEE记录
+    relation_type: resource
+    subject: machine_dim
+    object: oee_record
+    cardinality: "1:N"
+    join_mechanism: "mid / machine_no"
+    description: 设备按班次产出三色灯/OEE 运行记录
+    agent_enabled: true
+
+  - code: REL-M04
+    name: 执行生产报工
+    relation_type: resource
+    subject: machine_dim
+    object: production_report
+    cardinality: "1:N"
+    join_mechanism: machine_no
+    description: 设备执行的生产报工记录
+    agent_enabled: true
+
+  - code: REL-M05
+    name: 产生报工记录
+    relation_type: process
+    subject: work_order
+    object: production_report
+    cardinality: "1:N"
+    join_mechanism: workorder_no
+    description: 工单下各工序产生的报工记录
+    agent_enabled: true
+
+  - code: REL-M06
+    name: 派发排产任务
+    relation_type: process
+    subject: work_order
+    object: schedule_task
+    cardinality: "1:N"
+    join_mechanism: workorder_no
+    description: 工单派发到机台的排产任务
+    agent_enabled: true
+
+  - code: REL-M07
+    name: 关联故障上报
+    relation_type: event
+    subject: work_order
+    object: error_report
+    cardinality: "1:N"
+    join_mechanism: workorder_no
+    description: 工单执行期间关联的设备故障上报
+    agent_enabled: true
+
+  - code: REL-M08
+    name: 引用物料工艺
+    relation_type: resource
+    subject: work_order
+    object: craft_hours
+    cardinality: "N:1"
+    join_mechanism: material_no
+    description: 工单物料引用标准工艺工时
+    agent_enabled: true
+
+  - code: REL-M09
+    name: 报工消耗物料工艺
+    relation_type: resource
+    subject: production_report
+    object: craft_hours
+    cardinality: "N:1"
+    join_mechanism: material_no
+    description: 报工物料对应的标准工艺工时
+    agent_enabled: true
+
+  - code: REL-M10
+    name: 排产计划物料工艺
+    relation_type: resource
+    subject: schedule_task
+    object: craft_hours
+    cardinality: "N:1"
+    join_mechanism: material_no
+    description: 排产任务物料对应的标准工艺工时
+    agent_enabled: true
+
+  - code: REL-M11
+    name: 报工对应工序任务
+    relation_type: process
+    subject: production_report
+    object: schedule_task
+    cardinality: "N:1"
+    join_mechanism: "workorder_no + procedure_no"
+    description: 工序级报工对应的排产任务（双字段精确匹配）
+    agent_enabled: true
+
+# ── 跨系统关系（Phase 2 预留，ERP 数据接入后启用）──
+#  - code: REL-X01
+#    name: ERP工单映射MES工单
+#    relation_type: structural
+#    subject: work_order
+#    object: production_order_erp
+#    cardinality: "1:1"
+#    join_mechanism: "workorder_no = MO.DOC_NO"
+#    agent_enabled: false
+#  - code: REL-X02
+#    name: ERP物料映射MES物料
+#    relation_type: structural
+#    subject: craft_hours
+#    object: material_erp
+#    cardinality: "1:1"
+#    join_mechanism: "material_no = ITEM.ITEM_CODE"
+#    agent_enabled: false
