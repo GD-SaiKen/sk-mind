@@ -256,9 +256,9 @@ class SourceSemanticLoader:
                 await db.execute(
                     text("""
                         DELETE FROM semantic_properties
-                        WHERE semantic_object_id = :oid AND code NOT IN :codes
+                        WHERE semantic_object_id = :oid AND NOT (code = ANY(:codes))
                     """),
-                    {"oid": semantic_object_id, "codes": tuple(yaml_prop_codes)},
+                    {"oid": semantic_object_id, "codes": list(yaml_prop_codes)},
                 )
 
             # Mapping: object-level binding
