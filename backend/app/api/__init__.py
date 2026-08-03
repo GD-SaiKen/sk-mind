@@ -13,6 +13,7 @@ from app.modules.lineage.router import router as lineage_router
 from app.modules.quality.router import router as quality_router
 from app.modules.semantic.router import router as semantic_router
 from app.modules.agent.router import router as agent_router
+from app.modules.graph.router import router as graph_router
 
 router = APIRouter()
 
@@ -29,6 +30,7 @@ router.include_router(lineage_router)
 router.include_router(quality_router)
 router.include_router(semantic_router)
 router.include_router(agent_router)
+router.include_router(graph_router)
 
 # 当前阶段提供一个简单的状态接口验证前后端联通
 @router.get("/status", tags=["system"])

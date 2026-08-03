@@ -27,6 +27,8 @@ import app.modules.ingestion.models  # noqa: F401
 import app.modules.datasets.models  # noqa: F401
 import app.modules.quality.models  # noqa: F401
 import app.modules.lineage.models  # noqa: F401
+import app.modules.semantic.models  # noqa: F401
+import app.modules.graph.models  # noqa: F401
 
 # ── FastAPI app（在模型之后导入避免循环引用）────
 import app.main  # noqa: F401

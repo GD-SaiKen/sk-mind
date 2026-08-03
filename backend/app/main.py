@@ -50,6 +50,7 @@ import app.modules.ingestion.models     # noqa: F401
 import app.modules.lineage.models       # noqa: F401
 import app.modules.quality.models       # noqa: F401
 import app.modules.semantic.models    # noqa: F401
+import app.modules.graph.models       # noqa: F401
 
 app = FastAPI(
     title=settings.APP_NAME,
