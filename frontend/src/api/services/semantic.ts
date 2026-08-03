@@ -1,6 +1,7 @@
 import api from '../client'
 import type {
   SemanticObject, SemanticProperty, DataMappingItem, SemanticStats,
+  SemanticRelation,
   PaginatedData,
 } from '../types'
 
@@ -75,6 +76,36 @@ export class SemanticService {
 
   deleteMapping(id: string): Promise<unknown> {
     return api.delete(`/semantic/mappings/${id}`).then(r => r.data)
+  }
+
+  // ── SemanticRelation CRUD ──
+  getRelations(params?: {
+    keyword?: string
+    relationType?: string
+    subjectObjectId?: string
+    objectObjectId?: string
+    agentEnabled?: boolean
+    status?: string
+    page?: number
+    pageSize?: number
+  }): Promise<PaginatedData<SemanticRelation>> {
+    return api.get('/semantic/relations', { params }).then(r => r.data.data)
+  }
+
+  getRelation(id: string): Promise<SemanticRelation> {
+    return api.get(`/semantic/relations/${id}`).then(r => r.data.data)
+  }
+
+  createRelation(data: Record<string, unknown>): Promise<SemanticRelation> {
+    return api.post('/semantic/relations', data).then(r => r.data.data)
+  }
+
+  updateRelation(id: string, data: Record<string, unknown>): Promise<SemanticRelation> {
+    return api.put(`/semantic/relations/${id}`, data).then(r => r.data.data)
+  }
+
+  deleteRelation(id: string): Promise<unknown> {
+    return api.delete(`/semantic/relations/${id}`).then(r => r.data)
   }
 
   // ── Stats ──

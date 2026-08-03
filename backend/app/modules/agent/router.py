@@ -197,15 +197,19 @@ async def query_graph(
     current_user: User = Depends(get_current_user),
 ):
     """查询业务关系图谱中的实例路径（1-3 跳）。"""
-    paths = await graph_query(
-        db,
-        object_type=body.object_type,
-        entity_id=body.entity_id,
-        relation_code=body.relation_code,
-        hops=body.hops,
-        min_confidence=body.min_confidence,
-        confirmed_only=body.confirmed_only,
-    )
+    try:
+        paths = await graph_query(
+            db,
+            object_type=body.object_type,
+            entity_id=body.entity_id,
+            relation_code=body.relation_code,
+            hops=body.hops,
+            min_confidence=body.min_confidence,
+            confirmed_only=body.confirmed_only,
+        )
+    except Exception as e:
+        logger.exception("Graph query failed")
+        raise HTTPException(status_code=500, detail=str(e))
     return QueryGraphResponse(
         source=body.source,
         paths=[

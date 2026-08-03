@@ -13,7 +13,7 @@ from app.modules.semantic.loader import get_loader
 logger = logging.getLogger("sk-mind")
 
 
-def _parse_join_fields(join_mechanism: str) -> list[str]:
+def _parse_join_fields(join_mechanism: str) -> list[list[str]]:
     """解析 join_mechanism 为字段列表。
 
     支持:
@@ -98,19 +98,23 @@ async def generate_edges_for_relation(
         raise ValueError(f"relation '{relation_code}' has empty join_mechanism")
 
     join_sql = " AND ".join(join_clauses)
-    source_dataset = f"{subj_schema}.{subj_tbl}"
+    source_dataset = f"{subj_schema}.{subj_tbl} ↔ {obj_schema}.{obj_tbl}"
 
     # id 与时间戳：显式生成，兼容 PostgreSQL（gen_random_uuid）与 SQLite 测试库
     dialect = db.bind.dialect.name if db.bind is not None else "postgresql"
     if dialect == "sqlite":
         id_expr = "lower(hex(randomblob(16)))"
         now_expr = "datetime('now')"
+        conflict_clause = "OR IGNORE"
+        insert_keyword = "INSERT OR IGNORE"
     else:
         id_expr = "gen_random_uuid()"
         now_expr = "NOW()"
+        conflict_clause = ""
+        insert_keyword = "INSERT"
 
     sql = f"""
-        INSERT INTO business_graph_edges
+        {insert_keyword} INTO business_graph_edges
             (relation_id, from_object_id, from_entity_id,
              to_object_id, to_entity_id,
              source_dataset, generated_by, confidence, status,
@@ -124,17 +128,23 @@ async def generate_edges_for_relation(
         JOIN {obj_schema}.{obj_tbl} o ON {join_sql}
         WHERE s.{subj_key_col} IS NOT NULL
           AND o.{obj_key_col} IS NOT NULL
-        ON CONFLICT DO NOTHING
     """
+    if dialect != "sqlite":
+        sql += "\n        ON CONFLICT ON CONSTRAINT uq_graph_edge DO NOTHING"
 
-    result = await db.execute(
-        text(sql),
-        {
-            "relation_id": relation_id,
-            "from_object_id": subject_object_id,
-            "to_object_id": object_object_id,
-            "source_dataset": source_dataset,
-        },
-    )
-    await db.commit()
-    return result.rowcount or 0
+    try:
+        result = await db.execute(
+            text(sql),
+            {
+                "relation_id": relation_id,
+                "from_object_id": subject_object_id,
+                "to_object_id": object_object_id,
+                "source_dataset": source_dataset,
+            },
+        )
+        await db.commit()
+        return result.rowcount or 0
+    except Exception:
+        await db.rollback()
+        logger.exception("Edge generation failed for relation '%s'", relation_code)
+        raise

@@ -8,6 +8,7 @@ export { qualityService } from './services/quality';
 export { lineageService } from './services/lineage';
 export { dataBrowseService } from './services/data-browse';
 export { semanticService } from './services/semantic';
+export { graphService } from './services/graph';
 export type {
   LoginParams,
   ApiInterfaceItem,
@@ -44,4 +45,10 @@ export type {
   SemanticProperty,
   DataMappingItem,
   SemanticStats,
+  SemanticRelation,
+  GraphEdge,
+  GraphStats,
+  GraphPath,
+  GraphPathEdge,
+  GraphQueryResult,
 } from './types';

@@ -556,3 +556,77 @@ export interface SemanticStats {
   byObjectType: { type: string; count: number }[]
   byStatus: { status: string; count: number }[]
 }
+
+export interface SemanticRelation {
+  id: string
+  name: string
+  code: string
+  relationType: string
+  subjectObjectId: string
+  objectObjectId: string
+  cardinality: string
+  joinMechanism: string | null
+  description: string | null
+  agentEnabled: boolean
+  status: string
+  subjectObjectName: string | null
+  objectObjectName: string | null
+  edgeCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+// ── 业务关系图谱 ──
+
+export interface GraphEdge {
+  id: string
+  relationId: string
+  fromObjectId: string
+  fromEntityId: string
+  toObjectId: string
+  toEntityId: string
+  edgeProperties: Record<string, unknown> | null
+  sourceDataset: string | null
+  generatedBy: string
+  confidence: number
+  status: string
+  confirmedBy: string | null
+  confirmedAt: string | null
+  validFrom: string | null
+  validTo: string | null
+  relationName: string | null
+  relationCode: string | null
+  fromObjectName: string | null
+  toObjectName: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GraphStats {
+  totalEdges: number
+  confirmedCount: number
+  aiGeneratedCount: number
+  pendingCount: number
+  confirmRate: number
+}
+
+export interface GraphPathEdge {
+  fromType: string
+  fromId: string
+  relationCode: string
+  relationName: string
+  toType: string
+  toId: string
+  confidence: number
+  status: string
+}
+
+export interface GraphPath {
+  edges: GraphPathEdge[]
+}
+
+export interface GraphQueryResult {
+  paths: GraphPath[]
+  hops: number
+  total: number
+}

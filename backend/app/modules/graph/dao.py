@@ -255,6 +255,18 @@ async def graph_query(
         query = query.filter(e.status == "confirmed")
     if min_confidence > 0:
         query = query.filter(e.confidence >= min_confidence)
+    # 起点过滤下推到 SQL
+    if object_type:
+        query = query.filter(
+            sa.or_(
+                SemanticObject.code == object_type,
+                SemanticObject.code.endswith(f".{object_type}"),
+            )
+        )
+    if entity_id:
+        query = query.filter(e.from_entity_id == entity_id)
+    # 限制全量加载，避免大数据集 OOM
+    query = query.limit(10000)
 
     result = await db.execute(query)
     rows = result.all()
@@ -290,16 +302,8 @@ async def graph_query(
         )
         obj_names = {row[0]: row[1] for row in obj_result}
 
-    # 起点过滤：对象类型（按 code 后段匹配）+ 可选实体 id
-    start_edge_ids: set[uuid.UUID] = set()
-    for edge in edges:
-        code = obj_names.get(edge["from_object_id"], "")
-        obj_key = code.split(".", 1)[-1] if "." in code else code
-        if object_type and obj_key != object_type:
-            continue
-        if entity_id and edge["from_entity_id"] != entity_id:
-            continue
-        start_edge_ids.add(edge["id"])
+    # 起点边：SQL 层已过滤，所有加载的边均为有效起点
+    start_edge_ids: set[uuid.UUID] = {edge["id"] for edge in edges}
 
     if not start_edge_ids:
         return []

@@ -3,7 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import exc as sa_exc
+from sqlalchemy import exc as sa_exc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -387,7 +387,14 @@ async def create_relation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # 校验主体/客体对象存在
+    # 校验 code 唯一性（前置，避免 DB IntegrityError）
+    existing = await dao.semantic_relation_get_by_code(db, data.code)
+    if existing:
+        raise HTTPException(status_code=409, detail="关系编码已存在")
+
+    # 校验主体/客体对象存在 + 禁止自引用
+    if data.subject_object_id == data.object_object_id:
+        raise HTTPException(status_code=400, detail="主体对象与客体对象不能相同（禁止自引用）")
     subject = await dao.semantic_object_get_by_id(db, data.subject_object_id)
     if not subject:
         raise HTTPException(status_code=404, detail="主体业务对象不存在")
@@ -434,10 +441,38 @@ async def get_relation(
     rel = await dao.semantic_relation_get_by_id(db, relation_id)
     if not rel:
         raise HTTPException(status_code=404, detail="语义关系不存在")
-    items, _ = await dao.semantic_relation_list(db, page=1, page_size=1)
-    item = next((i for i in items if i["id"] == relation_id), None)
-    if item is None:
-        raise HTTPException(status_code=404, detail="语义关系不存在")
+
+    subject = await dao.semantic_object_get_by_id(db, rel.subject_object_id)
+    obj = await dao.semantic_object_get_by_id(db, rel.object_object_id)
+
+    from app.modules.graph.models import BusinessGraphEdge
+
+    edge_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(BusinessGraphEdge)
+            .where(BusinessGraphEdge.relation_id == relation_id)
+        )
+    ).scalar_one()
+
+    item = {
+        "id": rel.id,
+        "name": rel.name,
+        "code": rel.code,
+        "relation_type": rel.relation_type,
+        "subject_object_id": rel.subject_object_id,
+        "object_object_id": rel.object_object_id,
+        "cardinality": rel.cardinality,
+        "join_mechanism": rel.join_mechanism,
+        "description": rel.description,
+        "agent_enabled": rel.agent_enabled,
+        "status": rel.status,
+        "created_at": rel.created_at,
+        "updated_at": rel.updated_at,
+        "subject_object_name": subject.name if subject else None,
+        "object_object_name": obj.name if obj else None,
+        "edge_count": edge_count,
+    }
     return _ok(SemanticRelationResponse(**item).model_dump(**_DUMP_OPTS))
 
 
@@ -453,6 +488,8 @@ async def update_relation(
         raise HTTPException(status_code=404, detail="语义关系不存在")
 
     values = data.model_dump(exclude_unset=True)
+
+    # 主体/客体校验
     if values.get("subject_object_id"):
         subject = await dao.semantic_object_get_by_id(
             db, values["subject_object_id"]
@@ -464,13 +501,50 @@ async def update_relation(
         if not obj:
             raise HTTPException(status_code=404, detail="客体业务对象不存在")
 
+    # 禁止自引用
+    effective_subject = values.get("subject_object_id", rel.subject_object_id)
+    effective_object = values.get("object_object_id", rel.object_object_id)
+    if effective_subject == effective_object:
+        raise HTTPException(
+            status_code=400, detail="主体对象与客体对象不能相同（禁止自引用）"
+        )
+
     for k, v in values.items():
-        if v is not None:
-            setattr(rel, k, v)
+        setattr(rel, k, v)
     await dao.semantic_relation_update(db, rel)
 
-    items, _ = await dao.semantic_relation_list(db, page=1, page_size=1)
-    item = next((i for i in items if i["id"] == relation_id), None)
+    # 构建响应
+    subject = await dao.semantic_object_get_by_id(db, rel.subject_object_id)
+    obj = await dao.semantic_object_get_by_id(db, rel.object_object_id)
+
+    from app.modules.graph.models import BusinessGraphEdge
+
+    edge_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(BusinessGraphEdge)
+            .where(BusinessGraphEdge.relation_id == relation_id)
+        )
+    ).scalar_one()
+
+    item = {
+        "id": rel.id,
+        "name": rel.name,
+        "code": rel.code,
+        "relation_type": rel.relation_type,
+        "subject_object_id": rel.subject_object_id,
+        "object_object_id": rel.object_object_id,
+        "cardinality": rel.cardinality,
+        "join_mechanism": rel.join_mechanism,
+        "description": rel.description,
+        "agent_enabled": rel.agent_enabled,
+        "status": rel.status,
+        "created_at": rel.created_at,
+        "updated_at": rel.updated_at,
+        "subject_object_name": subject.name if subject else None,
+        "object_object_name": obj.name if obj else None,
+        "edge_count": edge_count,
+    }
     return _ok(
         SemanticRelationResponse(**item).model_dump(**_DUMP_OPTS),
         msg="更新成功",
