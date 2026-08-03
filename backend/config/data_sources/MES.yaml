@@ -78,11 +78,11 @@ interfaces:
   # 3. selectProceduresReportDataByTime
   # ⚠️ 2026-08-02 全接口跨度扫描发现：本接口与 #4 同属 workorderController，
   # 共享同一服务端限制——跨度 >2 天直接 code=1001「只支持跨度两天内的查询」。
-  # 在引擎支持分片之前，本接口的全量（约 300 天）与增量（replay 3 天）都必然
-  # 被拒、恒 0 行。补 max_window_days: 1 后才能真正拉到数。
-  # 注：table 已按真实响应校准（2026-08-02 实测 66/66 字段齐全、wtaid 唯一、
-  # 经 backfill 落 12396 行，但数据仅到 2026-04-11）。当前缺水位 → 增量未生效；
-  # 需跑一次全量重同步（或回填后补设水位=最大 task_end_time）才能持续增量。
+  # 2026-08-03 实测再发现：上游忽略 pageNum（每页返回同批全部行，仅顺序不同），
+  # pageSize=500 遇 2026-04-20 单日 510 行 → 引擎翻页死循环、批次永不结束。
+  # 该接口无视 pageSize、恒返回单日全部行（全量扫描单日最大 510 行），
+  # 故 pageSize=1000 一页拉完、翻页自然终止（见 api_client.fetch_all_pages 兜底）。
+  # 注：table 已按真实响应校准（2026-08-02 实测 66/66 字段齐全、wtaid 唯一）。
   - name: selectProceduresReportDataByTime
     endpoint: "/lightmesapi/open/workorderController/selectProceduresReportDataByTime"
     method: POST
@@ -94,11 +94,16 @@ interfaces:
       format: "%Y-%m-%d %H:%M:%S"
       is_time_based: true
     max_window_days: 1
+    # 全量回溯下界：数据实测始于 2025-10（与 #4 扫描结论一致）。
+    probe_floor: "2025-10-01"
+    # 关闭二分探测：本接口按天稀疏、非单调，二分会误判起点（同 #4）。
+    probe_start_date: false
     request_body_template:
       pageNum: 1
-      pageSize: 500
+      # 实测该接口无视 pageSize、恒返回单日全部行；500 会触发翻页死循环，
+      # 1000 有 2 倍余量（全量扫描单日最大 510 行），一页拉完即终止。
+      pageSize: 1000
     records_path: data
-    total_path: totalItems
 
   # 4. selectProductionBackParamsByTime（工序排产结果）
   # ⚠️ 以下配置经 2026-08-02 真实 API 实测确定，勿凭文档想当然修改：

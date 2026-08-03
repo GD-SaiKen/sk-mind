@@ -3,6 +3,7 @@
 对应策略文档：03-API拉取同步策略 §2。
 """
 
+import json
 import threading
 import time
 from typing import Any, Iterator
@@ -282,8 +283,16 @@ class HttpxApiConnector(ApiConnector):
         page_size: int = 100,
         max_pages: int | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """遍历所有分页数据。"""
+        """遍历所有分页数据。
+
+        兜底：部分上游接口忽略 pageNum，每页返回同一批数据（仅顺序不同），
+        当某页行数仍 >= page_size 时传统翻页会无限循环（如 MES
+        selectProceduresReportDataByTime 2026-04-20 单日 510 行、pageSize=500）。
+        因此额外追踪已见记录指纹，若某一整页没有任何新记录则立即终止翻页，
+        避免批次死循环。
+        """
         page = 1
+        seen: set[str] = set()
         while True:
             if max_pages and page > max_pages:
                 break
@@ -291,9 +300,20 @@ class HttpxApiConnector(ApiConnector):
             result = self.fetch_page(
                 endpoint, method, params, body, page, page_size
             )
+            new_found = 0
+            for record in result.records:
+                fp = json.dumps(
+                    record, sort_keys=True, ensure_ascii=False, default=str
+                )
+                if fp not in seen:
+                    seen.add(fp)
+                    new_found += 1
             yield from result.records
 
             if len(result.records) < page_size:
+                break
+            # 本页与历史页完全重复（上游忽略 pageNum）→ 终止，防止死循环
+            if new_found == 0:
                 break
             page += 1
 
