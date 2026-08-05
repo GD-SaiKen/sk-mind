@@ -341,6 +341,26 @@ def upgrade() -> None:
     # 3.6 workorder_v1 — 工单视图
     op.execute("""
         CREATE OR REPLACE VIEW serving.workorder_v1 AS
+        WITH t AS (
+            SELECT *,
+                CASE WHEN create_time IS NOT NULL AND create_time <> '' AND create_time ~ '^[0-9]+$'
+                     THEN to_timestamp(create_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _create_dt,
+                CASE WHEN start_time IS NOT NULL AND start_time <> '' AND start_time ~ '^[0-9]+$'
+                     THEN to_timestamp(start_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _start_dt,
+                CASE WHEN end_time IS NOT NULL AND end_time <> '' AND end_time ~ '^[0-9]+$'
+                     THEN to_timestamp(end_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _end_dt,
+                CASE WHEN require_end_time IS NOT NULL AND require_end_time <> '' AND require_end_time ~ '^[0-9]+$'
+                     THEN to_timestamp(require_end_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _require_dt,
+                CASE WHEN estimated_start_time IS NOT NULL AND estimated_start_time <> '' AND estimated_start_time ~ '^[0-9]+$'
+                     THEN to_timestamp(estimated_start_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _estimated_start_dt,
+                CASE WHEN estimated_end_time IS NOT NULL AND estimated_end_time <> '' AND estimated_end_time ~ '^[0-9]+$'
+                     THEN to_timestamp(estimated_end_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _estimated_end_dt,
+                CASE WHEN actual_complete_time IS NOT NULL AND actual_complete_time <> '' AND actual_complete_time ~ '^[0-9]+$'
+                     THEN to_timestamp(actual_complete_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _actual_dt,
+                CASE WHEN close_time IS NOT NULL AND close_time <> '' AND close_time ~ '^[0-9]+$'
+                     THEN to_timestamp(close_time::bigint / 1000.0) AT TIME ZONE 'Asia/Shanghai' END AS _close_dt
+            FROM raw.mes_filter_workorder
+        )
         SELECT
             woid,
             workorder_no,
@@ -351,43 +371,40 @@ def upgrade() -> None:
             material_desc,
             material_spec,
             unit,
-            plan_qty,
-            completed_qty,
-            surplus_qty,
-            order_qty,
-            portion_qty,
-            arranged_qty,
-            complete_progress,
-            -- status mapping: integer → Chinese
-            CASE status
-                WHEN 0 THEN '未开工'
-                WHEN 1 THEN '进行中'
-                WHEN 2 THEN '已完工'
-                WHEN 3 THEN '已关闭'
-                WHEN 4 THEN '已暂停'
-                ELSE '状态' || status::text
+            (plan_qty)::numeric AS plan_qty,
+            (completed_qty)::numeric AS completed_qty,
+            (surplus_qty)::numeric AS surplus_qty,
+            (order_qty)::numeric AS order_qty,
+            (portion_qty)::numeric AS portion_qty,
+            (arranged_qty)::numeric AS arranged_qty,
+            (complete_progress)::numeric AS complete_progress,
+            CASE (status)::integer
+                WHEN 1 THEN '待确认'
+                WHEN 2 THEN '异常'
+                WHEN 3 THEN '已确认'
+                WHEN 5 THEN '部分确认'
+                WHEN 9 THEN '已结产'
+                ELSE ('状态' || status)
             END AS status,
-            -- progress_pct
             CASE
-                WHEN COALESCE(plan_qty, 0) > 0 THEN COALESCE(completed_qty, 0) / plan_qty * 100
+                WHEN COALESCE((plan_qty)::numeric, 0) > 0
+                THEN COALESCE((completed_qty)::numeric, 0) / (plan_qty)::numeric * 100
                 ELSE 0
             END AS progress_pct,
-            -- is_overdue: require_end_time < NOW() AND status NOT IN (2,3)
-            (require_end_time < NOW() AND status NOT IN (2, 3)) AS is_overdue,
-            -- overdue_days
+            (_require_dt IS NOT NULL AND _require_dt < NOW() AND (status)::integer <> 9) AS is_overdue,
             CASE
-                WHEN require_end_time < NOW() AND status NOT IN (2, 3)
-                THEN EXTRACT(DAY FROM NOW() - require_end_time)::int
+                WHEN _require_dt IS NOT NULL AND _require_dt < NOW() AND (status)::integer <> 9
+                THEN EXTRACT(DAY FROM NOW() - _require_dt)::int
                 ELSE 0
             END AS overdue_days,
-            create_time,
-            start_time,
-            end_time,
-            require_end_time,
-            estimated_start_time,
-            estimated_end_time,
-            actual_complete_time,
-            close_time,
+            _create_dt AS create_time,
+            _start_dt AS start_time,
+            _end_dt AS end_time,
+            _require_dt AS require_end_time,
+            _estimated_start_dt AS estimated_start_time,
+            _estimated_end_dt AS estimated_end_time,
+            _actual_dt AS actual_complete_time,
+            _close_dt AS close_time,
             customer_no,
             customization_no,
             customer_requirement,
@@ -408,31 +425,33 @@ def upgrade() -> None:
             create_user_name,
             close_uid,
             close_user_name,
-            material_price,
-            material_total_price,
-            standard_work_hours,
+            (material_price)::numeric AS material_price,
+            (material_total_price)::numeric AS material_total_price,
+            (standard_work_hours)::numeric AS standard_work_hours,
             error_info,
             notes,
             remark,
             close_remark,
-            overdue_count,
-            print_number,
+            (overdue_count)::numeric AS overdue_count,
+            (print_number)::numeric AS print_number,
             material_ledger_desc,
             material_ledger_spec,
             supplier,
-            NULL::VARCHAR(128) AS workshop,  -- NULL placeholder: 工单无 machine 字段
+            NULL::character varying(128) AS workshop,
             _ingested_at
-        FROM raw.mes_filter_workorder
+        FROM t
+    
     """)
     op.execute("""
         COMMENT ON VIEW serving.workorder_v1 IS
         '工单视图。来源: raw.mes_filter_workorder。
-         status 映射: 0→未开工, 1→进行中, 2→已完工, 3→已关闭, 4→已暂停。
+         status 映射(MES 枚举): 1→待确认, 2→异常, 3→已确认, 5→部分确认, 9→已结产。
          progress_pct: completed_qty/plan_qty * 100。
          is_overdue: require_end_time < NOW() 且未完工/未关闭时标记超期。
          overdue_days: 超期天数。
          workshop: NULL 占位 (工单表无 machine 字段，需通过其他方式关联)。
-         时间列: create_time/start_time/end_time 等已是 TIMESTAMPTZ，直接使用。'
+         时间列: raw 层存 BIGINT 毫秒时间戳(text)，用 to_timestamp(col::bigint/1000.0) AT TIME ZONE ''Asia/Shanghai'' 转换，空/非法值返回 NULL。'
+    
     """)
 
     # 3.7 schedule_v1 — 排产任务视图

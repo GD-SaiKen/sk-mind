@@ -12,6 +12,34 @@
 | 缓存/队列 | Redis + RQ |
 | 部署 | Docker Compose + Nginx |
 
+## 服务端口一览
+
+项目由 6 个服务组成，分容器化部署和本地开发两种模式：
+
+### 容器化部署（docker compose up -d）
+
+| 服务 | 容器名 | 端口 | 作用 |
+|------|--------|------|------|
+| **PostgreSQL** | `skmind-postgres` | `5432` | 关系数据库，存储全部业务数据和元数据 |
+| **Redis** | `skmind-redis` | `6379` | 缓存 + 消息队列（RQ），Worker 通过 Redis 消费任务 |
+| **Backend API** | `skmind-backend` | `8000` | FastAPI 后端，含 REST API + Agent MCP 端点（`/api/agent/*`） + Swagger 文档（`/docs`） |
+| **Worker** | `skmind-worker` | — | RQ Worker，消费 `ingestion` 队列，执行数据同步等异步长任务 |
+| **Nginx** | `skmind-nginx` | `80` | 反向代理：前端静态资源 + `/api` 代理到 Backend |
+| **Frontend** | — | — | Vue 3 SPA 静态文件，由 Nginx 托管，无独立端口 |
+
+### 本地开发
+
+| 服务 | 端口 | 启动命令 | 作用 |
+|------|------|----------|------|
+| **PostgreSQL** | `5432` | `docker compose up -d postgres` | 数据库 |
+| **Redis** | `6379` | `docker compose up -d redis` | 缓存/队列 |
+| **Backend API** | `8000` | `python run_api.py` | FastAPI + uvicorn，`--reload` 热重载 |
+| **Frontend** | `5173` | `npm run dev` | Vite dev server，HMR 热更新，`/api` 代理到 `localhost:8000` |
+| **Worker** | — | `python run_worker.py` | RQ Worker，消费 `ingestion` 队列 |
+| **Scheduler** | — | `python run_scheduler.py` | APScheduler，按 cron 表达式将定时任务入队到 RQ |
+
+> **说明**：Agent MCP 服务不是独立进程，它是 Backend API 的一部分——端点挂在 `/api/agent/*` 下（`query_objects` / `query_metrics` / `query_relations` / `query_graph` / `catalog` / `reload`），与 REST API 共享同一个 uvicorn 进程和 8000 端口。
+
 ## 项目结构
 
 ```
