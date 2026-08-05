@@ -1,14 +1,24 @@
-"""Agent 模块路由 — 提供 YAML 语义模型查询和热重载端点。"""
+"""Agent 模块路由 — 提供 YAML 语义模型查询和热重载端点。
+
+业务逻辑已提取到 handlers.py，供 REST 和 MCP 路由器复用。
+"""
 
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.core.database import get_db
 from app.modules.auth.models import User
+from app.modules.agent.handlers import (
+    handle_catalog,
+    handle_query_graph,
+    handle_query_metrics,
+    handle_query_objects,
+    handle_query_relations,
+    handle_reload,
+)
 from app.modules.agent.schemas import (
     QueryObjectsRequest,
     QueryMetricsRequest,
@@ -25,20 +35,21 @@ from app.modules.agent.schemas import (
     CatalogMetric,
     CatalogResponse,
 )
-from app.modules.semantic.loader import get_loader
-from app.modules.semantic.mapper import ObjectQueryMapper, MetricQueryMapper
-from app.modules.graph.dao import graph_query
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 logger = logging.getLogger("sk-mind")
 
 
-# ── Helper ────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────
 
 
-def _rows_to_dict(columns: list[str], rows: list) -> list[dict]:
-    """将原生 SQL 行列表转为 dict 列表。"""
-    return [dict(zip(columns, row)) for row in rows]
+def _raise_http_from_error(e: Exception) -> None:
+    """将 handler 异常转换为 HTTP 异常。"""
+    if isinstance(e, ValueError):
+        raise HTTPException(status_code=400, detail=str(e))
+    if isinstance(e, RuntimeError):
+        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── POST /api/agent/query_objects ─────────────────────────
@@ -52,35 +63,21 @@ async def query_objects(
 ):
     """根据 YAML 定义的 object 查询 serving 视图数据。"""
     try:
-        loader = get_loader(body.source)
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail=f"Source '{body.source}' not found")
-
-    obj_def = loader.get_object(body.object_name)
-    if obj_def is None:
-        raise HTTPException(
-            status_code=404, detail=f"Object '{body.object_name}' not found in source '{body.source}'"
+        result = await handle_query_objects(
+            db=db,
+            source=body.source,
+            object_name=body.object_name,
+            filters=body.filters,
+            order_by=body.order_by,
+            limit=body.limit,
         )
-
-    mapper = ObjectQueryMapper(obj_def)
-    sql, params = mapper.build_query(
-        filters=body.filters,
-        order_by=body.order_by,
-        limit=body.limit,
-    )
-
-    try:
-        result = await db.execute(text(sql), params)
-        rows = result.fetchall()
-        columns = list(result.keys())
     except Exception as e:
-        logger.exception("Query objects failed: %s", sql)
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_http_from_error(e)
 
     return QueryObjectsResponse(
-        columns=columns,
-        rows=_rows_to_dict(columns, rows),
-        total=len(rows),
+        columns=result["columns"],
+        rows=result["rows"],
+        total=result["total"],
     )
 
 
@@ -95,44 +92,23 @@ async def query_metrics(
 ):
     """根据 YAML 定义的 metric 执行聚合查询。"""
     try:
-        loader = get_loader(body.source)
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail=f"Source '{body.source}' not found")
-
-    metric_def = loader.get_metric(body.metric_name)
-    if metric_def is None:
-        raise HTTPException(
-            status_code=404, detail=f"Metric '{body.metric_name}' not found in source '{body.source}'"
+        result = await handle_query_metrics(
+            db=db,
+            source=body.source,
+            metric_name=body.metric_name,
+            group_by=body.group_by,
+            dimensions=body.dimensions,
+            filters=body.filters,
+            limit=body.limit,
         )
-
-    source_obj_name = metric_def.get("source_object", "")
-    obj_def = loader.get_object(source_obj_name)
-    if obj_def is None:
-        raise HTTPException(
-            status_code=404, detail=f"Source object '{source_obj_name}' not found for metric '{body.metric_name}'"
-        )
-
-    mapper = MetricQueryMapper(metric_def, obj_def)
-    sql, params = mapper.build_query(
-        group_by=body.group_by,
-        dimensions=body.dimensions,
-        filters=body.filters,
-        limit=body.limit,
-    )
-
-    try:
-        result = await db.execute(text(sql), params)
-        rows = result.fetchall()
-        columns = list(result.keys())
     except Exception as e:
-        logger.exception("Query metrics failed: %s", sql)
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_http_from_error(e)
 
     return QueryMetricsResponse(
-        metric_name=body.metric_name,
-        columns=columns,
-        rows=_rows_to_dict(columns, rows),
-        total=len(rows),
+        metric_name=result["metric_name"],
+        columns=result["columns"],
+        rows=result["rows"],
+        total=result["total"],
     )
 
 
@@ -146,44 +122,34 @@ async def query_relations(
 ):
     """根据 YAML 定义返回语义关系目录（类型层）。"""
     try:
-        loader = get_loader(body.source)
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail=f"Source '{body.source}' not found")
-
-    relations = loader.list_relations()
-    if body.relation_type:
-        relations = [
-            r for r in relations if r.get("relation_type") == body.relation_type
-        ]
-    if body.subject_object:
-        relations = [
-            r for r in relations if r.get("subject") == body.subject_object
-        ]
-    if body.object_object:
-        relations = [
-            r for r in relations if r.get("object") == body.object_object
-        ]
-    if body.agent_enabled_only:
-        relations = [r for r in relations if r.get("agent_enabled", True)]
+        result = handle_query_relations(
+            source=body.source,
+            relation_type=body.relation_type,
+            subject_object=body.subject_object,
+            object_object=body.object_object,
+            agent_enabled_only=body.agent_enabled_only,
+        )
+    except Exception as e:
+        _raise_http_from_error(e)
 
     items = [
         RelationItem(
             code=r["code"],
-            name=r.get("name", r["code"]),
-            relation_type=r.get("relation_type", ""),
-            subject_object=r.get("subject", ""),
-            object_object=r.get("object", ""),
-            cardinality=r.get("cardinality", "1:N"),
+            name=r["name"],
+            relation_type=r["relation_type"],
+            subject_object=r["subject_object"],
+            object_object=r["object_object"],
+            cardinality=r["cardinality"],
             join_mechanism=r.get("join_mechanism"),
             description=r.get("description"),
-            agent_enabled=r.get("agent_enabled", True),
+            agent_enabled=r["agent_enabled"],
         )
-        for r in relations
+        for r in result["relations"]
     ]
     return QueryRelationsResponse(
-        source=body.source,
+        source=result["source"],
         relations=items,
-        total=len(items),
+        total=result["total"],
     )
 
 
@@ -198,8 +164,9 @@ async def query_graph(
 ):
     """查询业务关系图谱中的实例路径（1-3 跳）。"""
     try:
-        paths = await graph_query(
-            db,
+        result = await handle_query_graph(
+            db=db,
+            source=body.source,
             object_type=body.object_type,
             entity_id=body.entity_id,
             relation_code=body.relation_code,
@@ -208,18 +175,18 @@ async def query_graph(
             confirmed_only=body.confirmed_only,
         )
     except Exception as e:
-        logger.exception("Graph query failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_http_from_error(e)
+
     return QueryGraphResponse(
-        source=body.source,
+        source=result["source"],
         paths=[
             GraphPathItem(
-                edges=[GraphPathEdgeItem(**e) for e in path]
+                edges=[GraphPathEdgeItem(**e) for e in path["edges"]]
             )
-            for path in paths
+            for path in result["paths"]
         ],
-        hops=body.hops,
-        total=len(paths),
+        hops=result["hops"],
+        total=result["total"],
     )
 
 
@@ -233,32 +200,28 @@ async def get_catalog(
 ):
     """列出指定 source 的所有业务对象和指标。"""
     try:
-        loader = get_loader(source)
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail=f"Source '{source}' not found")
-
-    catalog = loader.get_catalog()
-    objects = loader.list_objects()
-    metrics = loader.list_metrics()
+        result = handle_catalog(source=source)
+    except Exception as e:
+        _raise_http_from_error(e)
 
     return CatalogResponse(
-        source=source,
+        source=result["source"],
         objects=[
             CatalogObject(
-                name=obj.get("object", ""),
-                display_name=obj.get("display_name", ""),
-                description=obj.get("description", ""),
+                name=obj["name"],
+                display_name=obj["display_name"],
+                description=obj["description"],
             )
-            for obj in objects
+            for obj in result["objects"]
         ],
         metrics=[
             CatalogMetric(
-                name=m.get("metric", ""),
-                display_name=m.get("display_name", ""),
-                description=m.get("description", ""),
-                source_object=m.get("source_object", ""),
+                name=m["name"],
+                display_name=m["display_name"],
+                description=m["description"],
+                source_object=m["source_object"],
             )
-            for m in metrics
+            for m in result["metrics"]
         ],
     )
 
@@ -274,18 +237,8 @@ async def reload_semantic(
 ):
     """热重载 YAML 配置并同步到 DB 缓存。"""
     try:
-        loader = get_loader(source)
-        loader.reload()
-        await loader.load_all_async(db, force=True)
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail=f"Source '{source}' not found")
+        result = await handle_reload(db=db, source=source)
     except Exception as e:
-        logger.exception("Reload failed for source '%s'", source)
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_http_from_error(e)
 
-    return {
-        "source": source,
-        "objects_loaded": len(loader.list_objects()),
-        "metrics_loaded": len(loader.list_metrics()),
-        "status": "reloaded",
-    }
+    return result

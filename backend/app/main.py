@@ -90,3 +90,7 @@ async def health_check() -> dict:
 # ── 注册业务路由 ─────────────────────────────
 from app.api import router as api_router
 app.include_router(api_router, prefix="/api")
+
+# ── 注册 MCP 路由（独立于 /api 命名空间）───
+from app.modules.agent.mcp_router import router as mcp_router
+app.include_router(mcp_router, prefix="/mcp")

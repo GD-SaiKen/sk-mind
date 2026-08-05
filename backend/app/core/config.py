@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = ""
 
+    # ── MCP ────────────────────────────────────
+    MCP_API_KEY: str = ""
+
     # ── 安全 ──────────────────────────────────
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
